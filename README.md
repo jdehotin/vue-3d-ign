@@ -90,6 +90,14 @@ en cache restent ouvertes à tous et ne comptent pas. Derrière un proxy
 partagent un seul quota. Sans proxy, ne pas le poser : chacun
 s'inventerait une adresse par requête. Ni l'un ni l'autre par défaut.
 
+Les tuiles de fond (orthophoto, Plan IGN) passent par le serveur, qui en
+garde certaines : la Géoplateforme refuse par épisodes une tuile qui existe.
+Le navigateur les lit à l'IGN, où le serveur le redirige ; une tuile refusée,
+le serveur la relit lui-même, la garde dans `VUE3D_CACHE/tuiles` et la sert
+désormais à tous. Une tuile gardée est effacée au bout de 90 jours. Avec un
+quota de scènes, une même adresse IP fait relire au plus 1 000 tuiles par
+heure.
+
 ### Avec Docker
 
 Le même service, sur le même port, partout où Docker tourne :

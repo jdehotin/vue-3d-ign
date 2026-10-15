@@ -23,8 +23,29 @@ const navigateur = await puppeteer.launch({
 const page = await navigateur.newPage();
 await page.setViewport({ width: 1400, height: 850 });
 const erreurs = [];
+// Tuiles de fond (vue3d/tuiles.py) : un refus de l'IGN au navigateur n'est
+// une erreur que si le serveur ne l'a pas rattrapé en la relisant. Clé
+// « couche/z/x/y », par ce que le navigateur en a vu.
+const COUCHES_TUILES = { 'ORTHOIMAGERY.ORTHOPHOTOS': 'ortho', 'GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2': 'plan' };
+const tuiles = { refusees: new Map(), relues: new Set(), absentes: new Set(), stock: 0, redirigees: 0 };
+function cleTuile(url) {
+  const u = new URL(url);
+  const api = u.pathname.match(/\/api\/tuile\/(\w+)\/(\d+)\/(\d+)\/(\d+)$/);
+  if (api) return { cle: api.slice(1).join('/'), api: true, relire: u.searchParams.has('relire') };
+  const couche = u.hostname === 'data.geopf.fr' && COUCHES_TUILES[u.searchParams.get('LAYER')];
+  if (!couche) return null;
+  const q = n => u.searchParams.get(n);
+  return { cle: [couche, q('TILEMATRIX'), q('TILECOL'), q('TILEROW')].join('/'), api: false };
+}
 page.on('pageerror', e => erreurs.push('pageerror: ' + e.message));
-page.on('console', m => { if (m.type() === 'error') erreurs.push('console: ' + m.text()); });
+page.on('console', m => {
+  if (m.type() !== 'error') return;
+  // « Failed to load resource » d'une tuile, ou tout message qui en cite
+  // l'URL : jugée par sa réponse, plus bas.
+  const urls = [m.location()?.url, ...(m.text().match(/https?:\/\/[^\s'"]+/g) || [])].filter(Boolean);
+  if (urls.some(u => cleTuile(u))) return;
+  erreurs.push('console: ' + m.text());
+});
 // Une fois la page quittée pour le lieu cherché, ses requêtes en cours sont
 // interrompues : c'est attendu.
 let quittee = false;
@@ -32,7 +53,20 @@ page.on('requestfailed', r => {
   if (quittee && r.failure()?.errorText === 'net::ERR_ABORTED') return;
   erreurs.push('échec requête: ' + r.url().slice(0, 100) + ' ' + (r.failure()?.errorText || ''));
 });
-page.on('response', r => { if (r.status() >= 400) erreurs.push(`HTTP ${r.status()} ${r.url().slice(0, 100)}`); });
+page.on('response', r => {
+  const t = cleTuile(r.url());
+  if (t && !t.api && r.status() >= 400) { tuiles.refusees.set(t.cle, r.status()); return; }
+  if (t && t.api) {
+    if (r.status() === 200 && t.relire) tuiles.relues.add(t.cle);
+    else if (r.status() === 200) tuiles.stock++;
+    else if (r.status() === 302) tuiles.redirigees++;
+    // Pas d'image à ce zoom ici : la page prend celle d'un ancêtre.
+    else if (r.status() === 404) tuiles.absentes.add(t.cle);
+    else erreurs.push(`HTTP ${r.status()} ${r.url().slice(0, 100)}`);
+    return;
+  }
+  if (r.status() >= 400) erreurs.push(`HTTP ${r.status()} ${r.url().slice(0, 100)}`);
+});
 await page.goto(url, { waitUntil: 'domcontentloaded' });
 // Attend la scène, puis la végétation et le relief.
 await page.waitForFunction(() => document.getElementById('attente').hidden
@@ -198,6 +232,11 @@ try {
 } catch (e) {
   erreurs.push('recherche : ' + e.message);
 }
+const perdues = [...tuiles.refusees].filter(([cle]) => !tuiles.relues.has(cle) && !tuiles.absentes.has(cle));
+console.log(`tuiles : ${tuiles.redirigees} redirigées vers l'IGN, ${tuiles.stock} servies du stock, `
+            + `${tuiles.refusees.size} refusées par l'IGN, ${tuiles.relues.size} relues par le serveur, `
+            + `${tuiles.absentes.size} absentes`);
+for (const [cle, code] of perdues) erreurs.push(`tuile ${cle} : refusée par l'IGN (${code}), non relue`);
 console.log('ERREURS :', erreurs.length ? '\n  ' + erreurs.join('\n  ') : 'aucune');
 await navigateur.close();
 process.exit(erreurs.length ? 1 : 0);

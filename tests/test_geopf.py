@@ -270,3 +270,13 @@ def test_une_panne_serveur_est_retentee(monkeypatch):
     with pytest.raises(requests.RequestException, match="503"):
         geopf.get_avec_reprise("http://x")
     assert len(appels) == geopf.GEOPF_ESSAIS
+
+
+def test_un_refus_persistant_porte_sa_reponse(monkeypatch):
+    """Une tuile WMTS hors couverture répond 404 : l'appelant le lit sur la
+    réponse jointe à l'exception (vue3d/tuiles.py)."""
+    monkeypatch.setattr(geopf.requests, "get", lambda url, timeout: _Reponse(404))
+    monkeypatch.setattr(geopf.time, "sleep", lambda s: None)
+    with pytest.raises(requests.RequestException) as exc:
+        geopf.get_avec_reprise("http://x")
+    assert exc.value.response.status_code == 404

@@ -2745,11 +2745,12 @@ function cadrer() {
 
 // --- Fond cartographique -------------------------------------------------
 // Les tuiles sont assemblées dans un canvas unique, qui sert à la fois de sol
-// et de texture pour les toits. Aucun proxy n'est nécessaire : data.geopf.fr
-// renvoie `access-control-allow-origin: *`, ce qu'exige WebGL pour une texture
-// cross-origin (vérifié, orthophoto et Plan IGN). Il faut en revanche
-// crossOrigin='anonymous' sur les images, sinon le canvas serait marqué
-// « souillé » et la texture refusée malgré cet en-tête.
+// et de texture pour les toits. Elles passent par le serveur (vue3d/tuiles.py) :
+// il sert celles qu'il a en stock et redirige les autres vers data.geopf.fr,
+// qui renvoie `access-control-allow-origin: *`, ce qu'exige WebGL pour une
+// texture cross-origin (vérifié, orthophoto et Plan IGN, redirection
+// comprise). Il faut en revanche crossOrigin='anonymous' sur les images, sinon
+// le canvas serait marqué « souillé » et la texture refusée malgré cet en-tête.
 //
 // Les deux fonds viennent de l'IGN, sous la même licence que le reste de la
 // scène. Le plan OpenStreetMap qu'on proposait avant dépendait de serveurs
@@ -2757,17 +2758,52 @@ function cadrer() {
 const TUILE_ZOOM = 18;
 const TUILE_DELTA = DEMI_EMPRISE_DEG;      // même emprise que les bâtiments
 
+// Couches et zooms que le serveur accepte : tuiles.COUCHES et TUILES_ZOOM
+// (9 à 18, de HORIZON_ZOOM_MIN à TUILE_ZOOM).
 const FONDS = {
-    ortho: (z, x, y) =>
-        'https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0' +
-        '&LAYER=ORTHOIMAGERY.ORTHOPHOTOS&STYLE=normal&FORMAT=image/jpeg' +
-        `&TILEMATRIXSET=PM&TILEMATRIX=${z}&TILEROW=${y}&TILECOL=${x}`,
+    ortho: (z, x, y) => `api/tuile/ortho/${z}/${x}/${y}`,
     // PLANIGNV2 : PNG seulement, publié jusqu'au zoom 19 comme l'orthophoto.
-    plan: (z, x, y) =>
-        'https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0' +
-        '&LAYER=GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2&STYLE=normal&FORMAT=image/png' +
-        `&TILEMATRIXSET=PM&TILEMATRIX=${z}&TILEROW=${y}&TILECOL=${x}`,
+    plan: (z, x, y) => `api/tuile/plan/${z}/${x}/${y}`,
 };
+
+// Relectures demandées au serveur à la fois, pour toute la page : autant
+// qu'il en mène pour tous ses visiteurs (TUILES_RELECTURES_SIMULTANEES).
+const RELECTURES_SIMULTANEES = 2;
+let relecturesEnCours = 0;
+const relecturesEnAttente = [];
+// Essais d'une relecture que le serveur dit occupé (503), espacés de son
+// Retry-After.
+const RELECTURE_ESSAIS = 3;
+
+/**
+ * Une tuile que l'IGN a refusée au navigateur, lue par le serveur, qui la
+ * garde (vue3d/tuiles.py) : l'IGN en refuse par épisodes une qui existe. Lue
+ * en fetch, pour distinguer l'absence (404 : pas d'image à ce zoom ici) d'un
+ * serveur occupé (503), puis rendue en image depuis ses octets.
+ */
+async function relireTuile(url) {
+    if (relecturesEnCours >= RELECTURES_SIMULTANEES) {
+        await new Promise(r => relecturesEnAttente.push(r));
+    }
+    relecturesEnCours++;
+    try {
+        for (let essai = 0; essai < RELECTURE_ESSAIS; essai++) {
+            const reponse = await fetch(`${url}?relire=1`);
+            if (reponse.ok) {
+                const lien = URL.createObjectURL(await reponse.blob());
+                try { return await chargerImage(lien); }
+                finally { URL.revokeObjectURL(lien); }
+            }
+            if (reponse.status !== 503) break;
+            const attente = Number(reponse.headers.get('retry-after')) || 2;
+            await new Promise(r => setTimeout(r, attente * 1000));
+        }
+        throw new Error(`tuile non relue : ${url}`);
+    } finally {
+        relecturesEnCours--;
+        relecturesEnAttente.shift()?.();
+    }
+}
 
 const groupeFond = new THREE.Group();
 scene.add(groupeFond);
@@ -2853,11 +2889,10 @@ async function composerTuiles(url, zoom, b) {
     canvas.height = (y1 - y0 + 1) * 256;
     const ctx = canvas.getContext('2d');
 
-    // Un refus se redemande une fois : la Géoplateforme en oppose de loin en
-    // loin à une tuile qui existe (un 404 au zoom 16 à Gordes, 200 cinq fois
-    // de suite ensuite), et le trou restait dans la texture.
-    const charger = u => chargerImage(u)
-        .catch(() => new Promise(r => setTimeout(r, 1500)).then(() => chargerImage(u)));
+    // Un refus se fait relire par le serveur : la Géoplateforme en oppose de
+    // loin en loin à une tuile qui existe (un 404 au zoom 16 à Gordes, 200
+    // cinq fois de suite ensuite), et le trou restait dans la texture.
+    const charger = u => chargerImage(u).catch(() => relireTuile(u));
     const chargements = [];
     for (let x = x0; x <= x1; x++) {
         for (let y = y0; y <= y1; y++) {
@@ -3888,8 +3923,8 @@ async function altitudesTuile(t) {
  * les descendantes d'une tuile sans image n'en demandent pas, elles empruntent
  * celle d'un ancêtre. Mais la Géoplateforme refuse aussi, de loin en loin, une
  * tuile qui existe (un 404 pendant un vol au-dessus de Gordes, absent au vol
- * suivant) : un refus se redemande une fois avant de valoir absence, sans quoi
- * toute une branche restait floue.
+ * suivant) : un refus se fait relire par le serveur avant de valoir absence,
+ * sans quoi toute une branche restait floue.
  */
 async function imageTuile(t, gen) {
     if (!fondActif) return null;
@@ -3897,15 +3932,16 @@ async function imageTuile(t, gen) {
         if (a.sansImage === gen) { t.sansImage = gen; return null; }
     }
     const url = FONDS[fondActif](t.z, t.x, t.y);
-    for (let essai = 0; essai < 2; essai++) {
+    try {
+        return await chargerImage(url);
+    } catch (e) {
         try {
-            return await chargerImage(url);
+            return await relireTuile(url);
         } catch (e) {
-            if (!essai) await new Promise(r => setTimeout(r, 1500));
+            t.sansImage = gen;
+            return null;
         }
     }
-    t.sansImage = gen;
-    return null;
 }
 
 function materiauHorizon() {

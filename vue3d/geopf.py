@@ -263,6 +263,8 @@ def get_avec_reprise(url, timeout=30, essais=GEOPF_ESSAIS, attente=GEOPF_ATTENTE
         else:
             if reponse.ok:
                 return reponse
+            # La réponse jointe : une tuile WMTS hors couverture répond 404,
+            # un fait que l'appelant distingue d'un incident (vue3d/tuiles.py).
             dernier = requests.RequestException(
-                f"HTTP {reponse.status_code} sur {url[:80]}")
+                f"HTTP {reponse.status_code} sur {url[:80]}", response=reponse)
     raise dernier

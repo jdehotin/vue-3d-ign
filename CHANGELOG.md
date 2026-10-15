@@ -13,6 +13,36 @@ messages de commit et dans les commentaires des modules.
 
 ## Scène v15 — 15 octobre 2026
 
+### Ajouté
+
+- **Les tuiles refusées par l'IGN sont relues et gardées par le serveur.**
+  La Géoplateforme refuse par épisodes une tuile d'orthophoto ou de Plan IGN
+  qui existe : 253 refus en une visite le 15 octobre vers 17 h 15, aucun
+  ensuite. La page réessayait une fois après 1,5 s ; au second refus, un trou
+  ou une tuile floue restait, à l'horizon surtout. Elle demande désormais
+  chaque tuile au serveur (`/api/tuile/<couche>/<z>/<x>/<y>`), qui sert celles
+  qu'il a en stock et redirige les autres vers l'IGN, où le navigateur les lit
+  comme avant. Une tuile refusée, la page la fait relire au serveur
+  (`?relire=1`) : il la lit avec reprises, la garde et la rend — à tous les
+  visiteurs ensuite.
+  - Ce n'est pas le débit : 576 tuiles lues 12 à la fois, 576 une à une
+    toutes les 100 ms, aucun refus de part et d'autre. La page n'espace donc
+    pas ses demandes.
+  - Rien de ce qu'envoie un navigateur n'entre au stock : l'IGN ne donnant
+    ni ETag ni date de modification, une image reçue ne se vérifie pas.
+  - Une tuile gardée est effacée au bout de 90 jours, l'IGN renouvelant
+    l'orthophoto ; une purge passe une fois par jour.
+  - Deux relectures à la fois pour tout le service, refusées aussitôt
+    au-delà (503) : elles prennent des places à la Géoplateforme et des fils
+    au serveur. Avec `VUE3D_QUOTA`, 1 000 relectures par heure et par
+    adresse IP. Une tuile vraiment absente (la mer au large, l'étranger) est
+    retenue une journée, en mémoire, sans être redemandée.
+  - Essayé dans un navigateur sous refus simulés (une tuile sur cinq) : 81
+    refusées, 81 relues ; à la visite suivante, 82 servies du stock.
+  - `outils/essai-navigateur.mjs` ne compte plus comme erreur un refus de
+    l'IGN que le serveur a rattrapé, et dit combien de tuiles viennent du
+    stock.
+
 ### Modifié
 
 - **Les toits-terrasses ne sont plus dessinés en pente.** Le toit résumé —

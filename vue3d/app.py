@@ -14,6 +14,9 @@
     GET /api/dpe?lat=…&lon=…         les DPE de l'ADEME, à la demande de la page seulement
     GET /api/dvf?lat=…&lon=…         les ventes DVF des parcelles, de même
     GET /api/avancement?lat=…&lon=…  l'étape de la construction en cours
+    GET /api/tuile/<couche>/<z>/<x>/<y>  une tuile WMTS de l'IGN (ortho, plan) : du
+                                   stock du serveur, sinon redirigée vers l'IGN ;
+                                   `?relire=1` après un refus, lue et gardée ici
     GET /api/sante                 contrôle de vie, pour Docker
 
 Chaque route d'API accepte `zone=` (150 à 1 000 m, arrondie à 50 m) : sans
@@ -32,7 +35,8 @@ import os
 import threading
 import time
 
-from flask import Flask, jsonify, request, send_from_directory
+import requests
+from flask import Flask, jsonify, redirect, request, send_file, send_from_directory
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from .dpe import fetch_dpe
@@ -51,6 +55,8 @@ from .scene import (NOM_DPE, NOM_DVF, NOM_MONUMENTS, NOM_NUAGE, NOM_ORTHO, NOM_O
                     zone_normalisee)
 from .scene import construire as construire_scene
 from .toits import autoriser_bassin
+from .tuiles import (COUCHES, TUILES_RELECTURES_PAR_HEURE, Stock, TuileAbsente, TuileIllisible,
+                     TuilesOccupees, fetch_tuile, url_ign, valide)
 from .vehicules import MODE_PAR_DEFAUT, fetch_mer
 from .vehicules import lecteur as lecteur_vehicules
 
@@ -128,7 +134,7 @@ class Quota:
 def creer_app(dossier_cache=None, construire=construire_scene, lire_monuments=fetch_monuments,
               lire_ouvrages=fetch_ouvrages, lire_vehicules=None, lire_panneaux=None,
               lire_nuage=fetch_nuage, lire_dpe=fetch_dpe, lire_dvf=fetch_dvf, lire_mer=fetch_mer,
-              quota=None, proxy=None):
+              lire_tuile=fetch_tuile, quota=None, proxy=None, relectures=None):
     """`construire`, `lire_monuments`, `lire_ouvrages`, `lire_vehicules`,
     `lire_panneaux`, `lire_nuage`, `lire_dpe`, `lire_dvf` et `lire_mer` sont injectables
     pour les tests, qui n'appellent ni l'IGN, ni Overpass, ni l'ADEME, ni
@@ -136,9 +142,12 @@ def creer_app(dossier_cache=None, construire=construire_scene, lire_monuments=fe
     de `vehicules.lecteur()` ; None, le service n'a ni véhicules, ni piscines,
     ni navires.
     `lire_panneaux` : de `panneaux.lecteur()` ; None, pas de panneaux.
+    `lire_tuile` : (couche, z, x, y) -> octets d'une tuile WMTS de l'IGN.
     `quota` : scènes neuves par heure et par adresse IP, 0 sans limite ;
     `proxy` : proxys devant le service, dont on croit `X-Forwarded-For`.
-    None : de VUE3D_QUOTA et VUE3D_PROXY, 0 en leur absence."""
+    None : de VUE3D_QUOTA et VUE3D_PROXY, 0 en leur absence.
+    `relectures` : tuiles relues par heure et par adresse IP, 0 sans limite ;
+    None : TUILES_RELECTURES_PAR_HEURE si le service a un quota de scènes."""
     app = Flask(__name__, static_folder=os.path.join(ICI, "static"), static_url_path="/static")
     proxy = entier_env("VUE3D_PROXY") if proxy is None else proxy
     if proxy:
@@ -160,6 +169,12 @@ def creer_app(dossier_cache=None, construire=construire_scene, lire_monuments=fe
                   lire_vehicules=lire_vehicules, lire_panneaux=lire_panneaux,
                   lire_nuage=lire_nuage, lire_dpe=lire_dpe, lire_dvf=lire_dvf,
                   lire_mer=lire_mer)
+    # Hors du dossier des versions de scène : une tuile ne dépend pas de
+    # SCENE_VERSION.
+    stock = Stock(os.path.join(cache.dossier, "tuiles"), lire=lire_tuile)
+    if relectures is None:
+        relectures = TUILES_RELECTURES_PAR_HEURE if quota else 0
+    quota_tuiles = Quota(relectures) if relectures else None
 
     def point():
         """(lat, lon, zone) de la requête ; None si l'un d'eux est illisible."""
@@ -483,6 +498,50 @@ def creer_app(dossier_cache=None, construire=construire_scene, lire_monuments=fe
         except HorsEmprise as exc:
             return erreur(422, str(exc))
         reponse.headers["Cache-Control"] = "no-store"
+        return reponse
+
+    @app.get("/api/tuile/<couche>/<int:z>/<int:x>/<int:y>")
+    def tuile(couche, z, x, y):
+        """Une tuile WMTS de l'IGN (vue3d/tuiles.py) : du stock, sinon une
+        redirection vers l'IGN ; avec `relire`, après un refus au
+        navigateur, lue ici et gardée."""
+        if not valide(couche, z, x, y):
+            return erreur(404, "Tuile hors de ce que la page demande : couche, zoom ou position.")
+        stock.purger_si_du()
+        chemin = stock.present(couche, z, x, y)
+        if chemin is None:
+            if stock.absente(couche, z, x, y):
+                reponse, code = erreur(404, "L'IGN n'a pas d'image pour cette tuile.")
+                reponse.headers["Cache-Control"] = "no-store"
+                return reponse, code
+            if "relire" not in request.args:
+                # Pas gardée par le navigateur : la tuile peut entrer au
+                # stock, et la page doit alors la recevoir d'ici.
+                reponse = redirect(url_ign(couche, z, x, y), 302)
+                reponse.headers["Cache-Control"] = "no-store"
+                return reponse
+            if quota_tuiles and quota_tuiles.attente(request.remote_addr, (couche, z, x, y)):
+                app.logger.warning("Quota de %d tuiles relues par heure atteint pour %s",
+                                   quota_tuiles.par_heure, request.remote_addr)
+                reponse, code = erreur(429, "Trop de tuiles relues pour ce visiteur.")
+                reponse.headers["Retry-After"] = "600"
+                return reponse, code
+            try:
+                chemin = stock.relire(couche, z, x, y)
+            except TuileAbsente:
+                reponse, code = erreur(404, "L'IGN n'a pas d'image pour cette tuile.")
+                reponse.headers["Cache-Control"] = "no-store"
+                return reponse, code
+            except TuilesOccupees:
+                reponse, code = erreur(503, "Le serveur relit déjà d'autres tuiles.")
+                reponse.headers["Retry-After"] = "2"
+                return reponse, code
+            except (TuileIllisible, requests.RequestException) as exc:
+                app.logger.warning("Tuile %s %d/%d/%d illisible à l'IGN : %s", couche, z, x, y, exc)
+                return erreur(503, "Tuile illisible à l'IGN pour l'instant.")
+        reponse = send_file(chemin, mimetype=COUCHES[couche][1], conditional=True)
+        # Le délai que l'IGN donne lui-même à ses tuiles.
+        reponse.headers["Cache-Control"] = "public, max-age=1814400"
         return reponse
 
     @app.get("/api/sante")
