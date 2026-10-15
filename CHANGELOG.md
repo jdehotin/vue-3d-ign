@@ -15,6 +15,31 @@ messages de commit et dans les commentaires des modules.
 
 ### Ajouté
 
+- **Les bornes de recharge pour véhicules électriques**, au clic sur leur
+  bouton, comme les DPE : une borne par station, et au-dessus une pastille à
+  éclair teinte de sa puissance la plus haute (jusqu'à 22 kW, 23 à 149 kW,
+  150 kW et plus). Survol ou toucher : opérateur, points de charge,
+  puissances, prises, accès, horaires ; le clic l'épingle avec « Recentrer
+  la scène sur cette station » et « Y aller ».
+  - Source : la Base nationale des IRVE, consolidée chaque jour par
+    data.gouv.fr (Licence Ouverte 2.0), lue sur l'emprise par l'API
+    tabulaire, sans télécharger le fichier de 101 Mo : 0,7 s pour les 108
+    points de charge de 7 stations autour de l'Opéra, à Paris. Datée,
+    gardée avec la scène, relue par « Reconstruire la scène » ; une lecture
+    incomplète n'écrit rien.
+  - La pastille garde sa taille à l'écran : une borne de 1,6 m n'est qu'un
+    pixel vue de 900 m, et le doigt doit la trouver. Une station sous un
+    toit (parking souterrain, adresse prise au milieu d'un îlot : la
+    première des sept de l'Opéra) a sa pastille 4 m au-dessus du toit.
+- **« Y aller »** sur un bâtiment (infobulle épinglée et fiche) et sur une
+  station de recharge : l'itinéraire dans Plans sur iPhone et iPad, dans
+  Google Maps ailleurs. Une page ne peut pas guider une voiture : sur l'écran
+  d'une Tesla, l'itinéraire s'ouvre dans Google Maps ; depuis le téléphone,
+  le partage vers l'application Tesla l'envoie à la voiture.
+- **La recherche trouve « borne de recharge aubagne »** : un mot tapé de
+  quatre lettres ou plus couvre aussi les mots qui commencent par lui
+  (« recharge », « Borne de rechargement électrique »), et la borne de l'IGN
+  passe devant celles d'autres communes.
 - **Chercher un lieu nommé, une entreprise ou un commerce**, en plus d'une
   adresse : « mairie bouc bel air », « pharmacie bouc bel air », « notaire
   aix en provence ». Les lieux nommés de l'IGN étaient déjà demandés, mais

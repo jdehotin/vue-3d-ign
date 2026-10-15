@@ -69,6 +69,7 @@ from .constructions import (COUCHE_PONCTUELLES, COUCHE_RESERVOIRS,
                             constructions_pour_emprise)
 from .couches import (COUCHE_BATIMENTS, COUCHE_FORET, COUCHE_ROUTES,
                       COUCHE_VEGETATION, lire_couche)
+from .bornes import BORNES_VERSION, bornes_pour_emprise, fetch_bornes
 from .dpe import DPE_VERSION, dpe_pour_emprise, fetch_dpe
 from .dvf import DVF_VERSION, dvf_pour_emprise, fetch_dvf
 from .eau import (COUCHE_COURS_EAU, COUCHE_SURFACES_EAU, eau_pour_emprise,
@@ -172,9 +173,11 @@ NOM_PANNEAUX = f"panneaux-v{PANNEAUX_VERSION}.json.gz"
 NOM_NUAGE = f"nuage-v{NUAGE_VERSION}.json.gz"
 # La première des deux lectures du nuage, sur un carré autour du point.
 NOM_NUAGE_PROCHE = f"nuage-proche-v{NUAGE_VERSION}.json.gz"
-# DPE de l'ADEME et ventes DVF : lus seulement à la demande de la page.
+# DPE de l'ADEME, ventes DVF et bornes de recharge : lus seulement à la
+# demande de la page.
 NOM_DPE = f"dpe-v{DPE_VERSION}.json.gz"
 NOM_DVF = f"dvf-v{DVF_VERSION}.json.gz"
+NOM_BORNES = f"bornes-v{BORNES_VERSION}.json.gz"
 
 
 def nom_vehicules(detecteur):
@@ -229,6 +232,10 @@ class DpeIndisponibles(RuntimeError):
 
 class DvfIndisponible(RuntimeError):
     """Le cadastre ou les fichiers DVF n'ont pas répondu : rien n'est mis en cache."""
+
+
+class BornesIndisponibles(RuntimeError):
+    """La base des bornes de recharge n'a pas répondu : rien n'est mis en cache."""
 
 
 class HorsEmprise(ValueError):
@@ -724,7 +731,8 @@ class Cache:
 
     def __init__(self, dossier, lire_monuments=fetch_monuments, lire_ouvrages=fetch_ouvrages,
                  lire_vehicules=None, lire_panneaux=None, lire_nuage=fetch_nuage,
-                 lire_dpe=fetch_dpe, lire_dvf=fetch_dvf, lire_mer=fetch_mer):
+                 lire_dpe=fetch_dpe, lire_dvf=fetch_dvf, lire_mer=fetch_mer,
+                 lire_bornes=fetch_bornes):
         """`lire_vehicules` : de `vehicules.lecteur()`, ou une doublure qui a
         la même forme — `mode`, `detecteurs`, `orthophoto(emprise)` -> tableau
         RGB, `piscines(emprise, rgb=None)`, `navires(emprise, rgb=None)` et
@@ -761,6 +769,7 @@ class Cache:
         self.lire_dpe = lire_dpe
         self.lire_dvf = lire_dvf
         self.lire_mer = lire_mer
+        self.lire_bornes = lire_bornes
         self._lectures = {}
         self._taches = {
             NOM_MONUMENTS: concurrent.futures.ThreadPoolExecutor(
@@ -1189,6 +1198,22 @@ class Cache:
             NOM_DVF, lat, lon, construire, self.lire_dvf,
             lambda message: DvfIndisponible(f"ventes DVF illisibles : {message}"),
             lambda bbox, brut, scene: dvf_pour_emprise(*bbox, brut), zone=zone)
+
+    def obtenir_bornes(self, lat, lon, construire=construire, zone=None):
+        """Chemin du dossier où la couche des bornes de recharge du point est
+        écrite.
+
+        Jamais lue d'avance, datée, relue par « Reconstruire la scène »,
+        comme les DPE ; elle ne lit rien de la scène (vue3d/bornes.py).
+
+        Raises:
+            BornesIndisponibles si data.gouv.fr n'a pas répondu : rien n'est
+            écrit, la demande suivante réessaie.
+        """
+        return self._obtenir_couche(
+            NOM_BORNES, lat, lon, construire, self.lire_bornes,
+            lambda message: BornesIndisponibles(f"bornes de recharge illisibles : {message}"),
+            lambda bbox, brut, scene: bornes_pour_emprise(*bbox, brut), zone=zone)
 
     def _detections(self):
         """Les couches de l'orthophoto du service, dans l'ordre où elles se

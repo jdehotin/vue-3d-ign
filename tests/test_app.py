@@ -397,8 +397,8 @@ def test_le_bouton_reconstruit_la_scene(client, tmp_path):
 
 @pytest.fixture
 def client_dpe_dvf(tmp_path):
-    """DPE et DVF doublés : chaque lecture est notée ; au sud de 46°, les
-    deux sources sont en panne."""
+    """DPE, DVF et bornes de recharge doublés : chaque lecture est notée ; au
+    sud de 46°, les trois sources sont en panne."""
     lectures = []
     scene = {"version": 1, "bbox": [0, 0, 1, 1], "batiments": {"features": []}}
 
@@ -420,10 +420,19 @@ def client_dpe_dvf(tmp_path):
         return {"lu_le": "2026-10-09", "parcelles": {"features": []}, "lignes": [],
                 "millesimes": [2025], "absent": ["Bas-Rhin"]}
 
+    def lire_bornes(west, south, east, north):
+        lectures.append("bornes")
+        if south < 46:
+            raise ConnectionError("data.gouv.fr injoignable")
+        return {"lu_le": "2026-10-09", "lignes": [{
+            "id_station_itinerance": "S1", "id_pdc_itinerance": "P1", "nom_station": "Mairie",
+            "puissance_nominale": 22, "consolidated_longitude": (west + east) / 2,
+            "consolidated_latitude": (south + north) / 2}]}
+
     appli = module_app.creer_app(str(tmp_path), construire=construire,
                                  lire_monuments=lambda *b: {"elements": []},
                                  lire_ouvrages=lambda *b: {}, lire_nuage=lambda *b: None,
-                                 lire_dpe=lire_dpe, lire_dvf=lire_dvf)
+                                 lire_dpe=lire_dpe, lire_dvf=lire_dvf, lire_bornes=lire_bornes)
     return appli.test_client(), lectures
 
 
@@ -433,15 +442,18 @@ def test_dpe_et_dvf_ne_sont_lus_qu_a_la_demande(client_dpe_dvf):
     client, lectures = client_dpe_dvf
     assert client.get("/api/scene?lat=48.8049&lon=2.1204").status_code == 200
     assert lectures == []
-    for route in ("dpe", "dvf"):
+    for route in ("dpe", "dvf", "bornes"):
         r = client.get(f"/api/{route}?lat=48.8049&lon=2.1204")
         assert r.status_code == 200 and r.headers["Content-Encoding"] == "gzip"
         assert r.headers["Cache-Control"] == "no-cache"
         couche = json.loads(gzip.decompress(r.data))
         assert couche["lu_le"] == "2026-10-09"
         client.get(f"/api/{route}?lat=48.8049&lon=2.1204")
-    assert lectures == ["dpe", "dvf"]
-    assert couche["absent"] == ["Bas-Rhin"]
+    assert lectures == ["dpe", "dvf", "bornes"]
+    (station,) = couche["stations"]
+    assert station["nom"] == "Mairie" and station["puissance_max"] == 22
+    r = client.get("/api/dvf?lat=48.8049&lon=2.1204")
+    assert json.loads(gzip.decompress(r.data))["absent"] == ["Bas-Rhin"]
     r = client.get("/api/dpe?lat=48.8049&lon=2.1204")
     (adresse,) = json.loads(gzip.decompress(r.data))["adresses"]
     assert adresse["resume"]["mediane"] == "C" and adresse["dpe"][0]["numero"] == "1"
@@ -453,8 +465,10 @@ def test_une_panne_de_l_ademe_ou_de_dvf_rend_503_sans_rien_ecrire(client_dpe_dvf
     assert r.status_code == 503 and "ADEME" in r.get_json()["erreur"]
     r = client.get("/api/dvf?lat=45.5&lon=2")
     assert r.status_code == 503 and "DVF" in r.get_json()["erreur"]
+    r = client.get("/api/bornes?lat=45.5&lon=2")
+    assert r.status_code == 503 and "bornes de recharge" in r.get_json()["erreur"]
     client.get("/api/dpe?lat=45.5&lon=2")
-    assert lectures == ["dpe", "dvf", "dpe"]
+    assert lectures == ["dpe", "dvf", "bornes", "dpe"]
     assert client.get("/api/dpe?lat=40&lon=2").status_code == 422
 
 

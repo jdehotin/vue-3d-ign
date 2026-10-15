@@ -272,10 +272,11 @@ des arbres y rend 0 houppier sans la moindre erreur (2 160 en 3.12 sur Gordes,
 mêmes données). Et comme le cache ne périme pas, une scène construite ainsi
 resterait fausse.
 
-### DPE et ventes immobilières, à la demande
+### DPE, ventes immobilières et bornes de recharge, à la demande
 
-Deux boutons du panneau, éteints à l'ouverture : rien n'est demandé à
-l'ADEME ni à DVF tant qu'on ne clique pas, et rien n'est à installer.
+Trois boutons du panneau, éteints à l'ouverture : rien n'est demandé à
+l'ADEME, à DVF ni à data.gouv.fr tant qu'on ne clique pas, et rien n'est à
+installer.
 
 - **DPE** colore chaque bâtiment qui a des diagnostics de performance
   énergétique selon son étiquette énergie médiane, de A (vert) à G (rouge),
@@ -302,8 +303,19 @@ l'ADEME ni à DVF tant qu'on ne clique pas, et rien n'est à installer.
   d'Etalab (DGFiP) et le Parcellaire Express de l'IGN, joints par
   l'identifiant de parcelle. **Pas de DVF en Alsace-Moselle**, où la
   publicité foncière relève du livre foncier : la page le dit.
+- **Bornes de recharge** pose une borne par station de recharge pour
+  véhicules électriques, et au-dessus d'elle une pastille à éclair teinte de
+  sa puissance la plus haute (jusqu'à 22 kW, 23 à 149 kW, 150 kW et plus),
+  de taille constante à l'écran pour se trouver de loin ; une station sous
+  un toit (parking souterrain) a sa pastille au-dessus du toit. Le survol ou
+  le toucher donne l'opérateur, le nombre de points de charge, les
+  puissances, les prises, l'accès et les horaires ; le clic l'épingle, avec
+  « Recentrer la scène » et « Y aller ». Source : la
+  [Base nationale des IRVE](https://www.data.gouv.fr/fr/datasets/5448d3e0c751df01f85d0572/),
+  consolidée chaque jour par data.gouv.fr, lue sur l'emprise par son API
+  tabulaire.
 
-Les deux sont datés (« lus le … ») et gardés en cache avec la scène ;
+Les trois sont datés (« lus le … ») et gardés en cache avec la scène ;
 « Reconstruire la scène » les relit. Une seconde ou deux à la première
 lecture, en zone de 356 m. Les conditions de réutilisation de DVF
 interdisent de réidentifier les personnes et de laisser les moteurs de
@@ -513,9 +525,11 @@ individuel n'est trouvé que par son enseigne, jamais par le nom de la
 personne.
 
 Au clic seulement, hors IGN aussi : les DPE de l'API de l'ADEME
-(`data.ademe.fr`, jeux `dpe03existant` et `dpe02neuf`) et les fichiers DVF
-géolocalisées d'Etalab (`files.data.gouv.fr/geo-dvf`), sous Licence Ouverte
-2.0, sans clé.
+(`data.ademe.fr`, jeux `dpe03existant` et `dpe02neuf`), les fichiers DVF
+géolocalisées d'Etalab (`files.data.gouv.fr/geo-dvf`) et la Base nationale
+des IRVE (`tabular-api.data.gouv.fr`), sous Licence Ouverte 2.0, sans clé.
+Le lien « Y aller » d'un bâtiment ou d'une station ouvre l'itinéraire dans
+Plans (iPhone, iPad) ou Google Maps.
 
 La couche optionnelle des panneaux solaires lit le registre
 [OpenPVMapper](https://doi.org/10.5281/zenodo.19188878) (G. Kasmi, CC-BY 4.0),
@@ -722,6 +736,7 @@ principales :
 | `GET /api/panneaux?lat=…&lon=…` | Les panneaux solaires du registre, en JSON gzippé ; `{"actif": false, "panneaux": []}` si le service n'a pas de registre |
 | `GET /api/dpe?lat=…&lon=…` | Les DPE de l'ADEME réunis par bâtiment (`batiments`, par `cleabs`) et, sans bâtiment, par adresse (`adresses`), en JSON gzippé, datés (`lu_le`) ; demandés au clic seulement |
 | `GET /api/dvf?lat=…&lon=…` | Les ventes DVF des parcelles de l'emprise (`parcelles`, `ventes`, `resume`), en JSON gzippé, datées ; `absent` nomme les départements sans DVF (Alsace-Moselle) ; au clic seulement |
+| `GET /api/bornes?lat=…&lon=…` | Les bornes de recharge de l'emprise, réunies par station (`stations` : opérateur, points de charge, puissances, prises, accès), en JSON gzippé, datées ; au clic seulement |
 | `GET /api/sante` | `{"ok": true, "vehicules": {"mode": …, "detecteurs": […]}, "panneaux": {"actif": …}}` : le contrôle de vie, et ce que le service sait détecter ou lire |
 | `POST /api/reconstruire?lat=…&lon=…` | Met de côté la scène et ses couches (202) : la demande suivante les reconstruit d'après les données de l'IGN du moment, l'ancienne revenant si l'IGN ne répond pas. 429 moins de 10 min après sa construction, 409 pendant qu'elle ou une de ses couches se calcule |
 

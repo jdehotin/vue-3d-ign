@@ -134,6 +134,10 @@ ok('couverture : pluriel, dernier mot en cours de frappe, rien de tapé',
    && R.couvre(['mairie', 'bouc', 'be'], R.motsDe('Mairie de Bouc-Bel-Air'))
    && !R.couvre(['mairie', 'bouc', 'bel', 'air'], R.motsDe('Bel Air 13320 Bouc-Bel-Air'))
    && !R.couvre([], ['gordes']));
+ok('couverture : un mot de quatre lettres ou plus au début d\'un autre, un plus court tel quel',
+   R.couvre(R.motsDe('borne de recharge aubagne'),
+            R.motsDe('Borne de rechargement électrique service dédié aux véhicules Aubagne 13400'))
+   && !R.couvre(['rue', 'gordes'], R.motsDe('Ruelle des Cerisiers 84220 Gordes')));
 ok('casse de titre des noms SIRENE',
    R.casseTitre('BOULANGERIE DE LA GRATIANE') === 'Boulangerie de la Gratiane'
    && R.casseTitre('AIX-EN-PROVENCE') === 'Aix-en-Provence'
