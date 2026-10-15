@@ -7,6 +7,7 @@
     GET /api/monuments?lat=…&lon=…   la couche des monuments OSM, JSON gzippé
     GET /api/ouvrages?lat=…&lon=…    la couche des ouvrages BD TOPO, JSON gzippé
     GET /api/nuage?lat=…&lon=…       le bâti du nuage LiDAR HD, JSON gzippé
+                                   `&proche=1` : d'abord le carré autour du point
     GET /api/piscines?lat=…&lon=…    les piscines de l'orthophoto, si le service a un détecteur
     GET /api/navires?lat=…&lon=…     les navires de l'orthophoto, sur l'eau, de même
     GET /api/vehicules?lat=…&lon=…&detecteur=…   les véhicules vus d'un détecteur du service
@@ -46,8 +47,8 @@ from .nuage import fetch_nuage
 from .ouvrages import fetch_ouvrages
 from .panneaux import REGISTRE_LICENCE
 from .panneaux import lecteur as lecteur_panneaux
-from .scene import (NOM_DPE, NOM_DVF, NOM_MONUMENTS, NOM_NUAGE, NOM_ORTHO, NOM_OUVRAGES,
-                    NOM_PANNEAUX, NOM_SCENE, Cache, DpeIndisponibles, DvfIndisponible,
+from .scene import (NOM_DPE, NOM_DVF, NOM_MONUMENTS, NOM_NUAGE, NOM_NUAGE_PROCHE, NOM_ORTHO,
+                    NOM_OUVRAGES, NOM_PANNEAUX, NOM_SCENE, Cache, DpeIndisponibles, DvfIndisponible,
                     HorsEmprise, MonumentsIndisponibles, NuageIndisponible,
                     OuvragesIndisponibles,
                     PanneauxIndisponibles, ReconstructionRefusee, SceneIncomplete,
@@ -236,6 +237,8 @@ def creer_app(dossier_cache=None, construire=construire_scene, lire_monuments=fe
                 return cache.obtenir_ouvrages(*p, construire=construire, zone=zone), None
             if couche == NOM_NUAGE:
                 return cache.obtenir_nuage(*p, construire=construire, zone=zone), None
+            if couche == NOM_NUAGE_PROCHE:
+                return cache.obtenir_nuage_proche(*p, construire=construire, zone=zone), None
             if couche == NOM_DPE:
                 return cache.obtenir_dpe(*p, construire=construire, zone=zone), None
             if couche == NOM_DVF:
@@ -364,6 +367,11 @@ def creer_app(dossier_cache=None, construire=construire_scene, lire_monuments=fe
     def nuage():
         """Le bâti du nuage LiDAR HD, demandé par la page une fois la scène
         affichée : `null` hors couverture LiDAR HD ou sans relief."""
+        if request.args.get("proche"):
+            trouve, err = dossier_scene(couche=NOM_NUAGE_PROCHE)
+            if err:
+                return err
+            return servir_gzip(*trouve)
         dossier, err = dossier_scene(couche=NOM_NUAGE)
         if err:
             return err

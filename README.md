@@ -705,7 +705,7 @@ principales :
 | `GET /api/ortho?lat=…&lon=…` | L'orthophoto de la scène, en JPEG |
 | `GET /api/monuments?lat=…&lon=…` | La couche des monuments OSM, en JSON gzippé (`null` sans partie), que la page demande une fois la scène affichée |
 | `GET /api/ouvrages?lat=…&lon=…` | La couche des murs, ponts, voies ferrées et terrains de sport, en JSON gzippé (`null` sans ouvrage), demandée elle aussi après la scène |
-| `GET /api/nuage?lat=…&lon=…` | Le bâti du nuage de points LiDAR HD, en JSON gzippé (`null` hors couverture), demandé après la scène : 10 à 90 s à la première demande |
+| `GET /api/nuage?lat=…&lon=…` | Le bâti du nuage de points LiDAR HD, en JSON gzippé (`null` hors couverture), demandé après la scène : 10 à 90 s à la première demande. Avec `&proche=1`, d'abord un carré de 400 m autour du point, que la page affiche avant la zone entière (en zone de 800 m et plus) |
 | `GET /api/piscines?lat=…&lon=…` | Les piscines de l'orthophoto, en JSON gzippé, demandées après la scène ; `{"mode": "aucun", "piscines": []}` si le service n'a pas de détecteur |
 | `GET /api/navires?lat=…&lon=…` | Les bateaux de l'orthophoto, sur l'eau, en JSON gzippé, demandés après les piscines ; `{"mode": "aucun", "navires": []}` si le service n'a pas de détecteur, une liste vide loin de l'eau |
 | `GET /api/vehicules?lat=…&lon=…&detecteur=…` | Les véhicules vus d'un détecteur du service (`rtmdet` ou `yolo`), en JSON gzippé ; la page les demande dans l'ordre que donne `/api/sante`, du rapide au lent, et les réunit ; 400 sans le paramètre ou avec un détecteur que le service n'a pas |

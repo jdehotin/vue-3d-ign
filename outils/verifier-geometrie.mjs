@@ -31,7 +31,10 @@
 //   comme simple ; végétation sans les masses qu'expliquent les ouvrages
 //   (vegetationExtraite) : identique à sa reconstruction ;
 // - barre d'avancement (partConstruite) : croissante, d'accord avec les étapes
-//   que compte le serveur.
+//   que compte le serveur ;
+// - écarts des points du nuage aux toits (ecartsSousToits) : un point sous un
+//   toit plat, sous un pan, sous deux triangles superposés (le plus haut),
+//   hors de tout toit, sous un pignon vertical, dans une cour.
 //
 // Sort en erreur si un contrôle est manqué, après les avoir tous faits.
 import * as THREE from 'three';
@@ -71,14 +74,14 @@ const NOMS = ['couperPolygone', 'enveloppeConvexe', 'rectangleMin', 'rectangleSe
               'normalesPliees', 'normalesIndexees', 'sphereEnglobante',
               'alea', 'portDe', 'portMesure', 'gabaritHouppier', 'facesHouppier', 'sommetsHouppier', 'ajouterHouppier',
               'nouveauTampon', 'facesHouppierSimple', 'sommetsHouppierSimple', 'ajouterHouppierSimple',
-              'vegetationExtraite', 'partConstruite'];
-const CONSTS = ['PORTS', 'SEGMENTS_HOUPPIER', 'SEGMENTS_SIMPLE', 'ANGLES_HOUPPIER', 'COS_HOUPPIER', 'BOSSES_HOUPPIER',
+              'vegetationExtraite', 'partConstruite', 'ecartsSousToits'];
+const CONSTS = ['PAS_ECARTS_M', 'PORTS', 'SEGMENTS_HOUPPIER', 'SEGMENTS_SIMPLE', 'ANGLES_HOUPPIER', 'COS_HOUPPIER', 'BOSSES_HOUPPIER',
                 'EMPRISE_HOUPPIER', 'HAUTEUR_MIN_TRONC', 'PART_LECTURES', 'GABARITS_NAVIRE'];
 const { rectangleMin, rectangleSelonAxe, geometrieToitDecoupe, stationsLeLong, prismeLeLong, dalle,
         blocsVehicule, repereVehicule, blocsNavire, GABARITS_NAVIRE, normalesFacettes, normalesPliees, normalesIndexees, sphereEnglobante,
         alea, portDe, facesHouppier, sommetsHouppier, ajouterHouppier, nouveauTampon, vegetationExtraite, partConstruite,
         facesHouppierSimple, sommetsHouppierSimple, ajouterHouppierSimple,
-        SEGMENTS_HOUPPIER, EMPRISE_HOUPPIER, HAUTEUR_MIN_TRONC, PART_LECTURES } =
+        SEGMENTS_HOUPPIER, EMPRISE_HOUPPIER, HAUTEUR_MIN_TRONC, PART_LECTURES, ecartsSousToits } =
   new Function('THREE', 'toLocal', CONSTS.map(extraireConst).join('\n') + '\n' + NOMS.map(extraire).join('\n')
                + `\nreturn { ${NOMS.concat(CONSTS).join(', ')} };`)(THREE, toLocal);
 let tout = true;
@@ -650,6 +653,36 @@ const ok = total > 2 && calculs === 2 && parts[0] === 0 && croissante && parts[t
            && parts[total - 2] === PART_LECTURES && parts[total - 3] < PART_LECTURES;
 console.log(`${ok ? 'OK ' : 'KO '} barre d'avancement : ${total} étapes dont ${calculs} de calcul, `
             + `${parts.map(p => Math.round(100 * p)).join(' ')} %`);
+tout = tout && ok;
+}
+
+// --- Écarts du nuage aux toits ----------------------------------------------------
+{
+// (x, z, altitude) de trois sommets par triangle.
+const tri = [], toitDe = [];
+const ajouter = (k, ...sommets) => { tri.push(...sommets.flat()); toitDe.push(k); };
+// Toit 0 : dessus plat à 110 m sur [0, 10]², en deux triangles, avec une cour
+// [4, 6]² laissée ouverte (quatre trapèzes, chacun en deux triangles).
+const quad = (k, [ax, az], [bx, bz], y) => {
+  ajouter(k, [ax, az, y], [bx, az, y], [bx, bz, y]);
+  ajouter(k, [ax, az, y], [bx, bz, y], [ax, bz, y]);
+};
+quad(0, [0, 0], [10, 4], 110); quad(0, [0, 6], [10, 10], 110);
+quad(0, [0, 4], [4, 6], 110); quad(0, [6, 4], [10, 6], 110);
+// Toit 1 : un pan de 120 m (x = 20) à 125 m (x = 30), sur z ∈ [0, 10], et
+// son pignon vertical en x = 30.
+ajouter(1, [20, 0, 120], [30, 0, 125], [30, 10, 125]);
+ajouter(1, [20, 0, 120], [30, 10, 125], [20, 10, 120]);
+ajouter(1, [30, 0, 100], [30, 10, 100], [30, 10, 125]);
+// Toit 2 : une lucarne à 128 m au-dessus du pan, sur [24, 26]².
+quad(2, [24, 4], [26, 6], 128);
+const pts = [[2, 2, 110.3], [5, 5, 112], [25, 1, 122], [25, 5, 127.5], [15, 5, 50], [30, 5, 126]];
+const { toit, ecart } = ecartsSousToits(Float64Array.from(tri), Int32Array.from(toitDe),
+  pts.map(p => p[0]), pts.map(p => p[1]), pts.map(p => p[2]));
+const attendus = [[0, 0.3], [-1], [1, -0.5], [2, -0.5], [-1], [1, 1]];
+const ok = attendus.every(([k, e], p) => toit[p] === k && (k < 0 || Math.abs(ecart[p] - e) < 1e-6));
+console.log(`${ok ? 'OK ' : 'KO '} écarts aux toits : toits ${Array.from(toit).join(' ')}, `
+            + `écarts ${Array.from(ecart).map(e => e.toFixed(2)).join(' ')}`);
 tout = tout && ok;
 }
 

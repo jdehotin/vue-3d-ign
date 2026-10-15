@@ -19,6 +19,7 @@ VUE3D_PANNEAUX=oui docker compose up -d --build        # avec les panneaux solai
 node outils/verifier-geometrie.mjs               # géométrie de la page, exécutée sous Node
 node outils/verifier-recherche.mjs               # recherche d'un lieu, exécutée sous Node
 node outils/verifier-export.mjs essai.ifc essai.gml   # exports IFC et CityGML, exécutés sous Node
+node outils/mesure-ecarts-toits.mjs "http://localhost:8080/?lat=43.9116&lon=5.2003"   # toits contre le nuage LiDAR (puppeteer-core)
 python outils/valider_ifc.py essai.ifc           # validation par ifcopenshell (pip install ifcopenshell pytest, hors requirements)
 python outils/valider_citygml.py essai.gml       # géométrie du CityGML ; son schéma : citygml-tools validate essai.gml
 npm install puppeteer-core && node outils/essai-navigateur.mjs "http://localhost:8080/?lat=43.9116&lon=5.2003"
@@ -43,7 +44,7 @@ vue3d/
   lignes.py     lignes à haute tension et hauteur de leurs supports
   monuments.py  parties de monuments OSM (building:part), seule source hors IGN
   ouvrages.py   murs, ponts, voies ferrées, terrains de sport : couche à part, chargée après la scène
-  nuage.py      bâti du nuage de points LiDAR HD (dalles COPC lues par plages, via geopf) ; ouvrages ajourés en points : couche à part
+  nuage.py      bâti du nuage de points LiDAR HD (dalles COPC lues par plages, via geopf) ; ouvrages ajourés en points : couche à part, lue en deux temps (carré proche, puis zone entière)
   vehicules.py  véhicules, piscines et navires lus sur l'orthophoto par un réseau ONNX : couche à part, optionnelle (VUE3D_VEHICULES) ; les navires gardés sur l'eau, mer comprise (communes BD TOPO, RGE ALTI)
   releves.py    détections gardées par rectangle de terrain (cache/releves/) : un point décalé ne détecte que la bande nouvelle
   panneaux.py   panneaux solaires du registre OpenPVMapper (SQLite R-tree) : couche à part, optionnelle (VUE3D_PANNEAUX)

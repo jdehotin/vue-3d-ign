@@ -79,7 +79,8 @@ from .houppiers import houppiers_pour_emprise
 from .mnh import dimensions_grille, fetch_mnh_grid, fetch_sol_grid
 from .monuments import fetch_monuments, monuments_pour_emprise
 from .ortho import fetch_exg_grid, fetch_ortho_jpeg
-from .nuage import NUAGE_VERSION, fetch_nuage, nuage_pour_emprise
+from .nuage import (NUAGE_PROCHE_COTE_M, NUAGE_PROCHE_ZONE_MIN_M, NUAGE_VERSION, fetch_nuage,
+                    nuage_pour_emprise)
 from .ouvrages import OUVRAGES_VERSION, fetch_ouvrages, ouvrages_pour_emprise
 from .panneaux import PANNEAUX_VERSION, panneaux_pour_emprise
 from .releves import (MARGE_NAVIRES_PX, MARGE_PISCINES_PX, MARGE_VEHICULES_PX, Releves,
@@ -169,6 +170,8 @@ NOM_OUVRAGES = f"ouvrages-v{OUVRAGES_VERSION}.json.gz"
 # Les panneaux solaires ont une seule source : le registre, à sa version.
 NOM_PANNEAUX = f"panneaux-v{PANNEAUX_VERSION}.json.gz"
 NOM_NUAGE = f"nuage-v{NUAGE_VERSION}.json.gz"
+# La première des deux lectures du nuage, sur un carré autour du point.
+NOM_NUAGE_PROCHE = f"nuage-proche-v{NUAGE_VERSION}.json.gz"
 # DPE de l'ADEME et ventes DVF : lus seulement à la demande de la page.
 NOM_DPE = f"dpe-v{DPE_VERSION}.json.gz"
 NOM_DVF = f"dvf-v{DVF_VERSION}.json.gz"
@@ -1105,6 +1108,33 @@ class Cache:
                 *bbox, brut, scene.get("relief"), scene.get("batiments"), scene.get("masses"),
                 scene.get("houppiers")),
             zone=zone)
+
+    def obtenir_nuage_proche(self, lat, lon, construire=construire, zone=None):
+        """(dossier, nom du fichier) de la première lecture du nuage : un carré
+        de NUAGE_PROCHE_COTE_M autour du point (vue3d/nuage.py), que la page
+        affiche avant de demander la zone entière.
+
+        La couche entière à sa place si elle est déjà écrite — la page n'a
+        alors rien de plus à demander — ou si la zone est trop petite pour que
+        deux lectures vaillent mieux qu'une.
+
+        Raises:
+            NuageIndisponible si une dalle n'a pas pu être lue : rien n'est
+            écrit, la demande suivante réessaie.
+        """
+        normal = point_normalise(lat, lon)
+        cote = zone_normalisee(zone) or SCENE_COTE_M
+        if (cote < NUAGE_PROCHE_ZONE_MIN_M
+                or os.path.exists(self.chemin(*normal, NOM_NUAGE, zone_normalisee(zone)))):
+            return self.obtenir_nuage(lat, lon, construire=construire, zone=zone), NOM_NUAGE
+        return self._obtenir_couche(
+            NOM_NUAGE_PROCHE, lat, lon, construire,
+            lambda *bbox: self.lire_nuage(*bbox, proche_m=NUAGE_PROCHE_COTE_M),
+            lambda message: NuageIndisponible(f"nuage LiDAR HD illisible : {message}"),
+            lambda bbox, brut, scene: nuage_pour_emprise(
+                *bbox, brut, scene.get("relief"), scene.get("batiments"), scene.get("masses"),
+                scene.get("houppiers")),
+            zone=zone), NOM_NUAGE_PROCHE
 
     def prelire_panneaux(self, lat, lon, zone=None):
         """Lance la lecture du registre en tâche de fond, si le service en a un."""

@@ -8,11 +8,14 @@ Pour chaque lieu, sur l'emprise par défaut :
 - pour chaque bâtiment de la scène, la part de son emprise érodée où le
   LiDAR voit le sol, et le sol sous une structure (parts_vues) ; les
   bâtiments au-delà de 5 % de sol vu ;
-- les points du bâti transmis, et ceux des ouvrages ajourés.
+- les points du bâti transmis, et ceux des ouvrages ajourés ;
+- avec --proche, ce que coûte d'abord le carré proche de chaque côté donné
+  (fetch_nuage, proche_m), avant la zone entière.
 
 C'est la mesure à relancer avant de toucher une constante de nuage.py.
 
-Usage : python outils/mesure_nuage.py [--blocs 65536,262144,1048576] [--zone 1000] [lat lon ...]
+Usage : python outils/mesure_nuage.py [--blocs 65536,262144,1048576] [--zone 1000]
+        [--proche 300,400,500] [lat lon ...]
 Sans lieu : la tour Eiffel, Notre-Dame de Paris, le Grand Palais (verrière),
 la gare de l'Est, la cathédrale de Strasbourg et le village de Gordes.
 """
@@ -35,9 +38,19 @@ LIEUX = {"Tour Eiffel": (48.8584, 2.2945), "Notre-Dame": (48.8530, 2.3499),
          "Strasbourg": (48.5819, 7.7510), "Gordes": (43.9116, 5.2003)}
 
 
-def mesurer(nom, lat, lon, blocs, zone=None):
+def mesurer(nom, lat, lon, blocs, zone=None, proches=()):
     bbox = emprise(lat, lon, zone)
     print(f"\n## {nom} ({lat}, {lon})")
+    for cote in proches:
+        lus = []
+        lire = lambda url, debut, fin: lus.append(fin - debut + 1) or nuage.lire_plage(url, debut, fin)
+        t0 = time.time()
+        brut = nuage.fetch_nuage(*bbox, lire=lire, proche_m=cote)
+        if brut is None:
+            print("- hors couverture LiDAR HD")
+            return
+        print(f"- carré proche de {cote} m : {len(lus)} requêtes, {sum(lus) / 1e6:.1f} Mo demandés, "
+              f"{time.time() - t0:.1f} s ; {len(brut['x'])} points du bâti")
     brut = None
     for bloc in blocs:
         nuage.BLOC_OCTETS = bloc
@@ -78,14 +91,16 @@ def mesurer(nom, lat, lon, blocs, zone=None):
 
 if __name__ == "__main__":
     args = sys.argv[1:]
-    blocs, zone = [nuage.BLOC_OCTETS], None
-    while args[:1] in (["--blocs"], ["--zone"]):
+    blocs, zone, proches = [nuage.BLOC_OCTETS], None, []
+    while args[:1] in (["--blocs"], ["--zone"], ["--proche"]):
         if args[0] == "--blocs":
             blocs = [int(b) for b in args[1].split(",")]
+        elif args[0] == "--proche":
+            proches = [int(c) for c in args[1].split(",")]
         else:
             zone = int(args[1])
         args = args[2:]
     lieux = ({f"{args[k]}, {args[k + 1]}": (float(args[k]), float(args[k + 1]))
               for k in range(0, len(args) - 1, 2)} if args else LIEUX)
     for nom, (lat, lon) in lieux.items():
-        mesurer(nom, lat, lon, blocs, zone)
+        mesurer(nom, lat, lon, blocs, zone, proches)

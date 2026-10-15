@@ -15,6 +15,37 @@ messages de commit et dans les commentaires des modules.
 
 ### Ajouté
 
+- **Le nuage LiDAR HD se lit en deux temps.** En zone de 800 m et plus, la
+  page demande d'abord un carré de 400 m autour du point (`/api/nuage?…&proche=1`),
+  l'affiche dès qu'il est lu, puis la zone entière, qui le remplace. Le carré
+  coûte le quart des octets de la zone (44 Mo sur 159 à Gordes, 27 sur 107 à
+  la tour Eiffel, en zone de 1 000 m) : l'ouvrage visé, presque toujours au
+  centre, apparaît bien avant le reste. La zone entière relit ce carré : la
+  couche complète arrive un peu plus tard qu'avant.
+  - Le carré est calé sur les mailles de la zone entière, et n'y sont jugés
+    que les bâtiments qu'il contient entiers : ses ouvrages ajourés sont
+    aussi ceux de la zone entière, rien n'apparaît pour disparaître ensuite.
+  - La couche entière ne change pas, et celles déjà en cache restent
+    valables : déjà lue, elle répond seule à la demande du carré.
+- **Les toits dessinés sont vérifiés contre le nuage LiDAR HD**, à la fin de
+  chacune de ses deux lectures (le carré proche, puis la zone entière) et à
+  chaque bouton des toits. Les toits sont tirés du MNH à 0,5 m ; les points
+  « bâtiment » bruts du nuage en sont un contrôle indépendant. Pour chaque
+  toit, le point le plus haut de chaque mètre carré, à plus de 1 m du
+  contour, est comparé au toit à sa verticale :
+  - la fiche du bâtiment dit son **décalage** (l'écart médian) et la part de
+    ses points **hors de sa forme**, à plus de 0,5 m du toit une fois le
+    décalage ôté ; au-delà de 40 %, le toit est « en écart » ;
+  - le panneau compte les toits vérifiés et ceux en écart ;
+  - avec « Nuage LiDAR » allumé, ces points sont colorés : bleus sous le
+    toit, rouges au-dessus, gris pâle à ±0,25 m.
+  - Mesuré en zone de 1 000 m, en médiane : les pans mesurés ont 11 % de
+    leurs points hors de leur forme à Gordes, 13 % à la tour Eiffel (aucun
+    toit en écart à Gordes, un sur 17 à la tour), les toits plats aucun ; les
+    toits résumés en deux pans, de 21 à 55 %. Sur le coteau provençal des
+    toits-terrasses, les huit villas passées en pans ont de 2 à 20 % de leurs
+    points hors de leur forme, de 9 à 85 % quand on éteint « Toits mesurés ».
+  - `outils/mesure-ecarts-toits.mjs` relève ces chiffres dans la vraie page.
 - **Les tuiles refusées par l'IGN sont relues et gardées par le serveur.**
   La Géoplateforme refuse par épisodes une tuile d'orthophoto ou de Plan IGN
   qui existe : 253 refus en une visite le 15 octobre vers 17 h 15, aucun
@@ -69,6 +100,14 @@ messages de commit et dans les commentaires des modules.
   reste « sous les arbres », en volume pâle : la planéité ne suffit pas à le
   distinguer d'un houppier, que la segmentation trouve plat aussi.
 - Avec « Toits mesurés » éteint, le toit résumé reste en pente.
+- Le pied des toits mesurés (pans, surfaces) est posé sur le point bas du
+  RGE ALTI sous le contour, quand le serveur les mesure depuis celui du sol
+  LiDAR : leur décalage au nuage est de −0,4 à −0,6 m en médiane, contre
+  +0,1 à +0,4 m pour les toits plats.
+- En ville dense, la couche du nuage, allégée à 250 000 points hors des
+  ouvrages ajourés, garde un point pour 1,5 à 2 m de bâti en zone de
+  1 000 m : à Strasbourg, les pans mesurés y paraissent à 47 % hors de leur
+  forme, à 35 % dans le carré proche, plus dense.
 
 ## Scène v14 — 1er octobre 2026
 

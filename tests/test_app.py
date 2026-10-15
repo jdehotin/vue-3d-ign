@@ -8,6 +8,7 @@ import numpy as np
 import pytest
 
 from vue3d import app as module_app
+from vue3d.nuage import NUAGE_PROCHE_COTE_M
 from vue3d.scene import SceneIncomplete
 
 
@@ -33,8 +34,11 @@ def client(tmp_path):
         return {"lineaires": {"features": []}, "surfaciques": {"features": []},
                 "voies": {"features": []}, "terrains": {"features": []}}
 
-    def lire_nuage(west, south, east, north):
+    lectures_nuage = []
+
+    def lire_nuage(west, south, east, north, proche_m=None):
         # Au sud de 46° : une dalle LiDAR HD illisible ; ailleurs, hors couverture.
+        lectures_nuage.append(proche_m)
         if south < 46:
             raise ConnectionError("plage refusée")
         return None
@@ -42,7 +46,9 @@ def client(tmp_path):
     appli = module_app.creer_app(str(tmp_path), construire=construire,
                                  lire_monuments=lire_monuments, lire_ouvrages=lire_ouvrages,
                                  lire_nuage=lire_nuage)
-    return appli.test_client()
+    client = appli.test_client()
+    client.lectures_nuage = lectures_nuage
+    return client
 
 
 @pytest.fixture
@@ -201,6 +207,21 @@ def test_la_couche_du_nuage_est_servie_a_part(client):
     r = client.get("/api/nuage?lat=48.8049&lon=2.1204")
     assert r.status_code == 200 and r.headers["Content-Encoding"] == "gzip"
     assert json.loads(gzip.decompress(r.data)) is None
+
+
+def test_le_nuage_se_lit_d_abord_autour_du_point(client):
+    """Zone de 1 000 m : le carré proche d'abord, puis la zone entière ; celle-ci
+    écrite, la demande du carré la sert. Sur l'emprise par défaut, une seule
+    lecture."""
+    url = "/api/nuage?lat=48.8049&lon=2.1204&zone=1000"
+    assert client.get(url + "&proche=1").status_code == 200
+    assert client.lectures_nuage == [NUAGE_PROCHE_COTE_M]
+    entiere = client.get(url)
+    assert entiere.status_code == 200 and client.lectures_nuage == [NUAGE_PROCHE_COTE_M, None]
+    r = client.get(url + "&proche=1")
+    assert r.headers["ETag"] == entiere.headers["ETag"] and len(client.lectures_nuage) == 2
+    assert client.get("/api/nuage?lat=48.8049&lon=2.1204&proche=1").status_code == 200
+    assert client.lectures_nuage[-1] is None
 
 
 def test_une_panne_du_nuage_rend_503_sans_toucher_la_scene(client):

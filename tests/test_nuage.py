@@ -258,3 +258,70 @@ def test_la_lecture_garde_le_bati_et_note_le_sol(monkeypatch):
     assert brut["classe"].tolist() == [6]
     g = brut["grilles"]
     assert g["sol"][1, 1] and g["sol"].sum() == 1 and g["bati"][2, 3] and g["bati"].sum() == 1
+
+
+# --- Le carré proche, lu d'abord ------------------------------------------------
+
+def test_le_carre_proche_est_cale_sur_les_mailles_de_la_zone():
+    """Ses bornes tombent sur la grille du sol vu de la zone entière : un
+    bâtiment qu'il contient y est jugé sur les mêmes mailles."""
+    x0, y0, x1, y1 = 650_000.37, 6_860_000.81, 650_720.52, 6_861_000.19
+    bx0, by0, bx1, by1 = nuage.boite_proche(x0, y0, x1, y1, 400)
+    for a, b in ((bx0, x0), (by0, y0), (bx1, x0), (by1, y0)):
+        assert (a - b) / nuage.PAS_SOL_VU_M == pytest.approx(round((a - b) / nuage.PAS_SOL_VU_M), abs=1e-6)
+    assert bx1 - bx0 == pytest.approx(400) and by1 - by0 == pytest.approx(400)
+    assert abs((bx0 + bx1) / 2 - (x0 + x1) / 2) <= 1 and abs((by0 + by1) / 2 - (y0 + y1) / 2) <= 1
+    # Plus grand que la zone : coupé à elle.
+    assert nuage.boite_proche(x0, y0, x1, y1, 2000) == (x0, y0, x1, y1)
+
+
+def test_la_lecture_proche_ne_lit_que_le_carre(monkeypatch):
+    """Dalles listées et points lus sur le carré, grilles tracées depuis son
+    coin, la boîte rendue avec le brut."""
+    listees, lues = [], []
+    monkeypatch.setattr(nuage, "lire_couche", lambda nom, *bbox: listees.append(bbox) or {"features": [
+        {"properties": {"url_npl": "https://data.geopf.fr/x/dalle.copc.laz"}}]})
+
+    def lire_points(u, bx0, by0, bx1, by1, lire=None):
+        lues.append((bx0, by0, bx1, by1))
+        return (np.array([bx0 + 1.5]), np.array([by0 + 2.5]), np.array([50.0]),
+                np.array([6], dtype=np.uint8)), None
+
+    monkeypatch.setattr(nuage, "lire_points", lire_points)
+    west, south, east, north = 2.28, 48.85, 2.30, 48.86
+    brut = nuage.fetch_nuage(west, south, east, north, proche_m=300)
+    (bx0, by0, bx1, by1), = lues
+    assert brut["proche"] == (bx0, by0, bx1, by1) and bx1 - bx0 == pytest.approx(300)
+    assert brut["grilles"]["x0"] == bx0 and brut["grilles"]["bati"].shape == (300, 300)
+    assert brut["grilles"]["bati"][2, 1] and brut["grilles"]["bati"].sum() == 1
+    o, s, e, n = listees[0]
+    assert west < o < e < east and south < s < n < north
+
+
+def test_la_couche_proche_ne_juge_que_les_batiments_qu_elle_contient():
+    """Un bâtiment à cheval sur le bord du carré n'y a qu'une partie de ses
+    mailles : la zone entière le jugera. Celui qu'il contient y est ajouré
+    comme dans la zone entière, ses points d'abord."""
+    g = _grilles(sol=lambda X, Y: (X.astype(int) + Y.astype(int)) % 2 == 0,
+                 bati=lambda X, Y: np.ones_like(X, bool))
+    x = g["x0"] + np.array([12.0, 27.0])        # dans la tour, dans le bâtiment à cheval
+    y = g["y0"] + np.array([25.0, 25.0])
+    brut = {"x": x, "y": y, "z": np.array([80.0, 40.0]), "classe": np.array([6, 6], dtype=np.uint8),
+            "grilles": g}
+    lon, lat = nuage.depuis_lambert93(x, y)
+    west, south, east, north = lon.min() - 0.001, lat.min() - 0.001, lon.max() + 0.001, lat.max() + 0.001
+    batiments = {"features": [_batiment("TOUR", 5, 10, 20, 40, g), _batiment("CHEVAL", 24, 10, 50, 40, g)]}
+    relief = _relief(west, south, east, north)
+
+    entiere = nuage.nuage_pour_emprise(west, south, east, north, brut, relief, batiments)
+    assert entiere["ajoures"] == ["TOUR", "CHEVAL"] and "proche" not in entiere
+
+    boite = (g["x0"], g["y0"], g["x0"] + 30, g["y0"] + 60)
+    proche = nuage.nuage_pour_emprise(west, south, east, north, {**brut, "proche": boite}, relief, batiments)
+    assert proche["ajoures"] == ["TOUR"] and proche["n_ajoures"] == 1
+    assert proche["ajoures_detail"]["TOUR"] == entiere["ajoures_detail"]["TOUR"]
+    # Le carré en degrés, contenu dans la boîte Lambert-93.
+    o, s, e, n = proche["proche"]
+    cx, cy = nuage.vers_lambert93([o, e, e, o], [s, s, n, n])
+    assert (cx >= boite[0] - 1e-6).all() and (cx <= boite[2] + 1e-6).all()
+    assert (cy >= boite[1] - 1e-6).all() and (cy <= boite[3] + 1e-6).all()
