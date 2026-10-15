@@ -185,6 +185,14 @@ ok('entreprises : l\'individuel par son enseigne seulement, ni cessée, ni outre
    memes(boulangeries.map(s => s.nom), ['Boulangerie du Cours'])
    && boulangeries[0].detail === 'entreprise · 13100 Aix-en-Provence',
    JSON.stringify(boulangeries.map(s => [s.nom, s.detail])));
+const societe = R.suggestionsEntreprises({ results: [
+  { nom_complet: 'SOCIETE EXEMPLE (SOCIETE EXEMPLE) (SOCIETE EXEMPLE)', nature_juridique: '5710', etat_administratif: 'A',
+    siege: etab('AIX-EN-PROVENCE', '13100', 43.5290, 5.4480, ['MAGASIN FICTIF']) },
+] }, R.motsDe('societe exemple aix'), 10);
+ok('entreprises : la société quand son enseigne ne répond pas, l\'enseigne en détail, sans nom répété',
+   societe.length === 1 && societe[0].nom === 'Societe Exemple'
+   && societe[0].detail === 'entreprise · Magasin Fictif · 13100 Aix-en-Provence',
+   JSON.stringify(societe.map(s => [s.nom, s.detail])));
 ok('entreprises : un individuel jamais trouvé par le nom de la personne',
    R.suggestionsEntreprises(FICTIF, R.motsDe('jean exemple aix'), 10).length === 0);
 ok('entreprises : réponse vide ou mal formée, aucune suggestion',

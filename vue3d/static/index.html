@@ -844,17 +844,28 @@ function suggestionsEntreprises(reponse, tapes, max) {
         if (!e.latitude || !e.longitude || !Number.isFinite(lat) || !Number.isFinite(lon) || /^9[78]/.test(cp)) continue;
         const enseigne = (e.liste_enseignes || [])[0] || '';
         const individuel = r.nature_juridique === '1000';
-        const motsNom = motsDe(individuel ? enseigne : `${r.nom_complet || ''} ${enseigne}`);
+        // « AUCHAN CARBURANT (AUCHAN CARBURANT) (AUCHAN CARBURANT) » : les
+        // parenthèses qui répètent le nom tombent.
+        const complet = r.nom_complet || '';
+        const nomSocial = complet.replace(/\s*\(([^()]*)\)/g, (tout, dedans) => (complet.startsWith(dedans) ? '' : tout)).trim();
+        const motsNom = [...new Set(motsDe(individuel ? enseigne : `${nomSocial} ${enseigne}`))];
         if (!motsNom.length) continue;
         const commune = e.libelle_commune || '';
         if (!couvre(tapes, [...motsNom, ...motsDe(commune)])) continue;
         if (!tapes.some(m => motsNom.some(x => x.startsWith(m)))) continue;
-        const nom = casseTitre(enseigne || r.nom_complet);
+        // Le nom montré est celui qui répond à la recherche : l'enseigne si
+        // elle porte un mot tapé, sinon la société, l'enseigne en détail —
+        // « auchan aubagne » : « Auchan Supermarche », enseigne « Simply
+        // Market ». Jamais le nom d'un entrepreneur individuel.
+        const parEnseigne = Boolean(enseigne) && (individuel || tapes.some(m => motsDe(enseigne).some(x => x.startsWith(m))));
+        const nom = casseTitre(parEnseigne ? enseigne : nomSocial);
+        const detailEnseigne = enseigne && !parEnseigne ? casseTitre(enseigne) : '';
         // Mots du nom que la recherche ne demandait pas : « Airbus
         // Helicopters » (aucun) passe devant le « Syndicat FO Airbus
         // Helicopters Marignane » (deux), que l'API classait premier.
         const enTrop = motsNom.filter(x => !tapes.some(m => x.startsWith(m))).length;
-        out.push({ nom, detail: ['entreprise', [cp, casseTitre(commune)].filter(Boolean).join(' ')].join(' · '),
+        out.push({ nom, detail: ['entreprise', detailEnseigne, [cp, casseTitre(commune)].filter(Boolean).join(' ')]
+                                    .filter(Boolean).join(' · '),
                    lat, lon, cle: nom.toLocaleLowerCase('fr') + '|' + cp, entreprise: true, mots: motsNom, enTrop });
     }
     return out.sort((a, b) => a.enTrop - b.enTrop).slice(0, max);
