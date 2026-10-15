@@ -18,6 +18,8 @@ VUE3D_PANNEAUX=oui docker compose up -d --build        # avec les panneaux solai
 ./run_macOS_CoreML.sh                            # sans Docker, les deux détecteurs sur CoreML (Mac)
 node outils/verifier-geometrie.mjs               # géométrie de la page, exécutée sous Node
 node outils/verifier-recherche.mjs               # recherche d'un lieu, exécutée sous Node
+node outils/verifier-export.mjs essai.ifc        # export IFC, exécuté sous Node
+python outils/valider_ifc.py essai.ifc           # validation par ifcopenshell (pip install ifcopenshell pytest, hors requirements)
 npm install puppeteer-core && node outils/essai-navigateur.mjs "http://localhost:8080/?lat=43.9116&lon=5.2003"
 ```
 

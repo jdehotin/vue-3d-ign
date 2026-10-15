@@ -15,6 +15,39 @@ messages de commit et dans les commentaires des modules.
 
 ### Ajouté
 
+- **L'export BIM, en IFC 4.** Le bouton « Télécharger l'IFC 4 » du panneau
+  écrit le contexte du lieu pour un logiciel de conception (Revit, ArchiCAD,
+  Vectorworks, Allplan, Bonsai) : le relief de l'emprise, les bâtiments tels
+  qu'affichés (toits en pente ou plats, mesurés ou résumés, parties OSM),
+  les arbres et, sur demande, les masses de sursol. Le fichier est écrit
+  dans le navigateur, sans requête au serveur, en une à quelques secondes :
+  8,7 Mo à Gordes, 24 Mo en zone de 1 000 m, 35 Mo avec les masses.
+  - Maillages triangulés (IfcTriangulatedFaceSet, vue de référence), un
+    élément par bâtiment BD TOPO avec ses propriétés (identifiant, usage,
+    étages, hauteur et sa source, forme du toit) ; arbres en forme simple,
+    houppier et tronc fermés ; relief à 2 m, 4 m en zone de 1 000 m.
+  - Le houppier exporté descend à la verticale à son bord, comme la forme
+    détaillée : sans cela, la forme simple se retournait sur un profil
+    mesuré qui remonte vers le bord, 1 848 houppiers et masses sur 418 839
+    des scènes en cache (0,44 %). La vue garde sa forme simple, qu'elle ne
+    montre qu'en mouvement.
+  - Géoréférencé en Lambert-93, altitudes NGF-IGN69 (IGN78 en Corse) :
+    origine entière au point (IfcMapConversion), nord vrai (−1,6° à Gordes,
+    +5,4° à Brest). Les emprises BD TOPO y tombent à 0,4 mm près en médiane,
+    3 cm au plus sur les toits en pans, quantifiés au dixième de maille.
+  - Bâtiments et arbres ont leur hauteur mesurée : la vue les enfonce de
+    0,5 m dans le terrain, sommet compris, sauf les toits mesurés ; l'export
+    les relève, le pied toujours enfoncé.
+  - Les GlobalId sont tirés de l'identifiant BD TOPO : un bâtiment garde le
+    sien d'un export à l'autre.
+  - Vérifié par `node outils/verifier-export.mjs` (Lambert-93 au millimètre
+    de pyproj, maillages fermés et orientés, fichier cohérent) et
+    `python outils/valider_ifc.py` (schéma, règles EXPRESS et géométrie, avec
+    ifcopenshell) ; l'essai du navigateur télécharge le fichier.
+  - Pas encore exportés : réservoirs, mâts et tours de refroidissement, murs,
+    ponts et voies ferrées, eau, routes et lignes électriques, ni les
+    ouvrages ajourés que la vue dessine en points (la tour Eiffel).
+
 - **L'horizon : le paysage jusqu'à 60 km.** Au-delà de l'anneau,
   l'orthophoto de l'IGN en tuiles, du zoom 9 au zoom 17, d'autant plus
   grossières qu'elles sont loin de la caméra ou hors de son champ, drapée

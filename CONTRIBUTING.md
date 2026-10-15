@@ -507,9 +507,11 @@ direct. Ils écrivent leurs sorties dans `cache/mesures/`, ignoré par git.
 
 | Outil | Ce qu'il mesure |
 |---|---|
-| `essai-navigateur.mjs` | Charge un lieu dans Chrome, clique le bâtiment visé, change de saison, cherche « place du chateau gordes » et s'y rend, relève toute erreur |
+| `essai-navigateur.mjs` | Charge un lieu dans Chrome, clique le bâtiment visé, change de saison, télécharge l'export IFC à côté de la capture, cherche « place du chateau gordes » et s'y rend, relève toute erreur |
 | `verifier-recherche.mjs` | Pas une mesure : exécute sous Node la lecture des coordonnées tapées et des réponses du géocodage (`lireCoordonnees`, `suggestionsDe`), sur des réponses réelles enregistrées dans `geocodage-exemples.json` ; sans réseau ni dépendance |
 | `verifier-geometrie.mjs` | Pas une mesure : exécute sous Node les fonctions géométriques de la page (toit découpé, murs, tabliers, véhicules, houppiers simples) et vérifie orientation, fermeture et volumes ; compare à l'octet les normales et sphères de la page à celles de three.js, et ses houppiers à ceux d'origine (`ajouterHouppierOrigine`, à mettre à jour si leur forme change exprès) ; contrôle la barre d'attente contre `ETAPES_SCENE` et `ETAPES_DE_CALCUL` ; demande `npm install three@0.160.0` |
+| `verifier-export.mjs` | Pas une mesure : exécute sous Node l'export IFC de la page — Lambert-93 au millimètre de pyproj, GlobalId, chaînes STEP, maillages fermés et tournés vers l'extérieur (tronc, houppier à lisière, même en cuvette), relief, cohérence d'un petit fichier qu'il écrit en argument ; demande `npm install three@0.160.0` |
+| `valider_ifc.py` | Pas une mesure : valide un fichier IFC exporté avec ifcopenshell (schéma, règles EXPRESS, géométrie de chaque élément, géoréférencement) ; demande `pip install ifcopenshell pytest`, hors `requirements.txt` |
 | `chrono-page.mjs` | Chronologie d'un chargement dans Chrome : quand chaque demande part, est envoyée et revient (puppeteer-core) |
 | `mesure_pans.py` | Toits en pans sur des lieux réels, par le vrai chemin de la scène |
 | `mesure_constructions.py` | Réservoirs, constructions ponctuelles et ouvrages sur des lieux réels : hauteurs, effet du masque sur les houppiers, masses expliquées |

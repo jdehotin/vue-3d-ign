@@ -286,6 +286,37 @@ lecture, en zone par défaut. Les conditions de réutilisation de DVF
 interdisent de réidentifier les personnes et de laisser les moteurs de
 recherche indexer ces données : la page ne les publie nulle part.
 
+### Export BIM, en IFC 4
+
+« Télécharger l'IFC 4 », dans le panneau, écrit le contexte du lieu pour un
+logiciel de conception — Revit, ArchiCAD, Vectorworks, Allplan, Bonsai :
+le relief de l'emprise, les bâtiments, les arbres et, si on les allume, les
+masses de sursol. Le navigateur écrit le fichier lui-même, en une à
+quelques secondes : 5 à 9 Mo dans l'emprise par défaut, environ 25 Mo en
+zone de 1 000 m, 35 avec les masses.
+
+- **Les bâtiments tels qu'affichés** : les boutons « Toits en pente »,
+  « Toits mesurés » et « Monuments OSM » décident de ce qui part, mais sans
+  exagération du relief et à leur hauteur mesurée. Un élément par bâtiment
+  BD TOPO, avec son identifiant, son usage, ses étages, sa hauteur et d'où
+  elle vient, la forme de son toit.
+- **Les arbres en forme simple**, houppier et tronc, à la hauteur et à
+  l'emprise mesurées au LiDAR HD, avec l'essence dominante de leur massif
+  quand la BD Forêt la donne ; le relief à 2 m, 4 m en zone de 1 000 m.
+- **En Lambert-93, altitudes NGF**, autour d'une origine entière au point
+  visé (IfcMapConversion), le nord vrai renseigné pour les études
+  d'ensoleillement. Les longueurs sont celles de la carte : de −1 à
+  +2,2 mm/m selon la latitude.
+- Des maillages triangulés (IFC 4, vue de référence) : un contexte à
+  consulter et à couper, pas des murs ni des dalles à modifier. Le fichier
+  cite ses sources ; avec des parties de monuments OSM, il est aussi sous
+  ODbL.
+
+C'est une maquette de contexte, pas un relevé : les emprises de la BD TOPO
+sont à un mètre près, un toit résumé n'a que deux pans ou une pyramide, et
+réservoirs, murs, ponts, eau, routes et ouvrages dessinés en points (la tour
+Eiffel) ne sont pas encore exportés.
+
 ## Lieux à essayer
 
 Des lieux publics qui montrent chacun un aspect de la vue. Les chiffres sont ceux
@@ -658,7 +689,13 @@ cherche un autre lieu et s'y rend, et échoue à la moindre erreur JavaScript :
 npm install puppeteer-core
 node outils/essai-navigateur.mjs "http://localhost:8080/?lat=43.9116&lon=5.2003" capture.png
 node outils/verifier-recherche.mjs     # la recherche d'un lieu, sous Node, sans réseau
+node outils/verifier-export.mjs essai.ifc   # l'export IFC, sous Node (npm install three@0.160.0)
+pip install ifcopenshell pytest && python outils/valider_ifc.py essai.ifc   # le valide comme un logiciel le lirait
 ```
+
+L'essai du navigateur télécharge aussi l'export IFC à côté de la capture :
+`outils/valider_ifc.py` le valide ensuite (schéma, règles EXPRESS,
+géométrie de chaque élément, géoréférencement).
 
 La démo filmée se tourne de la même façon, dans un Chrome sans écran, sur un
 serveur qui tourne avec la couche des véhicules : la caméra suit un scénario
