@@ -53,7 +53,7 @@
                     text-decoration:none; border:1px solid var(--line); border-radius:5px;
                     padding:4px 8px; }
         .lien-ext:hover { border-color:var(--accent); }
-        button.lien-ext { background:none; font-family:inherit; cursor:pointer; }
+        button.lien-ext { background:none; font-family:inherit; cursor:pointer; margin-right:4px; }
         button.lien-ext:disabled { color:var(--muted); cursor:wait; }
         #scene { flex:1; position:relative; }
         #scene canvas { display:block; }
@@ -262,11 +262,15 @@
                 <button class="toggle on" id="x-arbres">Arbres</button>
                 <button class="toggle" id="x-masses" title="Sursol ni bâti ni végétal : murs, abris, véhicules…">Masses de sursol</button>
             </div>
-            <button type="button" class="lien-ext" id="btn-ifc">⬇ Télécharger l'IFC 4</button>
+            <button type="button" class="lien-ext" id="btn-ifc" data-format="ifc"
+                    title="Pour Revit, ArchiCAD, Vectorworks, Allplan…">⬇ IFC 4</button>
+            <button type="button" class="lien-ext" id="btn-citygml" data-format="citygml"
+                    title="Pour les SIG et les maquettes urbaines : FME, 3DCityDB, FZKViewer…">⬇ CityGML 2.0</button>
             <div class="note" id="note-export">
-                Pour Revit, ArchiCAD, Vectorworks… Les bâtiments tels qu'affichés
-                (toits en pente, mesurés, monuments OSM), à l'échelle, en
-                Lambert-93 et altitudes NGF. Une maquette de contexte, pas un relevé.
+                IFC pour la conception (Revit, ArchiCAD…), CityGML pour les SIG.
+                Les bâtiments tels qu'affichés (toits en pente, mesurés, monuments
+                OSM), à l'échelle, en Lambert-93 et altitudes NGF. Une maquette de
+                contexte, pas un relevé.
             </div>
         </div>
 
@@ -7175,12 +7179,25 @@ function versLambert93(lon, lat) {
 const ALPHABET_IFC = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_$';
 
 /**
- * GlobalId IFC tiré d'un texte : 128 bits d'un hachage (cyrb128) en 22
- * caractères de l'alphabet IFC, deux bits dans le premier. Un bâtiment garde
- * le sien d'un export à l'autre : le logiciel qui recharge le contexte y
- * retrouve ses objets.
+ * GlobalId IFC tiré d'un texte : 128 bits d'un hachage en 22 caractères de
+ * l'alphabet IFC, deux bits dans le premier. Un bâtiment garde le sien d'un
+ * export à l'autre : le logiciel qui recharge le contexte y retrouve ses
+ * objets.
  */
 function guidIfc(texte) {
+    const n = hachage128(texte);
+    let s = '';
+    for (let i = 21; i >= 0; i--) s += ALPHABET_IFC[Number((n >> BigInt(6 * i)) & 63n)];
+    return s;
+}
+
+/** gml:id CityGML tiré d'un texte, stable comme le GlobalId IFC : « ID_ » et 32 chiffres hexadécimaux. */
+function idGml(texte) {
+    return 'ID_' + hachage128(texte).toString(16).padStart(32, '0');
+}
+
+/** 128 bits d'un texte (hachage cyrb128), en BigInt. */
+function hachage128(texte) {
     let h1 = 1779033703, h2 = 3144134277, h3 = 1013904242, h4 = 2773480762;
     for (let i = 0; i < texte.length; i++) {
         const k = texte.charCodeAt(i);
@@ -7196,9 +7213,7 @@ function guidIfc(texte) {
     h1 ^= h2 ^ h3 ^ h4; h2 ^= h1; h3 ^= h1; h4 ^= h1;
     let n = 0n;
     for (const h of [h1, h2, h3, h4]) n = (n << 32n) | BigInt(h >>> 0);
-    let s = '';
-    for (let i = 21; i >= 0; i--) s += ALPHABET_IFC[Number((n >> BigInt(6 * i)) & 63n)];
-    return s;
+    return n;
 }
 
 /** Chaîne STEP (ISO 10303-21) : apostrophe et barre doublées, le reste de l'ASCII imprimable tel quel, les autres caractères en \X2\…\X0\. */
@@ -7317,19 +7332,32 @@ function trianglesTronc(el, sol, versIfc) {
 }
 
 /**
- * Fichier IFC 4 d'un modèle, en texte ISO 10303-21. Le modèle :
- *   { fichier, horodatage, cle, nom, description, site, lon, lat,
+ * Entité IFC, type prédéfini et type d'objet de chaque genre d'élément.
+ * Tous sont dans le site, sans bâtiment ni étage IFC : un contexte de 600
+ * bâtiments importé dans un projet n'y crée pas 600 bâtiments, et chaque
+ * logiciel range ces volumes à sa façon.
+ */
+const ENTITES_IFC = {
+    batiment: ['IFCBUILDINGELEMENTPROXY', 'USERDEFINED', 'Bâtiment existant'],
+    arbre: ['IFCGEOGRAPHICELEMENT', 'USERDEFINED', 'Arbre'],
+    masse: ['IFCGEOGRAPHICELEMENT', 'USERDEFINED', 'Masse de sursol'],
+    terrain: ['IFCGEOGRAPHICELEMENT', 'TERRAIN', null],
+};
+
+/**
+ * Fichier IFC 4 d'un modèle (modeleExport), en texte ISO 10303-21. Le modèle :
+ *   { base, horodatage, cle, nom, description, site, lon, lat,
  *     origine: { x, y, z }   en Lambert-93 et en altitude, l'origine du fichier,
  *     nordVrai: [x, y]       le nord vrai dans ce repère,
- *     crs: { nom, description, datum, datumVertical, projection },
+ *     crs: { nom, description, datum, datumVertical, projection, epsgVertical },
  *     styles: { nom: [r, v, b] },
- *     elements: [{ cle, entite, type, objectType, nom, description, tag,
- *                  pset: { nom, valeurs: [[nom, type IFC, valeur]] },
- *                  maillages: [{ style, facettes }] }] }
- * `facettes` : ce que rend facettesIfc. Un élément sans triangle est omis.
- * Tous les éléments sont dans le site, sans bâtiment ni étage IFC : un
- * contexte de 600 bâtiments importé dans un projet n'y crée pas 600
- * bâtiments, et chaque logiciel range ces volumes à sa façon.
+ *     elements: [{ cle, genre, nom, description, tag,
+ *                  proprietes: { nom, valeurs: [[nom, type IFC, valeur]] },
+ *                  parties: [{ nom }]           bâtiments : une par emprise,
+ *                  maillages: [{ style, facettes, partie }] }] }
+ * `facettes` : ce que rend facettesIfc, en coordonnées rapportées à
+ * l'origine. Un élément sans triangle est omis ; l'IFC y met tous ses
+ * maillages, parties confondues.
  */
 function ecrireIfc(m) {
     const L = [];
@@ -7390,14 +7418,15 @@ function ecrireIfc(m) {
         const representation = ent(`IFCSHAPEREPRESENTATION(${corps},'Body','Tessellation',(${items.join(',')}))`);
         const forme = ent(`IFCPRODUCTDEFINITIONSHAPE($,$,(${representation}))`);
         const place = ent(`IFCLOCALPLACEMENT(${placeSite},${axe})`);
-        const objet = ent(`${el.entite}(${guid(el.cle)},$,${opt(el.nom)},${opt(el.description)},`
-            + `${opt(el.objectType)},${place},${forme},${opt(el.tag)},.${el.type}.)`);
+        const [entite, type, objectType] = ENTITES_IFC[el.genre];
+        const objet = ent(`${entite}(${guid(el.cle)},$,${opt(el.nom)},${opt(el.description)},`
+            + `${opt(objectType)},${place},${forme},${opt(el.tag)},.${type}.)`);
         contenus.push(objet);
-        const valeurs = ((el.pset && el.pset.valeurs) || []).filter(([, , v]) => v != null && v !== '');
+        const valeurs = ((el.proprietes && el.proprietes.valeurs) || []).filter(([, , v]) => v != null && v !== '');
         if (valeurs.length) {
             const proprietes = valeurs.map(([nom, type, v]) =>
                 ent(`IFCPROPERTYSINGLEVALUE(${chaineIfc(nom)},$,${valeur(type, v)},$)`));
-            const pset = ent(`IFCPROPERTYSET(${guid('pset|' + el.cle)},$,${chaineIfc(el.pset.nom)},$,(${proprietes.join(',')}))`);
+            const pset = ent(`IFCPROPERTYSET(${guid('pset|' + el.cle)},$,${chaineIfc(el.proprietes.nom)},$,(${proprietes.join(',')}))`);
             ent(`IFCRELDEFINESBYPROPERTIES(${guid('definit|' + el.cle)},$,$,$,(${objet}),${pset})`);
         }
     }
@@ -7406,8 +7435,333 @@ function ecrireIfc(m) {
     }
     return ['ISO-10303-21;', 'HEADER;',
             "FILE_DESCRIPTION(('ViewDefinition [ReferenceView_V1.2]'),'2;1');",
-            `FILE_NAME(${chaineIfc(m.fichier)},${chaineIfc(m.horodatage)},(''),(''),'Vue 3D IGN','Vue 3D IGN','');`,
+            `FILE_NAME(${chaineIfc(m.base + '.ifc')},${chaineIfc(m.horodatage)},(''),(''),'Vue 3D IGN','Vue 3D IGN','');`,
             "FILE_SCHEMA(('IFC4'));", 'ENDSEC;', 'DATA;', ...L, 'ENDSEC;', 'END-ISO-10303-21;', ''].join('\n');
+}
+
+// --- Export CityGML 2.0 --------------------------------------------------------
+// Le même modèle que l'IFC (modeleExport), pour les SIG et les maquettes
+// urbaines (FME, 3DCityDB, FZKViewer) : bâtiments en LOD2 — surfaces de toit,
+// de mur et de sol —, arbres en objets de végétation, masses en objets
+// génériques, relief en TIN. CityGML 2.0 plutôt que 3.0 : c'est celui que ces
+// logiciels lisent tous. Coordonnées absolues en Lambert-93, altitudes NGF,
+// au millimètre ; le système est dit une fois, sur l'enveloppe du modèle.
+// Les volumes sont ceux de l'IFC, pied compris : enfoncé de 0,5 m sous le
+// point le plus bas du terrain, le TIN, plus grossier, ne le laisse pas
+// flotter.
+
+// Deux triangles voisins sont du même polygone si leurs normales font moins
+// de 5° et que tous leurs sommets sont à 2 mm au plus du plan du premier :
+// les sommets sont arrondis au millimètre, et un mur à 1° du suivant s'en
+// écarte déjà de 17 cm à 10 m.
+const PLAN_COS = Math.cos(5 * Math.PI / 180);
+const PLAN_ECART_M = 0.002;
+
+/**
+ * Polygones plans d'un maillage (facettesIfc) : ses triangles réunis par
+ * région plane de même classe, de proche en proche par leurs arêtes, et
+ * chaque région rendue par son contour. CityGML décrit des faces, pas des
+ * triangles : un mur extrudé y est un rectangle, un toit-terrasse son
+ * emprise, trouée de ses cours. `classer(nz)` : la classe d'un triangle
+ * d'après la composante verticale de sa normale, null pour l'omettre.
+ * Rend [{ classe, anneaux: [[i, …]] }], l'anneau extérieur d'abord.
+ *
+ * Un triangle plat — ses sommets presque alignés une fois arrondis au
+ * millimètre : un sur 96 581 polygones à Gordes, un pan de toit d'aire nulle,
+ * invalide en CityGML — n'a pas de normale sûre. Il rejoint la région plane
+ * qui le borde, où ses arêtes s'annulent, et n'est jamais publié seul. Plat
+ * sous 10 mm², dix fois le seuil des validateurs : un triangle de 1 sur 3 mm
+ * à Strasbourg, à 1 mm² juste, passait d'un côté ou de l'autre selon
+ * l'arrondi.
+ */
+function polygonesPlans(f, classer) {
+    const P = f.points, F = f.faces, nT = F.length / 3, n = P.length / 3;
+    const normales = new Float64Array(3 * nT), classes = new Array(nT), plats = new Uint8Array(nT);
+    for (let t = 0; t < nT; t++) {
+        const a = 3 * F[3 * t], b = 3 * F[3 * t + 1], c = 3 * F[3 * t + 2];
+        const ux = P[b] - P[a], uy = P[b + 1] - P[a + 1], uz = P[b + 2] - P[a + 2];
+        const vx = P[c] - P[a], vy = P[c + 1] - P[a + 1], vz = P[c + 2] - P[a + 2];
+        const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+        // Deux fois l'aire : sous 10 mm², le triangle est plat.
+        const l = Math.hypot(nx, ny, nz);
+        if (l < 2e-5) { plats[t] = 1; continue; }
+        normales[3 * t] = nx / l; normales[3 * t + 1] = ny / l; normales[3 * t + 2] = nz / l;
+        classes[t] = classer(nz / l);
+    }
+    const arete = (a, b) => Math.min(a, b) * n + Math.max(a, b);
+    const voisins = new Map();
+    for (let t = 0; t < nT; t++) {
+        for (let k = 0; k < 3; k++) {
+            const cle = arete(F[3 * t + k], F[3 * t + (k + 1) % 3]);
+            const liste = voisins.get(cle);
+            if (liste) liste.push(t); else voisins.set(cle, [t]);
+        }
+    }
+    const pris = new Uint8Array(nT), sortie = [];
+    for (let t0 = 0; t0 < nT; t0++) {
+        if (pris[t0] || classes[t0] == null) continue;
+        const nx = normales[3 * t0], ny = normales[3 * t0 + 1], nz = normales[3 * t0 + 2];
+        const p0 = 3 * F[3 * t0], d = nx * P[p0] + ny * P[p0 + 1] + nz * P[p0 + 2];
+        const tris = [t0];
+        pris[t0] = 1;
+        for (let q = 0; q < tris.length; q++) {
+            for (let k = 0; k < 3; k++) {
+                for (const u of voisins.get(arete(F[3 * tris[q] + k], F[3 * tris[q] + (k + 1) % 3]))) {
+                    if (pris[u] || !plats[u] && (classes[u] !== classes[t0]
+                        || nx * normales[3 * u] + ny * normales[3 * u + 1] + nz * normales[3 * u + 2] < PLAN_COS)) continue;
+                    let plan = true;
+                    for (let m = 0; m < 3 && plan; m++) {
+                        const p = 3 * F[3 * u + m];
+                        plan = Math.abs(nx * P[p] + ny * P[p + 1] + nz * P[p + 2] - d) <= PLAN_ECART_M;
+                    }
+                    if (!plan) continue;
+                    pris[u] = 1;
+                    tris.push(u);
+                }
+            }
+        }
+        sortie.push(...contoursRegion(F, P, tris, [nx, ny, nz], classes[t0], plats));
+    }
+    return sortie;
+}
+
+/**
+ * Les anneaux d'une région plane : ses arêtes de bord enchaînées, l'anneau
+ * extérieur tournant comme ses triangles, les cours en sens inverse. Une
+ * région dont le bord n'est pas fait d'anneaux simples — deux bords qui
+ * partent d'un même sommet — est rendue triangle par triangle, sans ses
+ * triangles plats.
+ */
+function contoursRegion(F, P, tris, normale, classe, plats) {
+    const n = P.length / 3;
+    const unParUn = () => tris.filter(t => !plats[t])
+        .map(t => ({ classe, anneaux: [[F[3 * t], F[3 * t + 1], F[3 * t + 2]]] }));
+    if (tris.length === 1) return unParUn();
+    const orientees = new Set();
+    for (const t of tris) for (let k = 0; k < 3; k++) orientees.add(F[3 * t + k] * n + F[3 * t + (k + 1) % 3]);
+    const suivant = new Map();
+    for (const t of tris) {
+        for (let k = 0; k < 3; k++) {
+            const a = F[3 * t + k], b = F[3 * t + (k + 1) % 3];
+            if (orientees.has(b * n + a)) continue;           // arête intérieure
+            if (suivant.has(a)) return unParUn();
+            suivant.set(a, b);
+        }
+    }
+    const anneaux = [], vus = new Set();
+    for (const depart of suivant.keys()) {
+        if (vus.has(depart)) continue;
+        const anneau = [];
+        let v = depart;
+        while (v !== undefined && !vus.has(v)) { vus.add(v); anneau.push(v); v = suivant.get(v); }
+        if (v !== depart) return unParUn();
+        anneaux.push(anneau);
+    }
+    // Aire signée autour de la normale (Newell) : positive pour l'extérieur.
+    const aire = anneau => {
+        let x = 0, y = 0, z = 0;
+        anneau.forEach((i, k) => {
+            const j = anneau[(k + 1) % anneau.length];
+            x += P[3 * i + 1] * P[3 * j + 2] - P[3 * i + 2] * P[3 * j + 1];
+            y += P[3 * i + 2] * P[3 * j] - P[3 * i] * P[3 * j + 2];
+            z += P[3 * i] * P[3 * j + 1] - P[3 * i + 1] * P[3 * j];
+        });
+        return (x * normale[0] + y * normale[1] + z * normale[2]) / 2;
+    };
+    const aires = anneaux.map(aire);
+    if (aires.filter(a => a > 0).length !== 1) return unParUn();
+    const ordre = aires.map((_, i) => i).sort((i, j) => aires[j] - aires[i]);
+    return [{ classe, anneaux: ordre.map(i => anneaux[i]) }];
+}
+
+/**
+ * Sols d'un maillage de murs ouvert en bas : ses anneaux de bord, au plus
+ * bas, d'où les murs montent. Les toits en pans et les surfaces mesurées
+ * n'ont pas de plancher (vue3d/pans.py ne le transmet pas) : 38 bâtiments sur
+ * 247 à Gordes restaient sans sol. Au plus bas seulement : leurs murs
+ * comptent aussi les marches entre pans, dont le bas, sur un pan plat, est
+ * un bord horizontal d'où un mur monte. Rend [{ classe: 'GroundSurface',
+ * anneaux }], tournés vers le bas, les cours en trous de leur sol ; rien si
+ * le bord est pincé ou qu'une cour ne trouve pas son sol.
+ */
+function solsOuverts(f) {
+    const P = f.points, F = f.faces, n = P.length / 3;
+    const z = i => P[3 * i + 2];
+    let zMin = Infinity;
+    for (let i = 2; i < P.length; i += 3) zMin = Math.min(zMin, P[i]);
+    const orientees = new Set();
+    for (let t = 0; t < F.length; t += 3) for (let k = 0; k < 3; k++) orientees.add(F[t + k] * n + F[t + (k + 1) % 3]);
+    const suivant = new Map();
+    for (let t = 0; t < F.length; t += 3) {
+        for (let k = 0; k < 3; k++) {
+            const a = F[t + k], b = F[t + (k + 1) % 3], c = F[t + (k + 2) % 3];
+            if (orientees.has(b * n + a) || z(a) > zMin + 0.001 || z(b) > zMin + 0.001 || z(c) <= zMin + 0.001) continue;
+            if (suivant.has(b)) return [];
+            suivant.set(b, a);          // à rebours du mur : le sol regarde vers le bas
+        }
+    }
+    const anneaux = [], vus = new Set();
+    for (const depart of suivant.keys()) {
+        if (vus.has(depart)) continue;
+        const anneau = [];
+        let v = depart;
+        while (v !== undefined && !vus.has(v)) { vus.add(v); anneau.push(v); v = suivant.get(v); }
+        if (v !== depart || anneau.length < 3) return [];
+        anneaux.push(anneau);
+    }
+    const aire = a => a.reduce((s, i, k) => {
+        const j = a[(k + 1) % a.length];
+        return s + (P[3 * i] * P[3 * j + 1] - P[3 * j] * P[3 * i + 1]) / 2;
+    }, 0);
+    const dedans = ([x, y], a) => {
+        let c = false;
+        a.forEach((i, k) => {
+            const j = a[(k + 1) % a.length], [xi, yi, xj, yj] = [P[3 * i], P[3 * i + 1], P[3 * j], P[3 * j + 1]];
+            if ((yi > y) !== (yj > y) && x < xi + (y - yi) * (xj - xi) / (yj - yi)) c = !c;
+        });
+        return c;
+    };
+    const sols = anneaux.filter(a => aire(a) < 0).map(a => ({ classe: 'GroundSurface', anneaux: [a] }));
+    for (const cour of anneaux.filter(a => aire(a) > 0)) {
+        const pt = [P[3 * cour[0]], P[3 * cour[0] + 1]];
+        const sol = sols.find(s => Math.abs(z(s.anneaux[0][0]) - z(cour[0])) <= 0.001 && dedans(pt, s.anneaux[0]));
+        if (!sol) return [];
+        sol.anneaux.push(cour);
+    }
+    return sols;
+}
+
+/** Texte XML : &, <, >, " et ' échappés. */
+const texteXml = v => String(v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' })[c]);
+
+const ESPACES_CITYGML = [
+    'xmlns:core="http://www.opengis.net/citygml/2.0"',
+    'xmlns:bldg="http://www.opengis.net/citygml/building/2.0"',
+    'xmlns:veg="http://www.opengis.net/citygml/vegetation/2.0"',
+    'xmlns:dem="http://www.opengis.net/citygml/relief/2.0"',
+    'xmlns:gen="http://www.opengis.net/citygml/generics/2.0"',
+    'xmlns:gml="http://www.opengis.net/gml"',
+    'xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"',
+    'xsi:schemaLocation="' + ['building', 'vegetation', 'relief', 'generics'].map(m =>
+        `http://www.opengis.net/citygml/${m}/2.0 http://schemas.opengis.net/citygml/${m}/2.0/${m}.xsd`).join(' ') + '"',
+].join(' ');
+
+/**
+ * Fichier CityGML 2.0 d'un modèle (modeleExport), en morceaux de texte à
+ * joindre — ou à donner tels quels à un Blob : un relief de 125 000
+ * triangles n'a pas à tenir dans une seule chaîne. Un bâtiment est un
+ * bldg:Building en LOD2, une surface thématique par polygone plan, et une
+ * bldg:BuildingPart par emprise quand il en a plusieurs (polygones BD TOPO,
+ * parties OSM). Hauteur et étages vont aux attributs CityGML, le reste aux
+ * attributs génériques.
+ */
+function ecrireCityGml(m) {
+    const O = m.origine;
+    const pos = (P, i) => `${(P[3 * i] + O.x).toFixed(3)} ${(P[3 * i + 1] + O.y).toFixed(3)} ${(P[3 * i + 2] + O.z).toFixed(3)}`;
+    const anneau = (P, a) => '<gml:LinearRing><gml:posList srsDimension="3">'
+        + [...a, a[0]].map(i => pos(P, i)).join(' ') + '</gml:posList></gml:LinearRing>';
+    const surfaces = polys => '<gml:MultiSurface>' + polys.map(({ P, anneaux: [ext, ...cours] }) =>
+        `<gml:surfaceMember><gml:Polygon><gml:exterior>${anneau(P, ext)}</gml:exterior>`
+        + cours.map(a => `<gml:interior>${anneau(P, a)}</gml:interior>`).join('')
+        + '</gml:Polygon></gml:surfaceMember>').join('') + '</gml:MultiSurface>';
+    const valeurs = el => ((el.proprietes && el.proprietes.valeurs) || []).filter(([, , v]) => v != null && v !== '');
+    const valeur = (el, nom) => (valeurs(el).find(([n]) => n === nom) || [])[2];
+    const attributs = (el, sauf = []) => valeurs(el).filter(([nom]) => !sauf.includes(nom)).map(([nom, type, v]) =>
+        type === 'IFCINTEGER' ? `<gen:intAttribute name="${texteXml(nom)}"><gen:value>${Math.round(v)}</gen:value></gen:intAttribute>`
+        : /MEASURE$/.test(type) ? `<gen:measureAttribute name="${texteXml(nom)}"><gen:value uom="m">${v.toFixed(3)}</gen:value></gen:measureAttribute>`
+        : `<gen:stringAttribute name="${texteXml(nom)}"><gen:value>${texteXml(v)}</gen:value></gen:stringAttribute>`).join('');
+    const nomme = el => (el.description ? `<gml:description>${texteXml(el.description)}</gml:description>` : '')
+        + (el.nom ? `<gml:name>${texteXml(el.nom)}</gml:name>` : '');
+    // Les surfaces thématiques d'un bâtiment ou d'une de ses parties : toit
+    // sous 80° de pente, mur, sol ; le dessus des murs, sous un toit, et le
+    // dessous d'un toit, à l'intérieur du volume, sont omis.
+    const bordsBatiment = (maillages, base) => {
+        const aToit = maillages.some(x => x.style === 'toit' && x.facettes.faces.length);
+        const classerToit = nz => nz >= 0.17 ? 'RoofSurface' : nz > -0.17 ? 'WallSurface' : null;
+        const classerMurs = nz => nz < -0.5 ? 'GroundSurface' : nz <= 0.5 ? 'WallSurface'
+            : aToit ? null : 'RoofSurface';
+        return maillages.flatMap(({ style, facettes: f }) =>
+            [...polygonesPlans(f, style === 'toit' ? classerToit : classerMurs), ...(style === 'murs' ? solsOuverts(f) : [])]
+                .map(p => ({ ...p, P: f.points })))
+            .map((p, k) => `<bldg:boundedBy><bldg:${p.classe} gml:id="${base}_${k + 1}"><bldg:lod2MultiSurface>`
+                + surfaces([p]) + `</bldg:lod2MultiSurface></bldg:${p.classe}></bldg:boundedBy>`).join('');
+    };
+    const ids = new Set();
+    const id = (cle, propre) => {
+        let i = propre && /^[A-Za-z_][\w.-]*$/.test(propre) && !ids.has(propre) ? propre : idGml(cle);
+        for (let k = 1; ids.has(i); k++) i = idGml(`${cle}#${k}`);
+        ids.add(i);
+        return i;
+    };
+    const min = [Infinity, Infinity, Infinity], max = [-Infinity, -Infinity, -Infinity];
+    const membres = [];
+    for (const el of m.elements) {
+        const maillages = el.maillages.filter(({ facettes: f }) => f.faces.length);
+        if (!maillages.length) continue;
+        for (const { facettes: { points: P } } of maillages) {
+            for (let i = 0; i < P.length; i += 3) {
+                for (let k = 0; k < 3; k++) { min[k] = Math.min(min[k], P[i + k]); max[k] = Math.max(max[k], P[i + k]); }
+            }
+        }
+        if (el.genre === 'batiment') {
+            const gid = id(el.cle, el.tag);
+            const h = valeur(el, 'Hauteur'), etages = valeur(el, 'NombreEtages');
+            const parties = el.parties && el.parties.length > 1 ? el.parties : null;
+            membres.push(`<core:cityObjectMember><bldg:Building gml:id="${gid}">${nomme(el)}`
+                + attributs(el, ['Hauteur', 'NombreEtages'])
+                + (h != null ? `<bldg:measuredHeight uom="m">${h.toFixed(3)}</bldg:measuredHeight>` : '')
+                + (etages != null ? `<bldg:storeysAboveGround>${Math.round(etages)}</bldg:storeysAboveGround>` : '')
+                + (!parties ? bordsBatiment(maillages, gid) : parties.map(({ nom }, k) => {
+                    const siens = maillages.filter(x => x.partie === k);
+                    if (!siens.length) return '';
+                    const pid = `${gid}_p${k + 1}`;
+                    let zMin = Infinity, zMax = -Infinity;
+                    for (const { facettes: { points: P } } of siens) {
+                        for (let i = 2; i < P.length; i += 3) { zMin = Math.min(zMin, P[i]); zMax = Math.max(zMax, P[i]); }
+                    }
+                    // Comme le bâtiment : depuis le point bas du terrain, le pied étant enfoncé.
+                    return `<bldg:consistsOfBuildingPart><bldg:BuildingPart gml:id="${pid}">`
+                        + (nom ? `<gml:name>${texteXml(nom)}</gml:name>` : '')
+                        + `<bldg:measuredHeight uom="m">${(zMax - zMin - ENFONCEMENT).toFixed(3)}</bldg:measuredHeight>`
+                        + bordsBatiment(siens, pid) + '</bldg:BuildingPart></bldg:consistsOfBuildingPart>';
+                }).join(''))
+                + '</bldg:Building></core:cityObjectMember>\n');
+        } else if (el.genre === 'terrain') {
+            const gid = id(el.cle);
+            membres.push(`<core:cityObjectMember><dem:ReliefFeature gml:id="${gid}">${nomme(el)}${attributs(el)}`
+                + `<dem:lod>2</dem:lod><dem:reliefComponent><dem:TINRelief gml:id="${gid}_tin"><dem:lod>2</dem:lod>`
+                + '<dem:tin><gml:TriangulatedSurface><gml:trianglePatches>');
+            for (const { facettes: { points: P, faces: F } } of maillages) {
+                for (let t = 0; t < F.length; t += 3) {
+                    membres.push(`<gml:Triangle><gml:exterior>${anneau(P, [F[t], F[t + 1], F[t + 2]])}</gml:exterior></gml:Triangle>`);
+                }
+            }
+            membres.push('</gml:trianglePatches></gml:TriangulatedSurface></dem:tin></dem:TINRelief>'
+                + '</dem:reliefComponent></dem:ReliefFeature></core:cityObjectMember>\n');
+        } else {
+            const geometrie = surfaces(maillages.flatMap(({ facettes: f }) =>
+                polygonesPlans(f, () => 'surface').map(p => ({ ...p, P: f.points }))));
+            if (el.genre === 'arbre') {
+                const h = valeur(el, 'Hauteur'), d = valeur(el, 'DiametreHouppier');
+                membres.push(`<core:cityObjectMember><veg:SolitaryVegetationObject gml:id="${id(el.cle)}">${nomme(el)}`
+                    + attributs(el, ['Hauteur', 'DiametreHouppier'])
+                    + (h != null ? `<veg:height uom="m">${h.toFixed(3)}</veg:height>` : '')
+                    + (d != null ? `<veg:crownDiameter uom="m">${d.toFixed(3)}</veg:crownDiameter>` : '')
+                    + `<veg:lod2Geometry>${geometrie}</veg:lod2Geometry></veg:SolitaryVegetationObject></core:cityObjectMember>\n`);
+            } else {
+                membres.push(`<core:cityObjectMember><gen:GenericCityObject gml:id="${id(el.cle)}">${nomme(el)}${attributs(el)}`
+                    + `<gen:lod2Geometry>${geometrie}</gen:lod2Geometry></gen:GenericCityObject></core:cityObjectMember>\n`);
+            }
+        }
+    }
+    const srs = m.crs.epsgVertical ? `urn:ogc:def:crs,crs:EPSG::2154,crs:EPSG::${m.crs.epsgVertical}`
+                                   : 'urn:ogc:def:crs:EPSG::2154';
+    const coin = c => c.map((v, k) => ((Number.isFinite(v) ? v : 0) + [O.x, O.y, O.z][k]).toFixed(3)).join(' ');
+    return [`<?xml version="1.0" encoding="UTF-8"?>\n<core:CityModel ${ESPACES_CITYGML}>\n`
+            + `<gml:description>${texteXml(m.description)}</gml:description><gml:name>${texteXml(m.nom)}</gml:name>\n`
+            + `<gml:boundedBy><gml:Envelope srsName="${srs}" srsDimension="3"><gml:lowerCorner>${coin(min)}</gml:lowerCorner>`
+            + `<gml:upperCorner>${coin(max)}</gml:upperCorner></gml:Envelope></gml:boundedBy>\n`,
+            ...membres, '</core:CityModel>\n'];
 }
 
 // Couleurs des maillages exportés : un contexte en volumes clairs, comme une
@@ -7433,14 +7787,14 @@ function toitDessine(ud) {
 }
 
 /**
- * Le modèle de l'export (ecrireIfc), d'après la scène affichée et sans
+ * Le modèle des exports (ecrireIfc, ecrireCityGml), d'après la scène affichée et sans
  * exagération du relief : les bâtiments tels que dessinés — toits en pente ou
  * plats, mesurés ou résumés, parties OSM — chacun en un élément ; les arbres
  * et les masses en forme simple, 36 faces et un tronc, au lieu des 180 faces
  * de la forme détaillée (11 000 éléments au Trocadéro en zone de 1 000 m) ;
  * le relief de l'emprise. `options` : { relief, batiments, arbres, masses }.
  */
-function modeleIfc(options) {
+function modeleExport(options) {
     const [lx, ly] = versLambert93(CENTER[0], CENTER[1]);
     const origine = { x: Math.round(lx), y: Math.round(ly), z: Math.round(altitudeRef) };
     const [nx, ny] = versLambert93(CENTER[0], CENTER[1] + 1e-4);
@@ -7481,12 +7835,15 @@ function modeleIfc(options) {
                 const ud = o.userData;
                 // Les volumes invisibles des ouvrages dessinés en points n'en sont pas.
                 if (!o.isMesh || !ud.anneau || ud.nuage || o.material.visible === false) continue;
-                // Un élément par bâtiment BD TOPO, ses polygones et ses parties OSM ensemble.
+                // Un élément par bâtiment BD TOPO, ses polygones et ses parties
+                // OSM ensemble ; une partie par emprise, ses murs et son toit.
                 const cle = (ud.p && ud.p.cleabs) || ud.monument || ud.anneau;
                 let b = parBatiment.get(cle);
-                if (!b) parBatiment.set(cle, b = { ud, murs: [], toit: [] });
+                if (!b) parBatiment.set(cle, b = { ud, parties: new Map() });
                 if (ud.monument) b.monument = true;
-                const tri = o.name === 'toit' ? b.toit : b.murs;
+                let partie = b.parties.get(ud.anneau);
+                if (!partie) b.parties.set(ud.anneau, partie = { nom: ud.monument && ud.monument.nom, murs: [], toit: [] });
+                const tri = o.name === 'toit' ? partie.toit : partie.murs;
                 const pos = o.geometry.attributes.position, idx = o.geometry.index;
                 const nb = idx ? idx.count : pos.count;
                 for (let i = 0; i < nb; i++) {
@@ -7499,11 +7856,12 @@ function modeleIfc(options) {
             rebaserBatiments();
             groupeBatiments.updateMatrixWorld(true);
         }
-        for (const [cle, b] of parBatiment) {
+        for (const b of parBatiment.values()) {
             const p = b.ud.p || {};
-            const murs = facettesIfc(b.murs), toit = facettesIfc(b.toit);
+            const parties = [...b.parties.values()].map(({ nom, murs, toit }) =>
+                ({ nom, murs: facettesIfc(murs), toit: facettesIfc(toit) }));
             let zMin = Infinity, zMax = -Infinity;
-            for (const f of [murs, toit]) {
+            for (const f of parties.flatMap(x => [x.murs, x.toit])) {
                 for (let i = 2; i < f.points.length; i += 3) { zMin = Math.min(zMin, f.points[i]); zMax = Math.max(zMax, f.points[i]); }
             }
             if (!Number.isFinite(zMin)) continue;
@@ -7516,10 +7874,10 @@ function modeleIfc(options) {
             compte.osm = compte.osm || !!b.monument;
             elements.push({
                 cle: 'batiment|' + (p.cleabs || `${elements.length}`),
-                entite: 'IFCBUILDINGELEMENTPROXY', type: 'USERDEFINED', objectType: 'Bâtiment existant',
+                genre: 'batiment',
                 nom: p.usage_1 || p.nature || (b.ud.monument && b.ud.monument.nom) || 'Bâtiment',
                 description: `Hauteur ${source}, toit ${toitTexte}`, tag: p.cleabs,
-                pset: { nom: 'VueIGN_Batiment', valeurs: [
+                proprietes: { nom: 'VueIGN_Batiment', valeurs: [
                     ['IdentifiantBDTOPO', 'IFCIDENTIFIER', p.cleabs],
                     ['Nature', 'IFCLABEL', p.nature],
                     ['Usage', 'IFCLABEL', p.usage_1],
@@ -7529,7 +7887,13 @@ function modeleIfc(options) {
                     ['SourceHauteur', 'IFCLABEL', source],
                     ['Toit', 'IFCLABEL', toitTexte],
                 ] },
-                maillages: [{ style: 'murs', facettes: murs }, { style: 'toit', facettes: toit }],
+                // Les parties, que le CityGML écrit en bldg:BuildingPart : les
+                // 428 parties OSM de la cathédrale de Strasbourg, fondues en un
+                // maillage, s'y recoupaient, et ses sols en sortaient en 1 132
+                // triangles.
+                parties: parties.map(({ nom }) => ({ nom })),
+                maillages: parties.flatMap(({ murs, toit }, partie) =>
+                    [{ style: 'murs', facettes: murs, partie }, { style: 'toit', facettes: toit, partie }]),
             });
         }
     }
@@ -7558,13 +7922,12 @@ function modeleIfc(options) {
             compte[arbre ? 'arbres' : 'masses']++;
             elements.push({
                 cle: `${arbre ? 'arbre' : 'masse'}|${el.lon}|${el.lat}`,
-                entite: 'IFCGEOGRAPHICELEMENT', type: 'USERDEFINED',
-                objectType: arbre ? 'Arbre' : 'Masse de sursol',
+                genre: arbre ? 'arbre' : 'masse',
                 nom: arbre ? 'Arbre' : 'Sursol non bâti',
                 description: arbre ? `Houppier mesuré au LiDAR HD, port ${portDe(el).nom}`
                                      + (el.nature ? `, ${el.nature} (BD TOPO)` : '')
                     : 'Sursol hors zone de végétation BD TOPO, pas vert à l\'orthophoto (mur, abri, véhicule…)',
-                pset: { nom: arbre ? 'VueIGN_Arbre' : 'VueIGN_Sursol', valeurs: [
+                proprietes: { nom: arbre ? 'VueIGN_Arbre' : 'VueIGN_Sursol', valeurs: [
                     ['Hauteur', 'IFCLENGTHMEASURE', el.h],
                     // Celui du houppier dessiné, d'aire égale à son ellipse.
                     ['DiametreHouppier', 'IFCLENGTHMEASURE', 2 * Math.sqrt(demiA * demiB)],
@@ -7589,9 +7952,9 @@ function modeleIfc(options) {
         const [ax, ay] = toLocal(BORNES.o, BORNES.n), [bx, by] = toLocal(BORNES.e, BORNES.s);
         compte.maille = Math.max(Math.abs(bx - ax) / sx, Math.abs(ay - by) / sz) * pas;
         elements.push({
-            cle: 'terrain', entite: 'IFCGEOGRAPHICELEMENT', type: 'TERRAIN', objectType: null,
+            cle: 'terrain', genre: 'terrain',
             nom: 'Terrain naturel', description: `${sourceRelief}, maille de ${compte.maille.toFixed(1)} m`,
-            pset: { nom: 'VueIGN_Terrain', valeurs: [
+            proprietes: { nom: 'VueIGN_Terrain', valeurs: [
                 ['Source', 'IFCLABEL', sourceRelief],
                 ['Maille', 'IFCLENGTHMEASURE', compte.maille],
             ] },
@@ -7603,13 +7966,14 @@ function modeleIfc(options) {
     // Corse : le RGE ALTI y est en altitudes IGN78.
     const corse = CENTER[0] > 8 && CENTER[1] < 43.1;
     const datumVertical = rgeAlti ? (corse ? 'NGF-IGN78' : 'NGF-IGN69') : null;
+    const epsgVertical = rgeAlti ? (corse ? 5721 : 5720) : null;
     const credits = ['Données IGN – Géoplateforme (BD TOPO, LiDAR HD, BD Forêt'
         + (rgeAlti ? ', RGE ALTI' : '') + '), Licence Ouverte 2.0'];
     if (!rgeAlti && sourceRelief) credits.push(`relief : ${sourceRelief} (Mapzen Terrain Tiles, EU-DEM © Copernicus)`);
     if (compte.osm) credits.push('parties de monuments © contributeurs OpenStreetMap, ODbL');
     const zone = ZONE ?? Math.round(ZONE_DEFAUT_M);
     return {
-        fichier: `vue3d-${LAT0}-${LON0}${ZONE === null ? '' : `-z${ZONE}`}.ifc`,
+        base: `vue3d-${LAT0}-${LON0}${ZONE === null ? '' : `-z${ZONE}`}`,
         horodatage: new Date().toISOString().slice(0, 19),
         cle: `${LAT0}|${LON0}|${ZONE}`,
         nom: `Vue 3D IGN ${LAT0.toFixed(5)}, ${LON0.toFixed(5)}`,
@@ -7617,7 +7981,7 @@ function modeleIfc(options) {
         site: `Emprise de ${zone} m`, lon: CENTER[0], lat: CENTER[1], origine,
         nordVrai: [(nx - lx) / nord, (ny - ly) / nord],
         crs: { nom: 'EPSG:2154', description: 'RGF93 v1 / Lambert-93' + (datumVertical ? `, altitudes ${datumVertical}` : ''),
-               datum: 'RGF93 v1', datumVertical, projection: 'Lambert conique conforme' },
+               datum: 'RGF93 v1', datumVertical, epsgVertical, projection: 'Lambert conique conforme' },
         styles: STYLES_IFC, elements, compte,
     };
 }
@@ -7631,9 +7995,17 @@ for (const [cle, id] of [['relief', 'x-relief'], ['batiments', 'x-batiments'],
         bouton.classList.toggle('on', optionsExport[cle]);
     });
 }
-const btnIfc = document.getElementById('btn-ifc');
+const FORMATS_EXPORT = {
+    ifc: { nom: 'IFC', ecrire: ecrireIfc, extension: 'ifc', type: 'application/x-step',
+           reperes: m => `Lambert-93, origine en ${m.origine.x} E, ${m.origine.y} N, ${m.origine.z} m.` },
+    citygml: { nom: 'CityGML', ecrire: ecrireCityGml, extension: 'gml', type: 'application/gml+xml',
+               reperes: m => `Lambert-93${m.crs.datumVertical ? ` et ${m.crs.datumVertical}` : ''}, coordonnées absolues.` },
+};
 const noteExport = document.getElementById('note-export');
-btnIfc.addEventListener('click', async () => {
+const boutonsExport = [...document.querySelectorAll('[data-format]')];
+
+async function exporter(format) {
+    const { nom, ecrire, extension, type, reperes } = FORMATS_EXPORT[format];
     // Les bâtiments sont posés sur le relief : sans lui, pas d'altitudes.
     if (!terrain || !vegChargee) {
         noteExport.textContent = ERREUR_SCENE ? `Scène indisponible : ${ERREUR_SCENE}`
@@ -7641,35 +8013,37 @@ btnIfc.addEventListener('click', async () => {
             : 'La scène n\'est pas encore prête.';
         return;
     }
-    btnIfc.disabled = true;
-    noteExport.textContent = 'Écriture du fichier IFC…';
+    for (const b of boutonsExport) b.disabled = true;
+    noteExport.textContent = `Écriture du fichier ${nom}…`;
     // La note s'affiche avant le calcul, qui tient la main une à deux secondes en zone de 1 000 m.
     await new Promise(ok => requestAnimationFrame(() => setTimeout(ok)));
     try {
-        const modele = modeleIfc(optionsExport);
-        const texte = ecrireIfc(modele);
+        const modele = modeleExport(optionsExport);
+        const texte = ecrire(modele);
+        const fichier = new Blob(Array.isArray(texte) ? texte : [texte], { type });
         const lien = document.createElement('a');
-        lien.href = URL.createObjectURL(new Blob([texte], { type: 'application/x-step' }));
-        lien.download = modele.fichier;
+        lien.href = URL.createObjectURL(fichier);
+        lien.download = `${modele.base}.${extension}`;
         document.body.append(lien);
         lien.click();
         lien.remove();
         setTimeout(() => URL.revokeObjectURL(lien.href), 60000);
         const c = modele.compte;
         const nombre = (n, mot) => `${n.toLocaleString('fr-FR')} ${mot}${n > 1 ? 's' : ''}`;
-        noteExport.textContent = `${modele.fichier} : ${(texte.length / 1e6).toFixed(1).replace('.', ',')} Mo, `
+        noteExport.textContent = `${lien.download} : ${(fichier.size / 1e6).toFixed(1).replace('.', ',')} Mo, `
             + [optionsExport.batiments && nombre(c.batiments, 'bâtiment'),
                optionsExport.arbres && (vegPrete ? nombre(c.arbres, 'arbre') : 'pas d\'arbres (hors LiDAR HD)'),
                optionsExport.masses && vegPrete && nombre(c.masses, 'masse'),
                c.maille && `relief à ${c.maille.toFixed(1).replace('.', ',')} m`].filter(Boolean).join(', ')
-            + `. Lambert-93, origine en ${modele.origine.x} E, ${modele.origine.y} N, ${modele.origine.z} m.`;
+            + '. ' + reperes(modele);
     } catch (err) {
         noteExport.textContent = 'Export impossible : ' + err.message;
         console.error(err);
     } finally {
-        btnIfc.disabled = false;
+        for (const b of boutonsExport) b.disabled = false;
     }
-});
+}
+for (const b of boutonsExport) b.addEventListener('click', () => exporter(b.dataset.format));
 
 // --- Interactions --------------------------------------------------------
 const raycaster = new THREE.Raycaster();

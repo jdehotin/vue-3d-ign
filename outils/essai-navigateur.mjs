@@ -1,10 +1,10 @@
 // Essai de la page dans un vrai navigateur : charge un point, attend la scène,
 // survole et clique le bâtiment visé, bascule au 21 décembre, télécharge
-// l'export IFC (à côté de la capture), pilote le drone quelques mètres, décale
-// la scène vers le nord, cherche un lieu (« place du chateau gordes ») et s'y
-// rend, et relève toute erreur JavaScript ou requête en échec. C'est le seul
-// moyen de vérifier les chemins d'exécution du rendu, que les tests Python ne
-// voient pas.
+// les exports IFC et CityGML (à côté de la capture), pilote le drone quelques
+// mètres, décale la scène vers le nord, cherche un lieu (« place du chateau
+// gordes ») et s'y rend, et relève toute erreur JavaScript ou requête en
+// échec. C'est le seul moyen de vérifier les chemins d'exécution du rendu,
+// que les tests Python ne voient pas.
 //
 //   npm install puppeteer-core
 //   node outils/essai-navigateur.mjs "http://localhost:8080/?lat=43.9116&lon=5.2003" capture.png
@@ -98,33 +98,38 @@ await page.screenshot({ path: sortie.replace(/(\.png)?$/, '-dpe-dvf.png') });
 // Éteints, pour que la suite voie la page telle qu'elle s'ouvre.
 await page.click('#t-dpe');
 await page.click('#t-dvf');
-// Export IFC : le fichier arrive dans le dossier de la capture, et la note
-// dit sa taille et ce qu'il contient. outils/valider_ifc.py le valide ensuite.
-try {
-  const dossier = path.dirname(path.resolve(sortie));
-  const nom = await page.evaluate(() => {
-    const q = new URLSearchParams(location.search);
-    return `vue3d-${q.get('lat') ?? 43.9116}-${q.get('lon') ?? 5.2003}${q.get('zone') ? '-z' + q.get('zone') : ''}.ifc`;
-  });
-  const fichier = path.join(dossier, nom);
-  fs.rmSync(fichier, { force: true });
-  const cdp = await page.createCDPSession();
-  await cdp.send('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: dossier });
-  const debut = Date.now();
-  await page.click('#btn-ifc');
-  await page.waitForFunction(() => !/Écriture/.test(document.getElementById('note-export').textContent),
-                             { timeout: 60000 });
-  const noteExport = await page.$eval('#note-export', e => e.textContent);
-  console.log(`export IFC (${((Date.now() - debut) / 1000).toFixed(1)} s) :`, noteExport);
-  for (let i = 0; i < 50 && !fs.existsSync(fichier); i++) await new Promise(r => setTimeout(r, 200));
-  const texte = fs.existsSync(fichier) ? fs.readFileSync(fichier, 'utf8') : '';
-  if (!texte.startsWith('ISO-10303-21;') || !texte.endsWith('END-ISO-10303-21;\n')) {
-    erreurs.push(`export IFC : ${fichier} ${texte ? 'incomplet' : 'absent'} — ${noteExport}`);
-  } else {
-    console.log('fichier :', fichier, `(${(texte.length / 1e6).toFixed(1)} Mo)`);
+// Exports IFC et CityGML : chaque fichier arrive dans le dossier de la
+// capture, et la note dit sa taille et ce qu'il contient.
+// outils/valider_ifc.py et outils/valider_citygml.py les valident ensuite.
+for (const [format, bouton, debutFichier, finFichier] of [
+  ['ifc', '#btn-ifc', 'ISO-10303-21;', 'END-ISO-10303-21;\n'],
+  ['gml', '#btn-citygml', '<?xml version="1.0" encoding="UTF-8"?>', '</core:CityModel>\n']]) {
+  try {
+    const dossier = path.dirname(path.resolve(sortie));
+    const nom = await page.evaluate(f => {
+      const q = new URLSearchParams(location.search);
+      return `vue3d-${q.get('lat') ?? 43.9116}-${q.get('lon') ?? 5.2003}${q.get('zone') ? '-z' + q.get('zone') : ''}.${f}`;
+    }, format);
+    const fichier = path.join(dossier, nom);
+    fs.rmSync(fichier, { force: true });
+    const cdp = await page.createCDPSession();
+    await cdp.send('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: dossier });
+    const debut = Date.now();
+    await page.click(bouton);
+    await page.waitForFunction(() => !/Écriture/.test(document.getElementById('note-export').textContent),
+                               { timeout: 60000 });
+    const noteExport = await page.$eval('#note-export', e => e.textContent);
+    console.log(`export ${format} (${((Date.now() - debut) / 1000).toFixed(1)} s) :`, noteExport);
+    for (let i = 0; i < 50 && !fs.existsSync(fichier); i++) await new Promise(r => setTimeout(r, 200));
+    const texte = fs.existsSync(fichier) ? fs.readFileSync(fichier, 'utf8') : '';
+    if (!texte.startsWith(debutFichier) || !texte.endsWith(finFichier)) {
+      erreurs.push(`export ${format} : ${fichier} ${texte ? 'incomplet' : 'absent'} — ${noteExport}`);
+    } else {
+      console.log('fichier :', fichier, `(${(texte.length / 1e6).toFixed(1)} Mo)`);
+    }
+  } catch (e) {
+    erreurs.push(`export ${format} : ` + e.message);
   }
-} catch (e) {
-  erreurs.push('export IFC : ' + e.message);
 }
 // Drone : il décolle, avance tant que la flèche est tenue, dit sa vitesse,
 // et Échap rend la main à la souris.

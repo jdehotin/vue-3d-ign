@@ -15,6 +15,29 @@ messages de commit et dans les commentaires des modules.
 
 ### Ajouté
 
+- **L'export CityGML 2.0, pour les SIG.** À côté de l'IFC, le bouton
+  « CityGML 2.0 » écrit le même contexte pour FME, 3DCityDB, FZKViewer :
+  bâtiments en LOD2 (une surface de toit, de mur ou de sol par face plane,
+  les cours en trous), une partie (`bldg:BuildingPart`) par emprise quand un
+  bâtiment en a plusieurs, arbres en objets de végétation avec hauteur et
+  diamètre du houppier, masses en objets génériques, relief en TIN.
+  Coordonnées absolues en Lambert-93, altitudes NGF, au millimètre.
+  - Les triangles des maillages sont réunis en polygones plans : un mur
+    extrudé devient un rectangle, un toit-terrasse son emprise trouée de ses
+    cours ; un triangle plat rejoint son voisin.
+  - Les toits en pans et les surfaces mesurées n'ont pas de plancher : leur
+    sol est retrouvé au pied des murs (38 bâtiments sur 247 à Gordes).
+  - Les 428 parties OSM de la cathédrale de Strasbourg sortent en 311
+    parties ; fondues en un seul volume, elles se recoupaient, et leurs sols
+    tombaient en 1 132 triangles.
+  - Lourd : 47 Mo à Gordes, dont 28 pour les arbres, 172 Mo en zone de
+    1 000 m avec les masses ; en géométrie explicite, que tous les logiciels
+    lisent.
+  - Valide contre les schémas de CityGML 2.0 (`citygml-tools validate`) et,
+    géométrie comprise, par `outils/valider_citygml.py` : anneaux, planéité à
+    1 cm, cours, orientation des toits et des sols, arbres fermés et tournés
+    vers l'extérieur, à Gordes, Strasbourg et en zone de 1 000 m.
+
 - **L'export BIM, en IFC 4.** Le bouton « Télécharger l'IFC 4 » du panneau
   écrit le contexte du lieu pour un logiciel de conception (Revit, ArchiCAD,
   Vectorworks, Allplan, Bonsai) : le relief de l'emprise, les bâtiments tels

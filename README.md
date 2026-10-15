@@ -286,14 +286,23 @@ lecture, en zone par défaut. Les conditions de réutilisation de DVF
 interdisent de réidentifier les personnes et de laisser les moteurs de
 recherche indexer ces données : la page ne les publie nulle part.
 
-### Export BIM, en IFC 4
+### Export BIM et SIG, en IFC 4 et CityGML 2.0
 
-« Télécharger l'IFC 4 », dans le panneau, écrit le contexte du lieu pour un
-logiciel de conception — Revit, ArchiCAD, Vectorworks, Allplan, Bonsai :
-le relief de l'emprise, les bâtiments, les arbres et, si on les allume, les
-masses de sursol. Le navigateur écrit le fichier lui-même, en une à
-quelques secondes : 5 à 9 Mo dans l'emprise par défaut, environ 25 Mo en
-zone de 1 000 m, 35 avec les masses.
+Deux boutons du panneau écrivent le contexte du lieu : le relief de
+l'emprise, les bâtiments, les arbres et, si on les allume, les masses de
+sursol. Le navigateur écrit le fichier lui-même, en une à quelques secondes.
+
+- **IFC 4**, pour un logiciel de conception — Revit, ArchiCAD, Vectorworks,
+  Allplan, Bonsai : des maillages, autour d'une origine au point visé. 5 à
+  9 Mo dans l'emprise par défaut, environ 25 Mo en zone de 1 000 m, 35 avec
+  les masses.
+- **CityGML 2.0**, pour les SIG et les maquettes urbaines — FME, 3DCityDB,
+  FZKViewer : bâtiments en LOD2, une surface de toit, de mur ou de sol par
+  face plane, une partie par emprise ; arbres en objets de végétation ;
+  relief en TIN ; coordonnées absolues. Plus lourd : 47 Mo à Gordes, jusqu'à
+  170 Mo en zone de 1 000 m avec les masses.
+
+Pour l'un comme pour l'autre :
 
 - **Les bâtiments tels qu'affichés** : les boutons « Toits en pente »,
   « Toits mesurés » et « Monuments OSM » décident de ce qui part, mais sans
@@ -303,14 +312,13 @@ zone de 1 000 m, 35 avec les masses.
 - **Les arbres en forme simple**, houppier et tronc, à la hauteur et à
   l'emprise mesurées au LiDAR HD, avec l'essence dominante de leur massif
   quand la BD Forêt la donne ; le relief à 2 m, 4 m en zone de 1 000 m.
-- **En Lambert-93, altitudes NGF**, autour d'une origine entière au point
-  visé (IfcMapConversion), le nord vrai renseigné pour les études
-  d'ensoleillement. Les longueurs sont celles de la carte : de −1 à
-  +2,2 mm/m selon la latitude.
-- Des maillages triangulés (IFC 4, vue de référence) : un contexte à
-  consulter et à couper, pas des murs ni des dalles à modifier. Le fichier
-  cite ses sources ; avec des parties de monuments OSM, il est aussi sous
-  ODbL.
+- **En Lambert-93, altitudes NGF.** Les longueurs sont celles de la carte :
+  de −1 à +2,2 mm/m selon la latitude. L'IFC rapporte ses coordonnées à une
+  origine entière au point visé (IfcMapConversion) et renseigne le nord vrai
+  pour les études d'ensoleillement ; le CityGML les écrit en absolu.
+- Un contexte à consulter et à couper, pas des murs ni des dalles à
+  modifier. Chaque fichier cite ses sources ; avec des parties de monuments
+  OSM, il est aussi sous ODbL.
 
 C'est une maquette de contexte, pas un relevé : les emprises de la BD TOPO
 sont à un mètre près, un toit résumé n'a que deux pans ou une pyramide, et
@@ -689,13 +697,16 @@ cherche un autre lieu et s'y rend, et échoue à la moindre erreur JavaScript :
 npm install puppeteer-core
 node outils/essai-navigateur.mjs "http://localhost:8080/?lat=43.9116&lon=5.2003" capture.png
 node outils/verifier-recherche.mjs     # la recherche d'un lieu, sous Node, sans réseau
-node outils/verifier-export.mjs essai.ifc   # l'export IFC, sous Node (npm install three@0.160.0)
-pip install ifcopenshell pytest && python outils/valider_ifc.py essai.ifc   # le valide comme un logiciel le lirait
+node outils/verifier-export.mjs essai.ifc essai.gml   # les exports, sous Node (npm install three@0.160.0)
+pip install ifcopenshell pytest && python outils/valider_ifc.py essai.ifc   # l'IFC, comme un logiciel le lirait
+python outils/valider_citygml.py essai.gml   # la géométrie du CityGML, sans dépendance
+citygml-tools validate essai.gml             # son schéma (github.com/citygml4j/citygml-tools)
 ```
 
-L'essai du navigateur télécharge aussi l'export IFC à côté de la capture :
-`outils/valider_ifc.py` le valide ensuite (schéma, règles EXPRESS,
-géométrie de chaque élément, géoréférencement).
+L'essai du navigateur télécharge aussi les deux exports à côté de la
+capture : `outils/valider_ifc.py` valide l'IFC (schéma, règles EXPRESS,
+géométrie de chaque élément, géoréférencement), `outils/valider_citygml.py`
+et `citygml-tools` le CityGML.
 
 La démo filmée se tourne de la même façon, dans un Chrome sans écran, sur un
 serveur qui tourne avec la couche des véhicules : la caméra suit un scénario
