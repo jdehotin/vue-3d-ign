@@ -20,12 +20,19 @@ elle, l'emprise par défaut d'environ 356 m.
 
 La première demande d'un point construit sa scène : une vingtaine à une
 trentaine de secondes, que la page annonce. Les suivantes la lisent sur disque.
+Avec `VUE3D_QUOTA`, une même adresse IP n'en fait construire qu'autant par
+heure (429 au-delà) ; derrière un proxy, `VUE3D_PROXY` dit combien croire de
+`X-Forwarded-For`.
 """
 
 import logging
+import math
 import os
+import threading
+import time
 
 from flask import Flask, jsonify, request, send_from_directory
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from .dpe import fetch_dpe
 from .dvf import fetch_dvf
@@ -39,7 +46,8 @@ from .scene import (NOM_DPE, NOM_DVF, NOM_MONUMENTS, NOM_NUAGE, NOM_ORTHO, NOM_O
                     HorsEmprise, MonumentsIndisponibles, NuageIndisponible,
                     OuvragesIndisponibles,
                     PanneauxIndisponibles, ReconstructionRefusee, SceneIncomplete,
-                    VehiculesDesactives, VehiculesIndisponibles, zone_normalisee)
+                    VehiculesDesactives, VehiculesIndisponibles, point_normalise,
+                    zone_normalisee)
 from .scene import construire as construire_scene
 from .toits import autoriser_bassin
 from .vehicules import MODE_PAR_DEFAUT
@@ -56,16 +64,91 @@ logging.basicConfig(level=os.environ.get("VUE3D_LOG", "INFO"),
 ICI = os.path.dirname(os.path.abspath(__file__))
 
 
+def entier_env(nom):
+    """La variable `nom`, entier positif ou nul ; 0 si elle est absente."""
+    valeur = os.environ.get(nom, "").strip()
+    try:
+        n = int(valeur or 0)
+    except ValueError:
+        n = -1
+    if n < 0:
+        raise ValueError(f"{nom}={valeur!r} : attendu un entier positif ou nul.")
+    return n
+
+
+class Quota:
+    """Scènes neuves construites pour une même adresse IP, sur une heure
+    glissante. Une scène neuve coûte une trentaine de requêtes à la
+    Géoplateforme (Cache.RECONSTRUIRE_APRES_S), qui limite l'adresse du
+    serveur, pas celle du visiteur : sans quota, un seul visiteur qui
+    enchaîne les lieux ferait attendre tous les autres. Une scène en cache ne
+    coûte rien et n'est jamais comptée. Tenu en mémoire : un redémarrage du
+    service le remet à zéro.
+
+    Il compte des scènes, pas des requêtes : une page qui ouvre un lieu neuf
+    demande en même temps la scène, l'orthophoto et les couches du même
+    point, toutes avant que la scène n'existe."""
+
+    FENETRE_S = 3600
+
+    def __init__(self, par_heure, horloge=time.monotonic):
+        self.par_heure = par_heure
+        self.horloge = horloge
+        self._scenes = {}           # adresse -> {clé de scène: instant où elle a été comptée}
+        self._verrou = threading.Lock()
+        self._balayage = horloge()
+
+    def attente(self, adresse, cle, compter=True):
+        """0 si la scène `cle` peut être construite pour `adresse` — elle est
+        alors comptée, sauf `compter=False` ; sinon, les secondes avant
+        qu'une place se libère."""
+        maintenant = self.horloge()
+        limite = maintenant - self.FENETRE_S
+        with self._verrou:
+            if self._balayage <= limite:
+                # Une adresse muette depuis une heure ne garde rien en mémoire.
+                for a in [a for a, s in self._scenes.items()
+                          if not s or max(s.values()) <= limite]:
+                    del self._scenes[a]
+                self._balayage = maintenant
+            scenes = self._scenes.setdefault(adresse, {})
+            for c in [c for c, t in scenes.items() if t <= limite]:
+                del scenes[c]
+            if cle in scenes:
+                return 0
+            if len(scenes) >= self.par_heure:
+                return math.ceil(min(scenes.values()) - limite)
+            if compter:
+                scenes[cle] = maintenant
+            return 0
+
+
 def creer_app(dossier_cache=None, construire=construire_scene, lire_monuments=fetch_monuments,
               lire_ouvrages=fetch_ouvrages, lire_vehicules=None, lire_panneaux=None,
-              lire_nuage=fetch_nuage, lire_dpe=fetch_dpe, lire_dvf=fetch_dvf):
+              lire_nuage=fetch_nuage, lire_dpe=fetch_dpe, lire_dvf=fetch_dvf,
+              quota=None, proxy=None):
     """`construire`, `lire_monuments`, `lire_ouvrages`, `lire_vehicules`,
     `lire_panneaux`, `lire_nuage`, `lire_dpe` et `lire_dvf` sont injectables
     pour les tests, qui n'appellent ni l'IGN, ni Overpass, ni l'ADEME, ni
     data.gouv, et ne chargent aucun réseau ni registre. `lire_vehicules` :
     de `vehicules.lecteur()` ; None, le service n'a ni véhicules ni piscines.
-    `lire_panneaux` : de `panneaux.lecteur()` ; None, pas de panneaux."""
+    `lire_panneaux` : de `panneaux.lecteur()` ; None, pas de panneaux.
+    `quota` : scènes neuves par heure et par adresse IP, 0 sans limite ;
+    `proxy` : proxys devant le service, dont on croit `X-Forwarded-For`.
+    None : de VUE3D_QUOTA et VUE3D_PROXY, 0 en leur absence."""
     app = Flask(__name__, static_folder=os.path.join(ICI, "static"), static_url_path="/static")
+    proxy = entier_env("VUE3D_PROXY") if proxy is None else proxy
+    if proxy:
+        # Sans cela, derrière Caddy, tous les visiteurs auraient l'adresse
+        # 127.0.0.1, et un seul quota. Jamais sans proxy : un visiteur
+        # changerait d'adresse à chaque requête en écrivant l'en-tête.
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=proxy)
+    quota = entier_env("VUE3D_QUOTA") if quota is None else quota
+    quota = Quota(quota) if quota else None
+    if quota:
+        app.logger.info("Quota : %d scènes neuves par heure et par adresse IP, %s",
+                        quota.par_heure, f"lue dans X-Forwarded-For ({proxy} proxy)"
+                        if proxy else "celle de la connexion (aucun proxy déclaré)")
     # Absolu : send_from_directory résout un chemin relatif depuis le dossier
     # de l'application, pas depuis le répertoire courant — avec
     # VUE3D_CACHE=./cache, l'orthophoto répondait 404.
@@ -88,12 +171,46 @@ def creer_app(dossier_cache=None, construire=construire_scene, lire_monuments=fe
     def erreur(code, message):
         return jsonify({"erreur": message}), code
 
+    def refus_quota(lat, lon, zone, reconstruction=False):
+        """La réponse 429 si la scène du point est à construire et que le
+        visiteur a épuisé son quota ; None sinon, la scène comptée. Une
+        reconstruction est vérifiée avant de mettre la scène de côté, et
+        comptée par l'appelant une fois acceptée : refusée ensuite, la scène
+        resterait de côté.
+
+        Raises:
+            HorsEmprise: le point n'est pas servi.
+        """
+        if quota is None:
+            return None
+        lat, lon = point_normalise(lat, lon)
+        if not reconstruction and cache.present(lat, lon, zone):
+            return None
+        attente = quota.attente(request.remote_addr, (lat, lon, zone),
+                                compter=not reconstruction)
+        if not attente:
+            return None
+        app.logger.warning("Quota de %d scènes neuves par heure atteint pour %s",
+                           quota.par_heure, request.remote_addr)
+        reponse, code = erreur(429, f"Ce serveur construit au plus {quota.par_heure} scènes "
+                               "nouvelles par heure pour un même visiteur : chacune interroge "
+                               "longuement les services de l'IGN. Les lieux déjà construits "
+                               "restent ouverts ; un nouveau pourra l'être dans "
+                               f"{math.ceil(attente / 60)} min.")
+        reponse.headers["Retry-After"] = str(attente)
+        return reponse, code
+
     def dossier_scene(couche=None, prelire=False, detecteur=None):
         p = point()
         if p is None:
             return None, erreur(400, MESSAGE_POINT)
         *p, zone = p
         try:
+            # Toute route qui lit un dossier de scène la construit au besoin,
+            # couches comprises : le quota se vérifie donc ici, pour toutes.
+            refus = refus_quota(*p, zone)
+            if refus:
+                return None, refus
             if couche == NOM_MONUMENTS:
                 return cache.obtenir_monuments(*p, construire=construire, zone=zone), None
             if couche == NOM_OUVRAGES:
@@ -322,7 +439,12 @@ def creer_app(dossier_cache=None, construire=construire_scene, lire_monuments=fe
             return erreur(400, MESSAGE_POINT)
         *p, zone = p
         try:
+            refus = refus_quota(*p, zone, reconstruction=True)
+            if refus:
+                return refus
             cache.reconstruire(*p, zone=zone)
+            if quota:
+                quota.attente(request.remote_addr, (*point_normalise(*p), zone))
         except HorsEmprise as exc:
             return erreur(422, str(exc))
         except ReconstructionRefusee as exc:

@@ -15,6 +15,17 @@ messages de commit et dans les commentaires des modules.
 
 ### Ajouté
 
+- **Un quota de scènes neuves par visiteur, pour un service public.**
+  `VUE3D_QUOTA=20` limite chaque adresse IP à vingt lieux construits par
+  heure glissante ; au-delà, l'API répond 429 avec `Retry-After`, et la page
+  affiche le message. Une scène neuve coûte une trentaine de requêtes à la
+  Géoplateforme, qui limite l'adresse du serveur : un seul visiteur ne fait
+  plus attendre tous les autres. Ce sont les scènes qui comptent, pas les
+  requêtes : la page qui ouvre un lieu neuf en lance plusieurs sur le même
+  point. Les scènes en cache, et leurs couches, restent ouvertes. Derrière
+  un proxy, `VUE3D_PROXY=1` lit l'adresse dans `X-Forwarded-For`. Rien par
+  défaut.
+
 - **L'export CityGML 2.0, pour les SIG.** À côté de l'IFC, le bouton
   « CityGML 2.0 » écrit le même contexte pour FME, 3DCityDB, FZKViewer :
   bâtiments en LOD2 (une surface de toit, de mur ou de sol par face plane,

@@ -411,3 +411,117 @@ def test_une_panne_de_l_ademe_ou_de_dvf_rend_503_sans_rien_ecrire(client_dpe_dvf
     client.get("/api/dpe?lat=45.5&lon=2")
     assert lectures == ["dpe", "dvf", "dpe"]
     assert client.get("/api/dpe?lat=40&lon=2").status_code == 422
+
+
+@pytest.fixture
+def client_quota(tmp_path):
+    """Fabrique de services publics, à quota et proxy choisis, sur un même
+    cache : une scène construite par l'un est en cache pour l'autre."""
+    scene = {"version": 1, "bbox": [0, 0, 1, 1], "batiments": {"features": []}}
+
+    def construire(lat, lon, avancer=None):
+        return gzip.compress(json.dumps(scene).encode()), b"\xff\xd8jpeg"
+
+    def creer(**options):
+        return module_app.creer_app(str(tmp_path), construire=construire,
+                                    lire_monuments=lambda *b: {"elements": []},
+                                    lire_ouvrages=lambda *b: {}, lire_nuage=lambda *b: None,
+                                    **options).test_client()
+    return creer
+
+
+VISITEUR_A = {"REMOTE_ADDR": "203.0.113.5"}
+VISITEUR_B = {"REMOTE_ADDR": "203.0.113.6"}
+
+
+def test_le_quota_compte_les_scenes_neuves_de_chaque_visiteur(client_quota):
+    """Deux scènes neuves par heure : la troisième est refusée (429, avec
+    Retry-After), de même qu'une couche d'un point neuf, qui construirait sa
+    scène. Les requêtes d'une page sur un même lieu neuf ne comptent qu'une
+    scène ; une scène en cache reste ouverte ; chaque visiteur a son quota."""
+    client = client_quota(quota=2)
+    for url in ("/api/scene?lat=48.801&lon=2.12", "/api/ortho?lat=48.801&lon=2.12",
+                "/api/monuments?lat=48.801&lon=2.12", "/api/scene?lat=48.802&lon=2.12"):
+        assert client.get(url, environ_base=VISITEUR_A).status_code == 200, url
+    r = client.get("/api/scene?lat=48.803&lon=2.12", environ_base=VISITEUR_A)
+    assert r.status_code == 429 and 0 < int(r.headers["Retry-After"]) <= 3600
+    assert "au plus 2 scènes nouvelles par heure" in r.get_json()["erreur"]
+    assert client.get("/api/ouvrages?lat=48.804&lon=2.12", environ_base=VISITEUR_A).status_code == 429
+    assert client.get("/api/scene?lat=48.801&lon=2.12", environ_base=VISITEUR_A).status_code == 200
+    assert client.get("/api/scene?lat=48.803&lon=2.12", environ_base=VISITEUR_B).status_code == 200
+    assert client.get("/api/scene?lat=48.803&lon=2.12", environ_base=VISITEUR_A).status_code == 200
+    assert client.get("/api/scene?lat=40&lon=2.12", environ_base=VISITEUR_A).status_code == 422
+
+
+def test_sans_quota_par_defaut(client_quota, monkeypatch):
+    monkeypatch.delenv("VUE3D_QUOTA", raising=False)
+    client = client_quota()
+    for i in range(5):
+        assert client.get(f"/api/scene?lat=48.81{i}&lon=2.12",
+                          environ_base=VISITEUR_A).status_code == 200
+    monkeypatch.setenv("VUE3D_QUOTA", "1")
+    client = client_quota()
+    assert client.get("/api/scene?lat=48.821&lon=2.12", environ_base=VISITEUR_A).status_code == 200
+    assert client.get("/api/scene?lat=48.822&lon=2.12", environ_base=VISITEUR_A).status_code == 429
+    monkeypatch.setenv("VUE3D_QUOTA", "vingt")
+    with pytest.raises(ValueError, match="VUE3D_QUOTA"):
+        client_quota()
+
+
+def test_derriere_un_proxy_le_visiteur_est_celui_de_x_forwarded_for(client_quota):
+    """Derrière Caddy, tous les visiteurs arrivent de 127.0.0.1 : avec
+    proxy=1, chacun est reconnu à X-Forwarded-For. Sans proxy déclaré,
+    l'en-tête est ignoré : un visiteur ne s'invente pas une adresse par
+    requête."""
+    derriere = client_quota(quota=1, proxy=1)
+
+    def statut(client, lat, adresse):
+        return client.get(f"/api/scene?lat={lat}&lon=2.12",
+                          headers={"X-Forwarded-For": adresse}).status_code
+    assert statut(derriere, 48.831, "198.51.100.1") == 200
+    assert statut(derriere, 48.832, "198.51.100.2") == 200
+    assert statut(derriere, 48.833, "198.51.100.1") == 429
+    direct = client_quota(quota=1)
+    assert statut(direct, 48.841, "198.51.100.3") == 200
+    assert statut(direct, 48.842, "198.51.100.4") == 429
+
+
+def test_une_reconstruction_refusee_par_le_quota_laisse_la_scene(client_quota, tmp_path):
+    """Le quota se vérifie avant de mettre la scène de côté : refusée, elle
+    reste en place. Acceptée, la reconstruction compte une scène, une seule
+    fois avec la construction qui suit."""
+    import os
+    import time
+    client = client_quota(quota=1)
+    assert client.get("/api/scene?lat=48.851&lon=2.12", environ_base=VISITEUR_B).status_code == 200
+    assert client.get("/api/scene?lat=48.852&lon=2.12", environ_base=VISITEUR_A).status_code == 200
+    t = time.time() - 3600
+    for d, _, fs in os.walk(tmp_path):
+        if "scene.json.gz" in fs:
+            os.utime(os.path.join(d, "scene.json.gz"), (t, t))
+    r = client.post("/api/reconstruire?lat=48.851&lon=2.12", environ_base=VISITEUR_A)
+    assert r.status_code == 429 and "Retry-After" in r.headers
+    assert client.get("/api/avancement?lat=48.851&lon=2.12").get_json() == {"etat": "prete"}
+    assert client.post("/api/reconstruire?lat=48.851&lon=2.12",
+                       environ_base=VISITEUR_B).status_code == 202
+    assert client.get("/api/scene?lat=48.851&lon=2.12", environ_base=VISITEUR_B).status_code == 200
+    assert client.get("/api/scene?lat=48.853&lon=2.12", environ_base=VISITEUR_B).status_code == 429
+
+
+def test_le_quota_glisse_sur_une_heure():
+    t = [0.0]
+    quota = module_app.Quota(2, horloge=lambda: t[0])
+    assert quota.attente("a", 1) == 0
+    t[0] = 600
+    assert quota.attente("a", 2) == 0
+    assert quota.attente("a", 1) == 0                  # déjà comptée
+    t[0] = 1200
+    assert quota.attente("a", 3, compter=False) == 2400
+    assert quota.attente("a", 3) == 2400               # la scène 1 sort à 3 600 s
+    t[0] = 3600
+    assert quota.attente("a", 3) == 0
+    assert quota.attente("a", 4) == 600                # la scène 2 sort à 4 200 s
+    # Une adresse muette depuis une heure est oubliée.
+    t[0] = 8000
+    quota.attente("b", 1)
+    assert "a" not in quota._scenes

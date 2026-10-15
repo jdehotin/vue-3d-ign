@@ -79,6 +79,17 @@ passer, au prix de toitures cinq à dix fois plus lentes sur les grandes
 scènes). Chacun occupe 100 à 280 Mo sous macOS après de grandes scènes,
 environ 30 Mo dans le conteneur.
 
+Ouvert sur Internet, le service peut limiter les scènes neuves de chaque
+visiteur : avec `VUE3D_QUOTA=20`, une même adresse IP ne fait construire que
+vingt lieux par heure glissante. Au-delà, elle reçoit une erreur 429 avec
+`Retry-After`, que la page affiche. Chaque scène neuve coûte une trentaine
+de requêtes à la Géoplateforme, qui limite l'adresse du serveur ; les scènes
+en cache restent ouvertes à tous et ne comptent pas. Derrière un proxy
+(Caddy, nginx), `VUE3D_PROXY=1` prend l'adresse du visiteur dans
+`X-Forwarded-For` : sans lui, tous les visiteurs ont celle du proxy, et se
+partagent un seul quota. Sans proxy, ne pas le poser : chacun
+s'inventerait une adresse par requête. Ni l'un ni l'autre par défaut.
+
 ### Avec Docker
 
 Le même service, sur le même port, partout où Docker tourne :
