@@ -2881,6 +2881,10 @@ function poserPlanDeFond() {
  * Une tuile absente reste transparente. L'emprise rendue est celle du
  * composite, alignée sur le découpage des tuiles, en coordonnées locales.
  */
+// Tuiles d'un fond composé (sol, anneau) chargées à la fois : autant que
+// l'horizon (HORIZON_PARALLELE), voir composerTuiles.
+const COMPOSITION_PARALLELE = 12;
+
 async function composerTuiles(url, zoom, b) {
     const [x0, y0] = versTuile(b.o, b.n, zoom);
     const [x1, y1] = versTuile(b.e, b.s, zoom);
@@ -2893,16 +2897,26 @@ async function composerTuiles(url, zoom, b) {
     // loin en loin à une tuile qui existe (un 404 au zoom 16 à Gordes, 200
     // cinq fois de suite ensuite), et le trou restait dans la texture.
     const charger = u => chargerImage(u).catch(() => relireTuile(u));
-    const chargements = [];
+    const restantes = [];
     for (let x = x0; x <= x1; x++) {
-        for (let y = y0; y <= y1; y++) {
-            chargements.push(
-                charger(url(zoom, x, y))
-                    .then(img => ctx.drawImage(img, (x - x0) * 256, (y - y0) * 256, 256, 256))
-                    .catch(() => { /* tuile absente : reste transparente */ }));
+        for (let y = y0; y <= y1; y++) restantes.push([x, y]);
+    }
+    // COMPOSITION_PARALLELE à la fois, et non toutes ensemble : l'anneau
+    // d'une zone de 1 000 m en compte plus de cent au zoom 16, qui passent
+    // désormais par le serveur. D'un seul coup, en HTTP/2 derrière Caddy, elles
+    // ouvraient autant de connexions vers gunicorn, au-delà de sa file
+    // d'attente (128 sous macOS) : 100 réponses 502 en une milliseconde le 15
+    // octobre 2026 en production.
+    async function suivantes() {
+        for (let t; (t = restantes.shift());) {
+            const [x, y] = t;
+            try {
+                const img = await charger(url(zoom, x, y));
+                ctx.drawImage(img, (x - x0) * 256, (y - y0) * 256, 256, 256);
+            } catch (e) { /* tuile absente : reste transparente */ }
         }
     }
-    await Promise.all(chargements);
+    await Promise.all(Array.from({ length: COMPOSITION_PARALLELE }, suivantes));
 
     // Coin nord-ouest de la première tuile au coin sud-est de la dernière.
     const [lonO, latN] = versLonLat(x0, y0, zoom);
