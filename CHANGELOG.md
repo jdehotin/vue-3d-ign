@@ -15,6 +15,28 @@ messages de commit et dans les commentaires des modules.
 
 ### Ajouté
 
+- **Chercher un lieu nommé, une entreprise ou un commerce**, en plus d'une
+  adresse : « mairie bouc bel air », « pharmacie bouc bel air », « notaire
+  aix en provence ». Les lieux nommés de l'IGN étaient déjà demandés, mais
+  avec les adresses, sur un seul score où toute rue de la commune passait
+  devant : sans le « de », la mairie de Bouc-Bel-Air (0,39) restait hors des
+  quinze rues (0,42 à 0,54). Les deux index sont lus séparément, et ce qui
+  porte tous les mots tapés passe en tête, au pluriel près (« notaire » :
+  « Aix Mistral Notaires »).
+  - Les entreprises viennent de l'API Recherche d'entreprises de l'État
+    (SIRENE), sans clé : en activité seulement, et seulement si leur nom ou
+    leur enseigne porte les mots tapés — sinon « gordes » rendait des
+    sociétés « Gord » de Moulins. Trois au plus, l'enseigne la plus proche
+    de la recherche d'abord ; une entreprise du même lieu qu'un lieu nommé
+    proposé (les sociétés du musée d'Orsay, à 97 à 122 m ; les associations
+    d'Airbus Helicopters, jusqu'à 662 m de l'usine) ou de la même adresse
+    qu'une autre (0 à 26 m) n'est pas proposée deux fois.
+  - Un entrepreneur individuel porte le nom d'une personne : il n'est
+    trouvé que par son enseigne.
+  - `verifier-recherche.mjs` rejoue ces cas sur des réponses enregistrées
+    (`outils/recherche-exemples.json`, collectivités, établissements publics
+    et grandes sociétés seulement), et un exemple fictif pour les
+    entrepreneurs individuels.
 - **Recentrer la scène sur un arbre, un véhicule, un bateau ou une
   piscine**, comme sur un bâtiment. Un clic (ou un toucher) épingle leur
   infobulle avec « Recentrer la scène sur ce véhicule », qui recharge la

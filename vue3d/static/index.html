@@ -691,16 +691,41 @@ document.getElementById('coord-point').textContent = `${LAT0.toFixed(5)}, ${LON0
 // navigateur — le service répond à toute origine. Son quota, 50 requêtes par
 // seconde, est compté par adresse IP : chaque visiteur a le sien, le serveur
 // n'y prend aucune part.
+//
+// Ses deux index sont lus séparément : demandés ensemble, ils sont rangés sur
+// un seul score, où toute rue de la commune passe devant le lieu nommé —
+// « mairie bouc bel air » : quinze rues de Bouc-Bel-Air de 0,42 à 0,54, la
+// mairie à 0,39, hors de la liste ; avec « de », elle était en tête.
 const URL_GEOCODAGE = 'https://data.geopf.fr/geocodage';
+// Les entreprises et commerces, que l'IGN ne nomme pas (une boulangerie, un
+// cabinet) : l'API Recherche d'entreprises de l'État, sur le répertoire
+// SIRENE de l'INSEE, elle aussi sans clé et ouverte à toute origine, 7
+// requêtes par seconde et par adresse IP.
+const URL_ENTREPRISES = 'https://recherche-entreprises.api.gouv.fr/search';
 // Rien sous trois caractères (« go » rend des milliers de lieux), et une
 // requête par pause de la frappe, la précédente annulée.
 const RECHERCHE_MIN_CARACTERES = 3;
 const RECHERCHE_PAUSE_MS = 250;
 // Demandés en plus de ceux montrés : l'outre-mer et les doublons sont retirés
 // après coup — « gordes » rend la commune trois fois (lieu nommé, lieu-dit,
-// commune de la BAN) et « fort de france » met la Martinique en tête.
+// commune de la BAN) et « fort de france » met la Martinique en tête. Les
+// entreprises qui ne portent pas les mots tapés dans leur nom sont écartées.
 const RECHERCHE_DEMANDES = 15;
-const SUGGESTIONS_MAX = 6;
+const ENTREPRISES_DEMANDEES = 10;
+const ENTREPRISES_MONTREES = 3;
+const SUGGESTIONS_MAX = 8;
+// Une entreprise qui porte tout le nom d'un lieu nommé déjà proposé, à moins
+// de DOUBLON_LIEU_M, est ce lieu : les sociétés du musée d'Orsay sont à 97 à
+// 122 m du lieu de l'IGN, les associations d'Airbus Helicopters à 186 et
+// 662 m de l'usine (son comité d'entreprise, à 2,7 km, reste). Deux
+// entreprises à moins de DOUBLON_ADRESSE_M sont à la même adresse : 0 à 26 m
+// entre celles d'Orsay, 0 m entre celles d'Airbus.
+const DOUBLON_LIEU_M = 1000;
+const DOUBLON_ADRESSE_M = 30;
+// Mots qui ne disent rien du lieu : « mairie de bouc bel air » et « mairie
+// bouc-bel-air » cherchent la même chose.
+const MOTS_VIDES = new Set(['a', 'au', 'aux', 'd', 'de', 'des', 'du', 'en', 'et', 'l', 'la', 'le', 'les',
+                            'pres', 'sous', 'sur']);
 // Nom du lieu choisi, gardé pour l'onglet seulement, jamais dans l'URL : une
 // adresse tapée ne doit finir ni dans l'historique ni dans un lien partagé.
 const CLE_LIEU = 'vue3d-lieu';
@@ -761,9 +786,115 @@ function suggestionsDe(reponse, max) {
         const cle = nom.toLocaleLowerCase('fr') + '|' + cp;
         if (vues.has(cle)) continue;
         vues.add(cle);
-        out.push({ nom, detail, lat, lon });
+        out.push({ nom, detail, lat, lon, cle, poi: p._type === 'poi', score: p.score || 0 });
         if (out.length >= max) break;
     }
+    return out;
+}
+
+/** Les mots d'un texte, sans accents, sans casse et sans mots vides. */
+function motsDe(texte) {
+    return String(texte || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+        .split(/[^a-z0-9]+/).filter(m => m && !MOTS_VIDES.has(m));
+}
+
+/**
+ * Tous les mots tapés sont parmi `mots`, au singulier comme au pluriel
+ * (« notaire » : « Aix Mistral Notaires ») ; le dernier, peut-être en cours
+ * de frappe, au début de l'un d'eux. Rien de tapé, rien de couvert.
+ */
+function couvre(tapes, mots) {
+    const racine = w => (w.length > 3 ? w.replace(/[sx]$/, '') : w);
+    const racines = mots.map(racine);
+    return tapes.length > 0 && tapes.every((m, i) => i === tapes.length - 1
+        ? racines.some(x => x.startsWith(racine(m))) : racines.includes(racine(m)));
+}
+
+/** Un nom en capitales du répertoire SIRENE, en casse de titre. */
+function casseTitre(texte) {
+    if (/\p{Ll}/u.test(texte)) return texte;
+    return texte.toLocaleLowerCase('fr')
+        .replace(/(^|[\s\-'’(])(\p{L})/gu, (_, avant, c) => avant + c.toLocaleUpperCase('fr'))
+        // Les petits mots restent en minuscules, sauf en tête : « Aix-en-Provence ».
+        .replace(/([ -])(De|Du|Des|La|Le|Les|Et|En|Sur|Sous|Au|Aux|À)(?=[ -])/g, m => m.toLocaleLowerCase('fr'));
+}
+
+/**
+ * Entreprises tirées d'une réponse de l'API Recherche d'entreprises, dans son
+ * ordre : [{ nom, detail, lat, lon, cle, entreprise }], au plus `max`. Seules
+ * restent celles dont le nom ou l'enseigne, avec la commune, porte tous les
+ * mots tapés, et le nom au moins l'un : l'API rend aussi des homonymes
+ * lointains (« gordes » : une société « Gord » à Moulins). Un entrepreneur
+ * individuel porte le nom d'une personne : il n'est trouvé que par son
+ * enseigne, jamais par ce nom. L'établissement retenu est celui qui répond à
+ * la recherche — une boulangerie de Bouc-Bel-Air dont le siège est à Aix —,
+ * sinon le siège.
+ */
+function suggestionsEntreprises(reponse, tapes, max) {
+    const out = [];
+    for (const r of (reponse && reponse.results) || []) {
+        // Cessée (C) pour l'entreprise, fermé (F) pour l'établissement : la
+        // requête ne demande que les entreprises actives, mais l'une d'elles
+        // peut avoir fermé l'établissement trouvé.
+        if (r.etat_administratif === 'C') continue;
+        const e = (r.matching_etablissements || []).find(m => m.etat_administratif !== 'F' && m.latitude && m.longitude)
+            || r.siege || {};
+        if (e.etat_administratif === 'F') continue;
+        const lat = Number(e.latitude), lon = Number(e.longitude), cp = e.code_postal || '';
+        if (!e.latitude || !e.longitude || !Number.isFinite(lat) || !Number.isFinite(lon) || /^9[78]/.test(cp)) continue;
+        const enseigne = (e.liste_enseignes || [])[0] || '';
+        const individuel = r.nature_juridique === '1000';
+        const motsNom = motsDe(individuel ? enseigne : `${r.nom_complet || ''} ${enseigne}`);
+        if (!motsNom.length) continue;
+        const commune = e.libelle_commune || '';
+        if (!couvre(tapes, [...motsNom, ...motsDe(commune)])) continue;
+        if (!tapes.some(m => motsNom.some(x => x.startsWith(m)))) continue;
+        const nom = casseTitre(enseigne || r.nom_complet);
+        // Mots du nom que la recherche ne demandait pas : « Airbus
+        // Helicopters » (aucun) passe devant le « Syndicat FO Airbus
+        // Helicopters Marignane » (deux), que l'API classait premier.
+        const enTrop = motsNom.filter(x => !tapes.some(m => x.startsWith(m))).length;
+        out.push({ nom, detail: ['entreprise', [cp, casseTitre(commune)].filter(Boolean).join(' ')].join(' · '),
+                   lat, lon, cle: nom.toLocaleLowerCase('fr') + '|' + cp, entreprise: true, mots: motsNom, enTrop });
+    }
+    return out.sort((a, b) => a.enTrop - b.enTrop).slice(0, max);
+}
+
+/**
+ * Les suggestions des trois sources en une liste d'au plus `max` : d'abord
+ * les lieux nommés et les adresses qui portent tous les mots tapés, puis les
+ * entreprises (ENTREPRISES_MONTREES au plus, toutes les portent), enfin les
+ * autres lieux et adresses. Lieux et adresses gardent l'ordre du score du
+ * géocodage, commun aux deux index : sans mot couvert, « 12 rue de la
+ * republique aix en provence » mettait sinon un parking de Saint-Rémy avant
+ * les adresses. Un même nom au même code postal n'y est qu'une fois ; une
+ * entreprise n'y est pas quand un lieu proposé ou une autre entreprise est
+ * déjà là (DOUBLON_LIEU_M, DOUBLON_ADRESSE_M).
+ */
+function fusionnerLieux(texte, { lieux, entreprises, adresses }, max) {
+    const tapes = motsDe(texte);
+    const vues = new Set(), out = [];
+    let nbEntreprises = 0;
+    const distance = (a, b) => Math.hypot((a.lon - b.lon) * 111320 * Math.cos(a.lat * Math.PI / 180),
+                                          (a.lat - b.lat) * 111320);
+    const doublon = (e, o) => o.poi
+        ? distance(o, e) < DOUBLON_LIEU_M && motsDe(o.nom).every(m => e.mots.includes(m))
+        : o.entreprise && distance(o, e) < DOUBLON_ADRESSE_M;
+    const ajouter = l => {
+        if (out.length >= max || vues.has(l.cle)) return;
+        if (l.entreprise) {
+            if (nbEntreprises >= ENTREPRISES_MONTREES || out.some(o => doublon(l, o))) return;
+            nbEntreprises++;
+        }
+        vues.add(l.cle);
+        out.push(l);
+    };
+    const couvert = l => couvre(tapes, motsDe(`${l.nom} ${l.detail}`));
+    const parScore = (a, b) => b.score - a.score;
+    const lieuxEtAdresses = [...lieux, ...adresses];
+    lieuxEtAdresses.filter(couvert).sort(parScore).forEach(ajouter);
+    entreprises.forEach(ajouter);
+    lieuxEtAdresses.filter(l => !couvert(l)).sort(parScore).forEach(ajouter);
     return out;
 }
 
@@ -831,16 +962,32 @@ async function chercherLieux(texte) {
     if (coord) return [{ ...coord, nom: `${coord.lat}, ${coord.lon}`, detail: 'coordonnées', coordonnees: true }];
     if (demandeLieux) demandeLieux.abort();
     const demande = demandeLieux = new AbortController();
-    const url = `${URL_GEOCODAGE}/search?` + new URLSearchParams({
-        q: texte, autocomplete: 1, index: 'address,poi', limit: RECHERCHE_DEMANDES });
-    try {
+    const lire = async url => {
         const r = await fetch(url, { signal: demande.signal });
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        return suggestionsDe(await r.json(), SUGGESTIONS_MAX);
-    } catch (e) {
-        if (demande.signal.aborted) return null;
-        throw e;
-    }
+        return r.json();
+    };
+    const geocodage = index => lire(`${URL_GEOCODAGE}/search?` + new URLSearchParams({
+        q: texte, autocomplete: 1, index, limit: RECHERCHE_DEMANDES }));
+    const [lieuxNommes, entreprises, adresses] = await Promise.allSettled([
+        geocodage('poi'),
+        // Les entreprises en activité seulement : sans ce filtre, les trois
+        // boulangeries de « boulangerie bouc bel air » étaient fermées.
+        lire(`${URL_ENTREPRISES}?` + new URLSearchParams({
+            q: texte, per_page: ENTREPRISES_DEMANDEES, etat_administratif: 'A', minimal: true,
+            include: 'siege,matching_etablissements' })),
+        geocodage('address'),
+    ]);
+    if (demande.signal.aborted) return null;
+    // L'IGN fait la recherche ; les entreprises ne sont qu'un plus, et leur
+    // panne ou leur quota (429) ne la privent que d'elles.
+    if (lieuxNommes.status === 'rejected' && adresses.status === 'rejected') throw adresses.reason;
+    const valeur = (p, lire) => (p.status === 'fulfilled' ? lire(p.value) : []);
+    return fusionnerLieux(texte, {
+        lieux: valeur(lieuxNommes, r => suggestionsDe(r, RECHERCHE_DEMANDES)),
+        entreprises: valeur(entreprises, r => suggestionsEntreprises(r, motsDe(texte), ENTREPRISES_DEMANDEES)),
+        adresses: valeur(adresses, r => suggestionsDe(r, RECHERCHE_DEMANDES)),
+    }, SUGGESTIONS_MAX);
 }
 
 async function suggererLieux() {

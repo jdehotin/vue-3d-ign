@@ -31,8 +31,9 @@ Sur un Mac, sans Docker :
 
 Puis ouvrir <http://localhost:8080/> : sans paramètre, la page s'ouvre sur le
 village de Gordes. Un autre lieu se cherche dans le panneau — adresse, lieu
-nommé (« château de Chambord ») ou coordonnées collées, avec suggestions dès
-la frappe — ou se donne dans l'URL (`?lat=…&lon=…`). Les flèches N, E, S et O,
+nommé (« château de Chambord », « mairie bouc bel air »), entreprise ou
+commerce (« pharmacie bouc bel air ») ou coordonnées collées, avec
+suggestions dès la frappe — ou se donne dans l'URL (`?lat=…&lon=…`). Les flèches N, E, S et O,
 au bord de la vue, décalent la scène d'un quart de zone dans leur direction.
 La zone chargée mesure par défaut 1 000 m du nord au
 sud ; le sélecteur **Zone** du panneau, ou `&zone=…` dans l'URL, la règle de
@@ -492,7 +493,7 @@ Toutes servies sans clé par la Géoplateforme de l'IGN, sous
 | RGE ALTI | WMS, grille BIL ; WMTS, tuiles natives BIL | Le relief du terrain, l'anneau alentour et l'horizon |
 | Orthophoto | WMS, WMTS | La photo aérienne, et l'indice de verdure qui reconnaît le feuillage |
 | Plan IGN v2 | WMTS `GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2` | Le fond plan, au choix de la photo |
-| Géocodage | `geocodage/search`, `geocodage/reverse` | La recherche d'un lieu (Base Adresse Nationale et lieux nommés), et la commune du point affiché ; appelé par le navigateur |
+| Géocodage | `geocodage/search`, `geocodage/reverse` | La recherche d'un lieu (Base Adresse Nationale et lieux nommés, lus séparément), et la commune du point affiché ; appelé par le navigateur |
 | BD TOPO, hydrographie | WFS `surface_hydrographique`, `troncon_hydrographique` | Étendues et cours d'eau |
 | OpenStreetMap, `building:part` | API Overpass, © contributeurs OSM, [ODbL](https://www.openstreetmap.org/copyright) | Les monuments en vraie 3D, là où le LiDAR manque |
 | Parcellaire Express | WFS `CADASTRALPARCELS.PARCELLAIRE_EXPRESS:parcelle` | Les parcelles des ventes DVF, au clic |
@@ -502,6 +503,14 @@ d'altitude, l'horizon prend celle d'[AWS Terrain Tiles](https://github.com/tilez
 (EU-DEM © Copernicus), le relief mondial que la vue emploie déjà en repli.
 
 three.js est chargé depuis jsDelivr. Le lien Street View ouvre Google Maps.
+
+À la frappe dans la recherche, hors IGN aussi : les entreprises et commerces
+de l'[API Recherche d'entreprises](https://recherche-entreprises.api.gouv.fr)
+de l'État (répertoire SIRENE de l'INSEE, Licence Ouverte 2.0), sans clé,
+appelée par le navigateur. N'y sont proposées que les entreprises en
+activité dont le nom ou l'enseigne porte les mots tapés ; un entrepreneur
+individuel n'est trouvé que par son enseigne, jamais par le nom de la
+personne.
 
 Au clic seulement, hors IGN aussi : les DPE de l'API de l'ADEME
 (`data.ademe.fr`, jeux `dpe03existant` et `dpe02neuf`) et les fichiers DVF

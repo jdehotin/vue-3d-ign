@@ -10,10 +10,21 @@
 //   ordres et avec la virgule décimale, refusées hors de France métropolitaine
 //   et en cours de frappe (« 43,5 », « 45 5 ») ;
 // - suggestions (suggestionsDe) : ordre du service gardé, outre-mer écarté,
-//   commune présente une seule fois, nom et détail lisibles.
+//   commune présente une seule fois, nom et détail lisibles ;
+// - lieux nommés, entreprises et adresses fusionnés (motsDe, couvre,
+//   casseTitre, suggestionsEntreprises, fusionnerLieux), sur les réponses
+//   des trois sources enregistrées dans outils/recherche-exemples.json :
+//   « mairie bouc bel air » trouve la mairie, que le géocodage mélangé
+//   laissait hors de la liste ; une entreprise du même lieu qu'un lieu nommé
+//   n'est pas proposée deux fois ; un entrepreneur individuel n'est trouvé
+//   que par son enseigne (exemple fictif).
 //
 // Pour rafraîchir les exemples, rejouer les quatre requêtes du fichier sur
 // https://data.geopf.fr/geocodage/search?autocomplete=1&index=address,poi&limit=15&q=…
+// Ceux de recherche-exemples.json : index=poi, puis index=address, et
+// https://recherche-entreprises.api.gouv.fr/search?per_page=10&etat_administratif=A&minimal=true&include=siege,matching_etablissements&q=…
+// en n'y gardant que des collectivités, établissements publics et grandes
+// sociétés : le siège d'une petite association peut être un domicile.
 //
 // Sort en erreur si un contrôle est manqué, après les avoir tous faits.
 import fs from 'fs';
@@ -92,5 +103,91 @@ ok('« place du chateau gordes » : la place, avec code postal et commune',
 
 ok('réponse vide ou mal formée : aucune suggestion',
    [null, {}, { features: null }, { features: [{}] }].every(r => suggestionsDe(r, 6).length === 0));
+
+// --- Lieux nommés, entreprises et adresses ------------------------------------------
+function extraireConst(nom) {
+  const i = src.indexOf(`const ${nom} =`);
+  if (i < 0) throw new Error('introuvable dans la page : ' + nom);
+  let n = 0;
+  for (let j = i; j < src.length; j++) {
+    if ('([{'.includes(src[j])) n++;
+    else if (')]}'.includes(src[j])) n--;
+    else if (src[j] === ';' && n === 0) return src.slice(i, j + 1);
+  }
+}
+const CONSTS = ['MOTS_VIDES', 'ENTREPRISES_MONTREES', 'DOUBLON_LIEU_M', 'DOUBLON_ADRESSE_M'];
+const NOMS = ['motsDe', 'couvre', 'casseTitre', 'suggestionsEntreprises', 'fusionnerLieux'];
+const R = new Function(CONSTS.map(extraireConst).join('\n') + '\n' + NOMS.map(extraire).join('\n')
+                       + `\nreturn { ${NOMS.join(', ')} };`)();
+const EX = JSON.parse(lire('./recherche-exemples.json'));
+const lister = texte => R.fusionnerLieux(texte, {
+  lieux: suggestionsDe(EX[texte].poi, 15),
+  entreprises: R.suggestionsEntreprises(EX[texte].entreprises, R.motsDe(texte), 10),
+  adresses: suggestionsDe(EX[texte].adresses, 15),
+}, 8);
+
+ok('mots : accents, casse, traits d\'union et mots vides',
+   memes(R.motsDe('Mairie de Bouc-Bel-Air'), ['mairie', 'bouc', 'bel', 'air'])
+   && memes(R.motsDe("Musée d'Orsay"), ['musee', 'orsay']));
+ok('couverture : pluriel, dernier mot en cours de frappe, rien de tapé',
+   R.couvre(['notaire', 'aix'], R.motsDe('Aix Mistral Notaires'))
+   && R.couvre(['mairie', 'bouc', 'be'], R.motsDe('Mairie de Bouc-Bel-Air'))
+   && !R.couvre(['mairie', 'bouc', 'bel', 'air'], R.motsDe('Bel Air 13320 Bouc-Bel-Air'))
+   && !R.couvre([], ['gordes']));
+ok('casse de titre des noms SIRENE',
+   R.casseTitre('BOULANGERIE DE LA GRATIANE') === 'Boulangerie de la Gratiane'
+   && R.casseTitre('AIX-EN-PROVENCE') === 'Aix-en-Provence'
+   && R.casseTitre("L'OLIVIER") === "L'Olivier" && R.casseTitre('Déjà écrit') === 'Déjà écrit',
+   [R.casseTitre('BOULANGERIE DE LA GRATIANE'), R.casseTitre('AIX-EN-PROVENCE')].join(', '));
+
+const mairie = lister('mairie bouc bel air');
+ok('« mairie bouc bel air » : la mairie en tête (hors des quinze du géocodage mélangé)',
+   mairie[0].nom === 'Mairie de Bouc-Bel-Air', mairie.map(s => s.nom).slice(0, 3).join(', '));
+ok('« mairie bouc bel air » : la commune (enseigne « Mairie ») n\'est pas proposée en double',
+   !mairie.some(s => s.entreprise), mairie.filter(s => s.entreprise).map(s => s.nom).join(', '));
+
+const orsay = lister("musée d'orsay");
+ok('« musée d\'orsay » : le musée en tête, ses sociétés et son établissement public pas en double',
+   orsay[0].nom === "Musée d'Orsay" && !orsay.some(s => s.entreprise && /orsay/i.test(s.nom)),
+   orsay.filter(s => s.entreprise).map(s => s.nom).join(', ') || 'aucune entreprise');
+
+const airbus = lister('airbus helicopters marignane');
+const entreprisesAirbus = airbus.filter(s => s.entreprise);
+ok('« airbus helicopters marignane » : l\'usine en tête, les associations du site écartées',
+   airbus[0].nom === 'Airbus Helicopters' && airbus[0].poi
+   && !entreprisesAirbus.some(s => /syndicat|cooperative|ailes/i.test(s.nom))
+   && entreprisesAirbus.length <= 3,
+   entreprisesAirbus.map(s => s.nom).join(', '));
+
+const gordesMairie = lister('mairie de gordes');
+ok('« mairie de gordes » : la mairie en tête, une seule fois',
+   gordesMairie[0].nom === 'Mairie de Gordes' && !gordesMairie.some(s => s.entreprise && s.nom === 'Mairie'),
+   gordesMairie.map(s => s.nom).slice(0, 3).join(', '));
+
+// Exemple fictif : un entrepreneur individuel, une société cessée, l'outre-mer.
+const etab = (commune, cp, lat, lon, enseignes = null) =>
+  ({ latitude: String(lat), longitude: String(lon), code_postal: cp, libelle_commune: commune,
+     etat_administratif: 'A', liste_enseignes: enseignes });
+const FICTIF = { results: [
+  { nom_complet: 'JEAN EXEMPLE', nature_juridique: '1000', etat_administratif: 'A',
+    siege: etab('AIX-EN-PROVENCE', '13100', 43.5297, 5.4474) },
+  { nom_complet: 'JEAN EXEMPLE', nature_juridique: '1000', etat_administratif: 'A',
+    siege: etab('AIX-EN-PROVENCE', '13100', 43.5290, 5.4480, ['BOULANGERIE DU COURS']) },
+  { nom_complet: 'BOULANGERIE FERMEE', nature_juridique: '5710', etat_administratif: 'C',
+    siege: etab('AIX-EN-PROVENCE', '13100', 43.5280, 5.4490) },
+  { nom_complet: 'BOULANGERIE DES ILES', nature_juridique: '5710', etat_administratif: 'A',
+    siege: etab('FORT-DE-FRANCE', '97200', 14.6041, -61.0661) },
+  { nom_complet: 'SOCIETE SANS RAPPORT', nature_juridique: '5710', etat_administratif: 'A',
+    siege: etab('AIX-EN-PROVENCE', '13100', 43.5270, 5.4500) },
+] };
+const boulangeries = R.suggestionsEntreprises(FICTIF, R.motsDe('boulangerie aix'), 10);
+ok('entreprises : l\'individuel par son enseigne seulement, ni cessée, ni outre-mer, ni la commune seule',
+   memes(boulangeries.map(s => s.nom), ['Boulangerie du Cours'])
+   && boulangeries[0].detail === 'entreprise · 13100 Aix-en-Provence',
+   JSON.stringify(boulangeries.map(s => [s.nom, s.detail])));
+ok('entreprises : un individuel jamais trouvé par le nom de la personne',
+   R.suggestionsEntreprises(FICTIF, R.motsDe('jean exemple aix'), 10).length === 0);
+ok('entreprises : réponse vide ou mal formée, aucune suggestion',
+   [null, {}, { results: null }, { results: [{}] }].every(r => R.suggestionsEntreprises(r, ['x'], 10).length === 0));
 
 process.exit(tout ? 0 : 1);

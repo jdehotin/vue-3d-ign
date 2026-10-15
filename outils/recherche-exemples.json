@@ -1,0 +1,1741 @@
+{
+ "mairie bouc bel air": {
+  "poi": {
+   "features": [
+    {
+     "geometry": {
+      "type": "Point",
+      "coordinates": [
+       5.413683,
+       43.451175
+      ]
+     },
+     "properties": {
+      "_type": "poi",
+      "territory": "METROPOLE",
+      "postcode": [
+       "13320"
+      ],
+      "toponym": "Mairie de Bouc-Bel-Air",
+      "name": [
+       "Mairie de Bouc-Bel-Air"
+      ],
+      "city": [
+       "Bouc-Bel-Air"
+      ],
+      "category": [
+       "mairie",
+       "zone d'activité ou d'intérêt"
+      ],
+      "score": 0.38636363636363635
+     }
+    }
+   ]
+  },
+  "entreprises": {
+   "results": [
+    {
+     "nom_complet": "COMMUNE DE BOUC BEL AIR",
+     "nature_juridique": "7210",
+     "etat_administratif": "A",
+     "siege": {
+      "latitude": "43.4513033375449",
+      "longitude": "5.41377797606046",
+      "code_postal": "13320",
+      "libelle_commune": "BOUC-BEL-AIR",
+      "etat_administratif": "A",
+      "liste_enseignes": [
+       "MAIRIE"
+      ]
+     },
+     "matching_etablissements": [
+      {
+       "latitude": "43.4513033375449",
+       "longitude": "5.41377797606046",
+       "code_postal": "13320",
+       "libelle_commune": "BOUC-BEL-AIR",
+       "etat_administratif": "A",
+       "liste_enseignes": [
+        "MAIRIE"
+       ]
+      },
+      {
+       "latitude": "43.45051693",
+       "longitude": "5.4114779066",
+       "code_postal": "13320",
+       "libelle_commune": "BOUC-BEL-AIR",
+       "etat_administratif": "A",
+       "liste_enseignes": [
+        "VENTE DE CAVEAUX"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  "adresses": {
+   "features": [
+    {
+     "geometry": {
+      "type": "Point",
+      "coordinates": [
+       5.405608,
+       43.455842
+      ]
+     },
+     "properties": {
+      "_type": "address",
+      "postcode": "13320",
+      "name": "Bel Air",
+      "city": "Bouc-Bel-Air",
+      "type": "locality",
+      "context": "13, Bouches-du-Rhône, Provence-Alpes-Côte d'Azur",
+      "score": 0.5400037154150198,
+      "label": "Bel Air 13320 Bouc-Bel-Air"
+     }
+    },
+    {
+     "geometry": {
+      "type": "Point",
+      "coordinates": [
+       5.411536,
+       43.443491
+      ]
+     },
+     "properties": {
+      "_type": "address",
+      "postcode": "13320",
+      "name": "Bouc-Bel-Air",
+      "city": "Bouc-Bel-Air",
+      "type": "municipality",
+      "context": "13, Bouches-du-Rhône, Provence-Alpes-Côte d'Azur",
+      "score": 0.5388290909090909,
+      "label": "Bouc-Bel-Air"
+     }
+    },
+    {
+     "geometry": {
+      "type": "Point",
+      "coordinates": [
+       5.422224,
+       43.477064
+      ]
+     },
+     "properties": {
+      "_type": "address",
+      "postcode": "13080",
+      "name": "Route de Bouc Bel Air",
+      "city": "Aix-en-Provence",
+      "type": "street",
+      "context": "13, Bouches-du-Rhône, Provence-Alpes-Côte d'Azur",
+      "score": 0.48552545454545454,
+      "label": "Route de Bouc Bel Air 13080 Aix-en-Provence"
+     }
+    },
+    {
+     "geometry": {
+      "type": "Point",
+      "coordinates": [
+       5.412426,
+       43.455037
+      ]
+     },
+     "properties": {
+      "_type": "address",
+      "postcode": "13320",
+      "name": "Avenue d’Aix",
+      "city": "Bouc-Bel-Air",
+      "type": "street",
+      "context": "13, Bouches-du-Rhône, Provence-Alpes-Côte d'Azur",
+      "score": 0.46479999999999994,
+      "label": "Avenue d’Aix 13320 Bouc-Bel-Air"
+     }
+    },
+    {
+     "geometry": {
+      "type": "Point",
+      "coordinates": [
+       5.410975,
+       43.452061
+      ]
+     },
+     "properties": {
+      "_type": "address",
+      "postcode": "13320",
+      "name": "Rue du Barri",
+      "city": "Bouc-Bel-Air",
+      "type": "street",
+      "context": "13, Bouches-du-Rhône, Provence-Alpes-Côte d'Azur",
+      "score": 0.461970909090909,
+      "label": "Rue du Barri 13320 Bouc-Bel-Air"
+     }
+    },
+    {
+     "geometry": {
+      "type": "Point",
+      "coordinates": [
+       5.410931,
+       43.451679
+      ]
+     },
+     "properties": {
+      "_type": "address",
+      "postcode": "13320",
+      "name": "Rue Basse",
+      "city": "Bouc-Bel-Air",
+      "type": "street",
+      "context": "13, Bouches-du-Rhône, Provence-Alpes-Côte d'Azur",
+      "score": 0.4617590909090909,
+      "label": "Rue Basse 13320 Bouc-Bel-Air"
+     }
+    },
+    {
+     "geometry": {
+      "type": "Point",
+      "coordinates": [
+       5.398218,
+       43.457671
+      ]
+     },
+     "properties": {
+      "_type": "address",
+      "postcode": "13320",
+      "name": "Square Manet",
+      "city": "Bouc-Bel-Air",
+      "type": "street",
+      "context": "13, Bouches-du-Rhône, Provence-Alpes-Côte d'Azur",
+      "score": 0.4613045454545454,
+      "label": "Square Manet 13320 Bouc-Bel-Air"
+     }
+    },
+    {
+     "geometry": {
+      "type": "Point",
+      "coordinates": [
+       5.422477,
+       43.447153
+      ]
+     },
+     "properties": {
+      "_type": "address",
+      "postcode": "13320",
+      "name": "Avenue Thiers",
+      "city": "Bouc-Bel-Air",
+      "type": "street",
+      "context": "13, Bouches-du-Rhône, Provence-Alpes-Côte d'Azur",
+      "score": 0.45505341692789963,
+      "label": "Avenue Thiers 13320 Bouc-Bel-Air"
+     }
+    },
+    {
+     "geometry": {
+      "type": "Point",
+      "coordinates": [
+       5.415138,
+       43.461016
+      ]
+     },
+     "properties": {
+      "_type": "address",
+      "postcode": "13320",
+      "name": "Avenue Marie Mauron",
+      "city": "Bouc-Bel-Air",
+      "type": "street",
+      "context": "13, Bouches-du-Rhône, Provence-Alpes-Côte d'Azur",
+      "score": 0.45217603305785126,
+      "label": "Avenue Marie Mauron 13320 Bouc-Bel-Air"
+     }
+    },
+    {
+     "geometry": {
+      "type": "Point",
+      "coordinates": [
+       5.411295,
+       43.451583
+      ]
+     },
+     "properties": {
+      "_type": "address",
+      "postcode": "13320",
+      "name": "Rue de la Pie",
+      "city": "Bouc-Bel-Air",
+      "type": "street",
+      "context": "13, Bouches-du-Rhône, Provence-Alpes-Côte d'Azur",
+      "score": 0.44786432601880877,
+      "label": "Rue de la Pie 13320 Bouc-Bel-Air"
+     }
+    },
+    {
+     "geometry": {
+      "type": "Point",
+      "coordinates": [
+       5.412291,
+       43.461291
+      ]
+     },
+     "properties": {
+      "_type": "address",
+      "postcode": "13320",
+      "name": "Avenue Marie Mauron",
+      "city": "Bouc-Bel-Air",
+      "type": "locality",
+      "context": "13, Bouches-du-Rhône, Provence-Alpes-Côte d'Azur",
+      "score": 0.43867421487603303,
+      "label": "Avenue Marie Mauron 13320 Bouc-Bel-Air"
+     }
+    },
+    {
+     "geometry": {
+      "type": "Point",
+      "coordinates": [
+       5.4189,
+       43.44084
+      ]
+     },
+     "properties": {
+      "_type": "address",
+      "postcode": "13320",
+      "name": "Rue Maurice Ravel",
+      "city": "Bouc-Bel-Air",
+      "type": "street",
+      "context": "13, Bouches-du-Rhône, Provence-Alpes-Côte d'Azur",
+      "score": 0.4357363636363636,
+      "label": "Rue Maurice Ravel 13320 Bouc-Bel-Air"
+     }
+    },
+    {
+     "geometry": {
+      "type": "Point",
+      "coordinates": [
+       5.426745,
+       43.450481
+      ]
+     },
+     "properties": {
+      "_type": "address",
+      "postcode": "13320",
+      "name": "Impasse Soleri",
+      "city": "Bouc-Bel-Air",
+      "type": "street",
+      "context": "13, Bouches-du-Rhône, Provence-Alpes-Côte d'Azur",
+      "score": 0.43545727272727275,
+      "label": "Impasse Soleri 13320 Bouc-Bel-Air"
+     }
+    },
+    {
+     "geometry": {
+      "type": "Point",
+      "coordinates": [
+       5.402012,
+       43.450694
+      ]
+     },
+     "properties": {
+      "_type": "address",
+      "postcode": "13320",
+      "name": "Lotissement La Clairière",
+      "city": "Bouc-Bel-Air",
+      "type": "street",
+      "context": "13, Bouches-du-Rhône, Provence-Alpes-Côte d'Azur",
+      "score": 0.4290031941031941,
+      "label": "Lotissement La Clairière 13320 Bouc-Bel-Air"
+     }
+    },
+    {
+     "geometry": {
+      "type": "Point",
+      "coordinates": [
+       5.426204,
+       43.439775
+      ]
+     },
+     "properties": {
+      "_type": "address",
+      "postcode": "13320",
+      "name": "Rue Pierre Loti",
+      "city": "Bouc-Bel-Air",
+      "type": "street",
+      "context": "13, Bouches-du-Rhône, Provence-Alpes-Côte d'Azur",
+      "score": 0.4229623753665689,
+      "label": "Rue Pierre Loti 13320 Bouc-Bel-Air"
+     }
+    }
+   ]
+  }
+ },
+ "musée d'orsay": {
+  "poi": {
+   "features": [
+    {
+     "geometry": {
+      "type": "Point",
+      "coordinates": [
+       2.32675,
+       48.860128
+      ]
+     },
+     "properties": {
+      "_type": "poi",
+      "territory": "METROPOLE",
+      "postcode": [
+       "75007"
+      ],
+      "toponym": "Musée d'Orsay",
+      "name": [
+       "Musée d'Orsay"
+      ],
+      "city": [
+       "Paris",
+       "Paris 7e Arrondissement"
+      ],
+      "category": [
+       "musée",
+       "zone d'activité ou d'intérêt"
+      ],
+      "score": 0.9090909090909091
+     }
+    },
+    {
+     "geometry": {
+      "type": "Point",
+      "coordinates": [
+       2.325373,
+       48.860641
+      ]
+     },
+     "properties": {
+      "_type": "poi",
+      "territory": "METROPOLE",
+      "postcode": [
+       "75007"
+      ],
+      "toponym": "Musée d'Orsay",
+      "name": [
+       "Musée d'Orsay"
+      ],
+      "city": [
+       "Paris",
+       "Paris 7e Arrondissement"
+      ],
+      "category": [
+       "gare voyageurs uniquement",
+       "transport",
+       "équipement de transport"
+      ],
+      "score": 0.8545454545454545
+     }
+    }
+   ]
+  },
+  "entreprises": {
+   "results": [
+    {
+     "nom_complet": "SOCIETE DE RESTAURATION DU MUSEE D'ORSAY (SRMO)",
+     "nature_juridique": "5710",
+     "etat_administratif": "A",
+     "siege": {
+      "latitude": "48.8800043305237",
+      "longitude": "2.31526581849718",
+      "code_postal": "75008",
+      "libelle_commune": "PARIS",
+      "etat_administratif": "A",
+      "liste_enseignes": null
+     },
+     "matching_etablissements": [
+      {
+       "latitude": "48.860379038",
+       "longitude": "2.325130047",
+       "code_postal": "75007",
+       "libelle_commune": "PARIS",
+       "etat_administratif": "A",
+       "liste_enseignes": null
+      },
+      {
+       "latitude": "48.861488698",
+       "longitude": "2.3319658798",
+       "code_postal": "75001",
+       "libelle_commune": "PARIS 01",
+       "etat_administratif": "A",
+       "liste_enseignes": null
+      },
+      {
+       "latitude": "48.8800043305237",
+       "longitude": "2.31526581849718",
+       "code_postal": "75008",
+       "libelle_commune": "PARIS",
+       "etat_administratif": "A",
+       "liste_enseignes": null
+      },
+      {
+       "latitude": "48.838010998",
+       "longitude": "2.3818090828",
+       "code_postal": "75012",
+       "libelle_commune": "PARIS",
+       "etat_administratif": "F",
+       "liste_enseignes": null
+      },
+      {
+       "latitude": "48.828331057",
+       "longitude": "2.2732444769",
+       "code_postal": "75015",
+       "libelle_commune": "PARIS",
+       "etat_administratif": "F",
+       "liste_enseignes": null
+      },
+      {
+       "latitude": "48.8951813287265",
+       "longitude": "2.23798157771034",
+       "code_postal": "92400",
+       "libelle_commune": "COURBEVOIE",
+       "etat_administratif": "F",
+       "liste_enseignes": null
+      },
+      {
+       "latitude": "48.826755168",
+       "longitude": "2.2606277436",
+       "code_postal": "92130",
+       "libelle_commune": "ISSY-LES-MOULINEAUX",
+       "etat_administratif": "F",
+       "liste_enseignes": null
+      }
+     ]
+    },
+    {
+     "nom_complet": "MUSEE D ORSAY CLUB",
+     "nature_juridique": "9220",
+     "etat_administratif": "A",
+     "siege": {
+      "latitude": "48.860221768",
+      "longitude": "2.325374022",
+      "code_postal": "75007",
+      "libelle_commune": "PARIS",
+      "etat_administratif": "A",
+      "liste_enseignes": null
+     },
+     "matching_etablissements": [
+      {
+       "latitude": "48.860221768",
+       "longitude": "2.325374022",
+       "code_postal": "75007",
+       "libelle_commune": "PARIS",
+       "etat_administratif": "A",
+       "liste_enseignes": null
+      }
+     ]
+    },
+    {
+     "nom_complet": "ETABLISSEMENT PUBLIC DU MUSEE D'ORSAY ET DU MUSEE DE L'ORANGERIE - VALERY GISCARD D'ESTAING",
+     "nature_juridique": "7389",
+     "etat_administratif": "A",
+     "siege": {
+      "latitude": "48.860259194",
+      "longitude": "2.3254401896",
+      "code_postal": "75007",
+      "libelle_commune": "PARIS 7",
+      "etat_administratif": "A",
+      "liste_enseignes": null
+     },
+     "matching_etablissements": [
+      {
+       "latitude": "48.860259194",
+       "longitude": "2.3254401896",
+       "code_postal": "75007",
+       "libelle_commune": "PARIS 7",
+       "etat_administratif": "A",
+       "liste_enseignes": null
+      },
+      {
+       "latitude": "48.861488698",
+       "longitude": "2.3319658798",
+       "code_postal": "75001",
+       "libelle_commune": "PARIS 01",
+       "etat_administratif": "A",
+       "liste_enseignes": [
+        "MUSEE DE L'ORANGERIE DES TUILERIES"
+       ]
+      }
+     ]
+    },
+    {
+     "nom_complet": "ETABLISSEMENT PUBLIC DE LA REUNION DES MUSEES NATIONAUX ET DU GRAND PALAIS DES CHAMPS-ELYSEES (RMN)",
+     "nature_juridique": "4110",
+     "etat_administratif": "A",
+     "siege": {
+      "latitude": "48.84796096",
+      "longitude": "2.3681038204",
+      "code_postal": "75012",
+      "libelle_commune": "PARIS",
+      "etat_administratif": "A",
+      "liste_enseignes": null
+     },
+     "matching_etablissements": [
+      {
+       "latitude": "48.860221768",
+       "longitude": "2.325374022",
+       "code_postal": "75007",
+       "libelle_commune": "PARIS",
+       "etat_administratif": "A",
+       "liste_enseignes": [
+        "MUSEE D'ORSAY"
+       ]
+      }
+     ]
+    },
+    {
+     "nom_complet": "SOCIETE NATIONALE SNCF (SNCF)",
+     "nature_juridique": "5599",
+     "etat_administratif": "A",
+     "siege": {
+      "latitude": "48.918596697",
+      "longitude": "2.3515098208",
+      "code_postal": "93210",
+      "libelle_commune": "SAINT-DENIS",
+      "etat_administratif": "A",
+      "liste_enseignes": [
+       "SNCF ST DENIS 2 PL AUX ETOILES"
+      ]
+     },
+     "matching_etablissements": [
+      {
+       "latitude": "48.860197885",
+       "longitude": "2.3262909684",
+       "code_postal": "75007",
+       "libelle_commune": "PARIS",
+       "etat_administratif": "F",
+       "liste_enseignes": [
+        "SNCF GARE DU MUSEE D ORSAY PARIS 7"
+       ]
+      }
+     ]
+    },
+    {
+     "nom_complet": "SOCIETE FRANCAISE D'EXPLOITATION DE RESTAURANT (SO.FE.REST.) (SOFEREST)",
+     "nature_juridique": "5499",
+     "etat_administratif": "A",
+     "siege": {
+      "latitude": "48.8800043305237",
+      "longitude": "2.31526581849718",
+      "code_postal": "75008",
+      "libelle_commune": "PARIS",
+      "etat_administratif": "A",
+      "liste_enseignes": null
+     },
+     "matching_etablissements": [
+      {
+       "latitude": "48.828331057",
+       "longitude": "2.2732444769",
+       "code_postal": "75015",
+       "libelle_commune": "PARIS",
+       "etat_administratif": "F",
+       "liste_enseignes": [
+        "MUSEE D ORSAY"
+       ]
+      }
+     ]
+    },
+    {
+     "nom_complet": "AGENCE FRANCE - MUSEUMS",
+     "nature_juridique": "5710",
+     "etat_administratif": "A",
+     "siege": {
+      "latitude": "48.866218334",
+      "longitude": "2.3448293109",
+      "code_postal": "75002",
+      "libelle_commune": "PARIS",
+      "etat_administratif": "A",
+      "liste_enseignes": null
+     },
+     "matching_etablissements": []
+    },
+    {
+     "nom_complet": "LAGARDERE TRAVEL RETAIL FRANCE (COFEC - RELAY, RELAY STORE, RELAY SHOP, RELAY WEB, RELAY INTERNATIONAL)",
+     "nature_juridique": "5202",
+     "etat_administratif": "A",
+     "siege": {
+      "latitude": "48.8964498918022",
+      "longitude": "2.27425875880114",
+      "code_postal": "92300",
+      "libelle_commune": "LEVALLOIS-PERRET",
+      "etat_administratif": "A",
+      "liste_enseignes": null
+     },
+     "matching_etablissements": [
+      {
+       "latitude": "48.85998239",
+       "longitude": "2.3263530465",
+       "code_postal": "75007",
+       "libelle_commune": "PARIS 07",
+       "etat_administratif": "F",
+       "liste_enseignes": null
+      }
+     ]
+    },
+    {
+     "nom_complet": "INDIGO PARK",
+     "nature_juridique": "5599",
+     "etat_administratif": "A",
+     "siege": {
+      "latitude": "48.8891267745931",
+      "longitude": "2.23413817778324",
+      "code_postal": "92800",
+      "libelle_commune": "PUTEAUX",
+      "etat_administratif": "A",
+      "liste_enseignes": [
+       "INDIGO"
+      ]
+     },
+     "matching_etablissements": [
+      {
+       "latitude": "48.861812951",
+       "longitude": "2.3215175972",
+       "code_postal": "75007",
+       "libelle_commune": "PARIS",
+       "etat_administratif": "F",
+       "liste_enseignes": null
+      }
+     ]
+    },
+    {
+     "nom_complet": "MUSEE ARMENIEN FONDATION NOURHAM FR",
+     "nature_juridique": "9300",
+     "etat_administratif": "A",
+     "siege": {
+      "latitude": "48.856073644",
+      "longitude": "2.2652285204",
+      "code_postal": "75016",
+      "libelle_commune": "PARIS",
+      "etat_administratif": "A",
+      "liste_enseignes": null
+     },
+     "matching_etablissements": [
+      {
+       "latitude": "48.862194965",
+       "longitude": "2.3034776657",
+       "code_postal": "75007",
+       "libelle_commune": "PARIS",
+       "etat_administratif": "F",
+       "liste_enseignes": null
+      }
+     ]
+    }
+   ]
+  },
+  "adresses": {
+   "features": [
+    {
+     "geometry": {
+      "type": "Point",
+      "coordinates": [
+       55.292952,
+       -21.198183
+      ]
+     },
+     "properties": {
+      "_type": "address",
+      "postcode": "97424",
+      "name": "Rue du Musee",
+      "city": "Saint-Leu",
+      "type": "street",
+      "context": "974, La Réunion",
+      "score": 0.3509873262032086,
+      "label": "Rue du Musee 97424 Saint-Leu"
+     }
+    },
+    {
+     "geometry": {
+      "type": "Point",
+      "coordinates": [
+       -0.55431,
+       47.469265
+      ]
+     },
+     "properties": {
+      "_type": "address",
+      "postcode": "49100",
+      "name": "Rue du Musée",
+      "city": "Angers",
+      "type": "street",
+      "context": "49, Maine-et-Loire, Pays de la Loire",
+      "score": 0.3508191443850267,
+      "label": "Rue du Musée 49100 Angers"
+     }
+    },
+    {
+     "geometry": {
+      "type": "Point",
+      "coordinates": [
+       2.733877,
+       50.743223
+      ]
+     },
+     "properties": {
+      "_type": "address",
+      "postcode": "59270",
+      "name": "Rue du Musée",
+      "city": "Bailleul",
+      "type": "street",
+      "context": "59, Nord, Hauts-de-France",
+      "score": 0.3493864171122995,
+      "label": "Rue du Musée 59270 Bailleul"
+     }
+    },
+    {
+     "geometry": {
+      "type": "Point",
+      "coordinates": [
+       5.379588,
+       43.29606
+      ]
+     },
+     "properties": {
+      "_type": "address",
+      "postcode": "13001",
+      "name": "Rue du musee",
+      "city": "Marseille",
+      "type": "street",
+      "context": "13, Bouches-du-Rhône, Provence-Alpes-Côte d'Azur",
+      "score": 0.348541871657754,
+      "label": "Rue du musee 13001 Marseille"
+     }
+    },
+    {
+     "geometry": {
+      "type": "Point",
+      "coordinates": [
+       4.874918,
+       45.523236
+      ]
+     },
+     "properties": {
+      "_type": "address",
+      "postcode": "38200",
+      "name": "Rue du Musee",
+      "city": "Vienne",
+      "type": "street",
+      "context": "38, Isère, Auvergne-Rhône-Alpes",
+      "score": 0.34620368983957217,
+      "label": "Rue du Musee 38200 Vienne"
+     }
+    },
+    {
+     "geometry": {
+      "type": "Point",
+      "coordinates": [
+       2.899531,
+       42.697967
+      ]
+     },
+     "properties": {
+      "_type": "address",
+      "postcode": "66000",
+      "name": "Rue du Musée",
+      "city": "Perpignan",
+      "type": "street",
+      "context": "66, Pyrénées-Orientales, Occitanie",
+      "score": 0.3443127807486631,
+      "label": "Rue du Musée 66000 Perpignan"
+     }
+    },
+    {
+     "geometry": {
+      "type": "Point",
+      "coordinates": [
+       2.08054,
+       49.433315
+      ]
+     },
+     "properties": {
+      "_type": "address",
+      "postcode": "60000",
+      "name": "Rue du Musée",
+      "city": "Beauvais",
+      "type": "street",
+      "context": "60, Oise, Hauts-de-France",
+      "score": 0.34390187165775404,
+      "label": "Rue du Musée 60000 Beauvais"
+     }
+    },
+    {
+     "geometry": {
+      "type": "Point",
+      "coordinates": [
+       4.722125,
+       49.77074
+      ]
+     },
+     "properties": {
+      "_type": "address",
+      "postcode": "08000",
+      "name": "Rue du Musée",
+      "city": "Charleville-Mézières",
+      "type": "street",
+      "context": "08, Ardennes, Grand Est",
+      "score": 0.342521871657754,
+      "label": "Rue du Musée 08000 Charleville-Mézières"
+     }
+    },
+    {
+     "geometry": {
+      "type": "Point",
+      "coordinates": [
+       2.770673,
+       50.699662
+      ]
+     },
+     "properties": {
+      "_type": "address",
+      "postcode": "59181",
+      "name": "Rue du Musee",
+      "city": "Steenwerck",
+      "type": "street",
+      "context": "59, Nord, Hauts-de-France",
+      "score": 0.3412109625668449,
+      "label": "Rue du Musee 59181 Steenwerck"
+     }
+    },
+    {
+     "geometry": {
+      "type": "Point",
+      "coordinates": [
+       2.535065,
+       50.721613
+      ]
+     },
+     "properties": {
+      "_type": "address",
+      "postcode": "59190",
+      "name": "Rue du Musée",
+      "city": "Hazebrouck",
+      "type": "street",
+      "context": "59, Nord, Hauts-de-France",
+      "score": 0.34010732620320855,
+      "label": "Rue du Musée 59190 Hazebrouck"
+     }
+    },
+    {
+     "geometry": {
+      "type": "Point",
+      "coordinates": [
+       -0.927183,
+       47.758127
+      ]
+     },
+     "properties": {
+      "_type": "address",
+      "postcode": "49500",
+      "name": "Rue du Musée",
+      "city": "Segré-en-Anjou Bleu",
+      "type": "street",
+      "context": "49, Maine-et-Loire, Pays de la Loire",
+      "score": 0.3382164171122995,
+      "label": "Rue du Musée 49500 Segré-en-Anjou Bleu"
+     }
+    },
+    {
+     "geometry": {
+      "type": "Point",
+      "coordinates": [
+       1.367178,
+       48.734005
+      ]
+     },
+     "properties": {
+      "_type": "address",
+      "postcode": "28100",
+      "name": "Rue du Musée",
+      "city": "Dreux",
+      "type": "street",
+      "context": "28, Eure-et-Loir, Centre-Val de Loire",
+      "score": 0.3381791443850268,
+      "label": "Rue du Musée 28100 Dreux"
+     }
+    },
+    {
+     "geometry": {
+      "type": "Point",
+      "coordinates": [
+       3.775086,
+       43.552401
+      ]
+     },
+     "properties": {
+      "_type": "address",
+      "postcode": "34690",
+      "name": "Rue du Musée",
+      "city": "Fabrègues",
+      "type": "street",
+      "context": "34, Hérault, Occitanie",
+      "score": 0.338141871657754,
+      "label": "Rue du Musée 34690 Fabrègues"
+     }
+    },
+    {
+     "geometry": {
+      "type": "Point",
+      "coordinates": [
+       3.76819,
+       46.622912
+      ]
+     },
+     "properties": {
+      "_type": "address",
+      "postcode": "71140",
+      "name": "Rue du Musée",
+      "city": "Bourbon-Lancy",
+      "type": "street",
+      "context": "71, Saône-et-Loire, Bourgogne-Franche-Comté",
+      "score": 0.33643914438502676,
+      "label": "Rue du Musée 71140 Bourbon-Lancy"
+     }
+    },
+    {
+     "geometry": {
+      "type": "Point",
+      "coordinates": [
+       3.974552,
+       50.277704
+      ]
+     },
+     "properties": {
+      "_type": "address",
+      "postcode": "59600",
+      "name": "Rue du Musée",
+      "city": "Maubeuge",
+      "type": "street",
+      "context": "59, Nord, Hauts-de-France",
+      "score": 0.33543823529411765,
+      "label": "Rue du Musée 59600 Maubeuge"
+     }
+    }
+   ]
+  }
+ },
+ "airbus helicopters marignane": {
+  "poi": {
+   "features": [
+    {
+     "geometry": {
+      "type": "Point",
+      "coordinates": [
+       5.232089,
+       43.435052
+      ]
+     },
+     "properties": {
+      "_type": "poi",
+      "territory": "METROPOLE",
+      "postcode": [
+       "13700",
+       "13127"
+      ],
+      "toponym": "Airbus Helicopters",
+      "name": [
+       "Airbus Helicopters"
+      ],
+      "city": [
+       "Marignane",
+       "Vitrolles"
+      ],
+      "category": [
+       "usine",
+       "zone d'activité ou d'intérêt"
+      ],
+      "score": 0.687603305785124
+     }
+    }
+   ]
+  },
+  "entreprises": {
+   "results": [
+    {
+     "nom_complet": "SYNDICAT FO AIRBUS HELICOPTERS MARIGNANE",
+     "nature_juridique": "8410",
+     "etat_administratif": "A",
+     "siege": {
+      "latitude": "43.440491857",
+      "longitude": "5.2287738684",
+      "code_postal": "13700",
+      "libelle_commune": "MARIGNANE",
+      "etat_administratif": "A",
+      "liste_enseignes": null
+     },
+     "matching_etablissements": [
+      {
+       "latitude": "43.440491857",
+       "longitude": "5.2287738684",
+       "code_postal": "13700",
+       "libelle_commune": "MARIGNANE",
+       "etat_administratif": "A",
+       "liste_enseignes": null
+      }
+     ]
+    },
+    {
+     "nom_complet": "COOPERATIVE DU PERSONNEL AIRBUS HELICOPTERS ETABLISSEMENT DE MARIGNANE",
+     "nature_juridique": "6560",
+     "etat_administratif": "A",
+     "siege": {
+      "latitude": "43.440491857",
+      "longitude": "5.2287738684",
+      "code_postal": "13700",
+      "libelle_commune": "MARIGNANE",
+      "etat_administratif": "A",
+      "liste_enseignes": null
+     },
+     "matching_etablissements": [
+      {
+       "latitude": "43.440491857",
+       "longitude": "5.2287738684",
+       "code_postal": "13700",
+       "libelle_commune": "MARIGNANE",
+       "etat_administratif": "A",
+       "liste_enseignes": null
+      }
+     ]
+    },
+    {
+     "nom_complet": "LOISIRS ARTS ET CULTURE DU COMITE D'ETABLISSEMENT AIRBUS-HELICOPTERS MARIGNANE",
+     "nature_juridique": "9220",
+     "etat_administratif": "A",
+     "siege": {
+      "latitude": "43.440491857",
+      "longitude": "5.2287738684",
+      "code_postal": "13700",
+      "libelle_commune": "MARIGNANE",
+      "etat_administratif": "A",
+      "liste_enseignes": null
+     },
+     "matching_etablissements": [
+      {
+       "latitude": "43.440491857",
+       "longitude": "5.2287738684",
+       "code_postal": "13700",
+       "libelle_commune": "MARIGNANE",
+       "etat_administratif": "A",
+       "liste_enseignes": null
+      }
+     ]
+    },
+    {
+     "nom_complet": "AIRBUS HELICOPTERS",
+     "nature_juridique": "5710",
+     "etat_administratif": "A",
+     "siege": {
+      "latitude": "43.43564139",
+      "longitude": "5.2299326478",
+      "code_postal": "13700",
+      "libelle_commune": "MARIGNANE",
+      "etat_administratif": "A",
+      "liste_enseignes": null
+     },
+     "matching_etablissements": [
+      {
+       "latitude": "43.43564139",
+       "longitude": "5.2299326478",
+       "code_postal": "13700",
+       "libelle_commune": "MARIGNANE",
+       "etat_administratif": "A",
+       "liste_enseignes": null
+      },
+      {
+       "latitude": "43.398773809",
+       "longitude": "5.2216963769",
+       "code_postal": "13700",
+       "libelle_commune": "MARIGNANE",
+       "etat_administratif": "A",
+       "liste_enseignes": null
+      }
+     ]
+    },
+    {
+     "nom_complet": "COMITE SOCIAL ET ECONOMIQUE AIRBUS HELICOPTERS",
+     "nature_juridique": "8310",
+     "etat_administratif": "A",
+     "siege": {
+      "latitude": "43.437808792",
+      "longitude": "5.1991630571",
+      "code_postal": "13700",
+      "libelle_commune": "MARIGNANE",
+      "etat_administratif": "A",
+      "liste_enseignes": null
+     },
+     "matching_etablissements": [
+      {
+       "latitude": "43.437808792",
+       "longitude": "5.1991630571",
+       "code_postal": "13700",
+       "libelle_commune": "MARIGNANE",
+       "etat_administratif": "A",
+       "liste_enseignes": null
+      },
+      {
+       "latitude": "43.437808792",
+       "longitude": "5.1991630571",
+       "code_postal": "13700",
+       "libelle_commune": "MARIGNANE",
+       "etat_administratif": "A",
+       "liste_enseignes": [
+        "COLONIES DE VACANCES CE AEROSPATIALE"
+       ]
+      },
+      {
+       "latitude": "43.437808792",
+       "longitude": "5.1991630571",
+       "code_postal": "13700",
+       "libelle_commune": "MARIGNANE",
+       "etat_administratif": "A",
+       "liste_enseignes": [
+        "CTRE SANTE MEDICAL CE EUROCOPTER"
+       ]
+      },
+      {
+       "latitude": "43.437808792",
+       "longitude": "5.1991630571",
+       "code_postal": "13700",
+       "libelle_commune": "MARIGNANE",
+       "etat_administratif": "A",
+       "liste_enseignes": [
+        "CTRE SANTE DENTAIRE"
+       ]
+      }
+     ]
+    },
+    {
+     "nom_complet": "AILES SPORTIVES AIRBUS HELICOPTERS",
+     "nature_juridique": "9220",
+     "etat_administratif": "A",
+     "siege": {
+      "latitude": "43.440491857",
+      "longitude": "5.2287738684",
+      "code_postal": "13700",
+      "libelle_commune": "MARIGNANE",
+      "etat_administratif": "A",
+      "liste_enseignes": null
+     },
+     "matching_etablissements": [
+      {
+       "latitude": "43.440491857",
+       "longitude": "5.2287738684",
+       "code_postal": "13700",
+       "libelle_commune": "MARIGNANE",
+       "etat_administratif": "A",
+       "liste_enseignes": null
+      },
+      {
+       "latitude": "43.440491857",
+       "longitude": "5.2287738684",
+       "code_postal": "13700",
+       "libelle_commune": "MARIGNANE",
+       "etat_administratif": "F",
+       "liste_enseignes": null
+      }
+     ]
+    },
+    {
+     "nom_complet": "DAHER LOGISTICS",
+     "nature_juridique": "5710",
+     "etat_administratif": "A",
+     "siege": {
+      "latitude": "48.733319745",
+      "longitude": "2.3710038806",
+      "code_postal": "94310",
+      "libelle_commune": "ORLY",
+      "etat_administratif": "A",
+      "liste_enseignes": [
+       "DAHER TECHNOLOGIES"
+      ]
+     },
+     "matching_etablissements": [
+      {
+       "latitude": "43.4474621487559",
+       "longitude": "5.21740061611137",
+       "code_postal": "13700",
+       "libelle_commune": "MARIGNANE",
+       "etat_administratif": "A",
+       "liste_enseignes": null
+      }
+     ]
+    },
+    {
+     "nom_complet": "SODEXO ENTREPRISES",
+     "nature_juridique": "5710",
+     "etat_administratif": "A",
+     "siege": {
+      "latitude": "48.7831330544049",
+      "longitude": "2.05789106513844",
+      "code_postal": "78280",
+      "libelle_commune": "GUYANCOURT",
+      "etat_administratif": "A",
+      "liste_enseignes": null
+     },
+     "matching_etablissements": [
+      {
+       "latitude": "43.441965144",
+       "longitude": "5.2221294476",
+       "code_postal": "13700",
+       "libelle_commune": "MARIGNANE",
+       "etat_administratif": "A",
+       "liste_enseignes": null
+      }
+     ]
+    },
+    {
+     "nom_complet": "AIRBUS INTERNATIONAL SERVICES DESIGNATED ACTIVITY COMPANY (AHIS)",
+     "nature_juridique": "3120",
+     "etat_administratif": "A",
+     "siege": {
+      "latitude": null,
+      "longitude": null,
+      "code_postal": null,
+      "libelle_commune": null,
+      "etat_administratif": "A",
+      "liste_enseignes": null
+     },
+     "matching_etablissements": [
+      {
+       "latitude": "43.403858403",
+       "longitude": "5.2054483177",
+       "code_postal": "13700",
+       "libelle_commune": "MARIGNANE",
+       "etat_administratif": "A",
+       "liste_enseignes": null
+      },
+      {
+       "latitude": "43.440491857",
+       "longitude": "5.2287738684",
+       "code_postal": "13700",
+       "libelle_commune": "MARIGNANE",
+       "etat_administratif": "F",
+       "liste_enseignes": null
+      }
+     ]
+    },
+    {
+     "nom_complet": "INDIGO MOBILITES SERVICES",
+     "nature_juridique": "5710",
+     "etat_administratif": "A",
+     "siege": {
+      "latitude": "48.8891267745931",
+      "longitude": "2.23413817778324",
+      "code_postal": "92800",
+      "libelle_commune": "PUTEAUX",
+      "etat_administratif": "A",
+      "liste_enseignes": [
+       "INDIGO"
+      ]
+     },
+     "matching_etablissements": [
+      {
+       "latitude": null,
+       "longitude": null,
+       "code_postal": "13700",
+       "libelle_commune": "MARIGNANE",
+       "etat_administratif": "A",
+       "liste_enseignes": null
+      }
+     ]
+    }
+   ]
+  },
+  "adresses": {
+   "features": [
+    {
+     "geometry": {
+      "type": "Point",
+      "coordinates": [
+       5.229619,
+       43.411303
+      ]
+     },
+     "properties": {
+      "_type": "address",
+      "postcode": "13700",
+      "name": "Allée des Oliviers",
+      "city": "Marignane",
+      "type": "street",
+      "context": "13, Bouches-du-Rhône, Provence-Alpes-Côte d'Azur",
+      "score": 0.34688818181818176,
+      "label": "Allée des Oliviers 13700 Marignane"
+     }
+    },
+    {
+     "geometry": {
+      "type": "Point",
+      "coordinates": [
+       5.250495,
+       43.402226
+      ]
+     },
+     "properties": {
+      "_type": "address",
+      "postcode": "13700",
+      "name": "Rue des Blés",
+      "city": "Marignane",
+      "type": "street",
+      "context": "13, Bouches-du-Rhône, Provence-Alpes-Côte d'Azur",
+      "score": 0.3017968796068796,
+      "label": "Rue des Blés 13700 Marignane"
+     }
+    }
+   ]
+  }
+ },
+ "mairie de gordes": {
+  "poi": {
+   "features": [
+    {
+     "geometry": {
+      "type": "Point",
+      "coordinates": [
+       5.2006,
+       43.91215
+      ]
+     },
+     "properties": {
+      "_type": "poi",
+      "territory": "METROPOLE",
+      "postcode": [
+       "84220"
+      ],
+      "toponym": "Mairie de Gordes",
+      "name": [
+       "Mairie de Gordes"
+      ],
+      "city": [
+       "Gordes"
+      ],
+      "category": [
+       "mairie",
+       "zone d'activité ou d'intérêt"
+      ],
+      "score": 0.8363636363636363
+     }
+    }
+   ]
+  },
+  "entreprises": {
+   "results": [
+    {
+     "nom_complet": "COMMUNE DE GORDES",
+     "nature_juridique": "7210",
+     "etat_administratif": "A",
+     "siege": {
+      "latitude": "43.912087707",
+      "longitude": "5.2006357278",
+      "code_postal": "84220",
+      "libelle_commune": "GORDES",
+      "etat_administratif": "A",
+      "liste_enseignes": [
+       "MAIRIE"
+      ]
+     },
+     "matching_etablissements": [
+      {
+       "latitude": "43.912087707",
+       "longitude": "5.2006357278",
+       "code_postal": "84220",
+       "libelle_commune": "GORDES",
+       "etat_administratif": "A",
+       "liste_enseignes": [
+        "MAIRIE"
+       ]
+      }
+     ]
+    },
+    {
+     "nom_complet": "ASA CANAL DE GORDES",
+     "nature_juridique": "7321",
+     "etat_administratif": "A",
+     "siege": {
+      "latitude": "43.475863484",
+      "longitude": "5.1675757487",
+      "code_postal": "13130",
+      "libelle_commune": "BERRE L'ETANG",
+      "etat_administratif": "A",
+      "liste_enseignes": null
+     },
+     "matching_etablissements": [
+      {
+       "latitude": "43.475863484",
+       "longitude": "5.1675757487",
+       "code_postal": "13130",
+       "libelle_commune": "BERRE L'ETANG",
+       "etat_administratif": "A",
+       "liste_enseignes": null
+      }
+     ]
+    }
+   ]
+  },
+  "adresses": {
+   "features": [
+    {
+     "geometry": {
+      "type": "Point",
+      "coordinates": [
+       2.024969,
+       44.794304
+      ]
+     },
+     "properties": {
+      "_type": "address",
+      "postcode": "46210",
+      "name": "Place de la Mairie",
+      "city": "Gorses",
+      "type": "street",
+      "context": "46, Lot, Occitanie",
+      "score": 0.4388427272727273,
+      "label": "Place de la Mairie 46210 Gorses"
+     }
+    },
+    {
+     "geometry": {
+      "type": "Point",
+      "coordinates": [
+       2.401874,
+       47.812619
+      ]
+     },
+     "properties": {
+      "_type": "address",
+      "postcode": "45460",
+      "name": "Rue de la Mairie",
+      "city": "Les Bordes",
+      "type": "street",
+      "context": "45, Loiret, Centre-Val de Loire",
+      "score": 0.4245464935064935,
+      "label": "Rue de la Mairie 45460 Les Bordes"
+     }
+    },
+    {
+     "geometry": {
+      "type": "Point",
+      "coordinates": [
+       3.380184,
+       48.097843
+      ]
+     },
+     "properties": {
+      "_type": "address",
+      "postcode": "89500",
+      "name": "Rue de la Mairie",
+      "city": "Les Bordes",
+      "type": "street",
+      "context": "89, Yonne, Bourgogne-Franche-Comté",
+      "score": 0.4169746753246753,
+      "label": "Rue de la Mairie 89500 Les Bordes"
+     }
+    },
+    {
+     "geometry": {
+      "type": "Point",
+      "coordinates": [
+       5.029955,
+       46.895987
+      ]
+     },
+     "properties": {
+      "_type": "address",
+      "postcode": "71350",
+      "name": "mairie",
+      "city": "Les Bordes",
+      "type": "locality",
+      "context": "71, Saône-et-Loire, Bourgogne-Franche-Comté",
+      "score": 0.4081185714285714,
+      "label": "mairie 71350 Les Bordes"
+     }
+    },
+    {
+     "geometry": {
+      "type": "Point",
+      "coordinates": [
+       5.029954,
+       46.895987
+      ]
+     },
+     "properties": {
+      "_type": "address",
+      "postcode": "71350",
+      "name": "mairie",
+      "city": "Les Bordes",
+      "type": "locality",
+      "context": "71, Saône-et-Loire, Bourgogne-Franche-Comté",
+      "score": 0.4081185714285714,
+      "label": "mairie 71350 Les Bordes"
+     }
+    },
+    {
+     "geometry": {
+      "type": "Point",
+      "coordinates": [
+       5.029978,
+       46.89627
+      ]
+     },
+     "properties": {
+      "_type": "address",
+      "postcode": "71350",
+      "name": "Rue de la Mairie",
+      "city": "Les Bordes",
+      "type": "street",
+      "context": "71, Saône-et-Loire, Bourgogne-Franche-Comté",
+      "score": 0.40337194805194804,
+      "label": "Rue de la Mairie 71350 Les Bordes"
+     }
+    },
+    {
+     "geometry": {
+      "type": "Point",
+      "coordinates": [
+       6.468936,
+       43.318167
+      ]
+     },
+     "properties": {
+      "_type": "address",
+      "postcode": "83680",
+      "name": "Rue de la Mairie",
+      "city": "La Garde-Freinet",
+      "type": "street",
+      "context": "83, Var, Provence-Alpes-Côte d'Azur",
+      "score": 0.3893393506493506,
+      "label": "Rue de la Mairie 83680 La Garde-Freinet"
+     }
+    },
+    {
+     "geometry": {
+      "type": "Point",
+      "coordinates": [
+       0.958298,
+       45.769365
+      ]
+     },
+     "properties": {
+      "_type": "address",
+      "postcode": "87310",
+      "name": "Place de la Mairie",
+      "city": "Saint-Laurent-sur-Gorre",
+      "type": "street",
+      "context": "87, Haute-Vienne, Nouvelle-Aquitaine",
+      "score": 0.35302446640316204,
+      "label": "Place de la Mairie 87310 Saint-Laurent-sur-Gorre"
+     }
+    },
+    {
+     "geometry": {
+      "type": "Point",
+      "coordinates": [
+       6.468979,
+       43.317807
+      ]
+     },
+     "properties": {
+      "_type": "address",
+      "postcode": "83680",
+      "name": "Place de la Mairie",
+      "city": "La Garde-Freinet",
+      "type": "street",
+      "context": "83, Var, Provence-Alpes-Côte d'Azur",
+      "score": 0.3525471936758893,
+      "label": "Place de la Mairie 83680 La Garde-Freinet"
+     }
+    },
+    {
+     "geometry": {
+      "type": "Point",
+      "coordinates": [
+       5.755485,
+       44.341016
+      ]
+     },
+     "properties": {
+      "_type": "address",
+      "postcode": "05300",
+      "name": "Place de la Mairie",
+      "city": "Garde-Colombe",
+      "type": "street",
+      "context": "05, Hautes-Alpes, Provence-Alpes-Côte d'Azur",
+      "score": 0.35192355731225294,
+      "label": "Place de la Mairie 05300 Garde-Colombe"
+     }
+    },
+    {
+     "geometry": {
+      "type": "Point",
+      "coordinates": [
+       3.042751,
+       48.486755
+      ]
+     },
+     "properties": {
+      "_type": "address",
+      "postcode": "77154",
+      "name": "Place de la Mairie",
+      "city": "Villeneuve-les-Bordes",
+      "type": "street",
+      "context": "77, Seine-et-Marne, Île-de-France",
+      "score": 0.35165446640316206,
+      "label": "Place de la Mairie 77154 Villeneuve-les-Bordes"
+     }
+    },
+    {
+     "geometry": {
+      "type": "Point",
+      "coordinates": [
+       1.029331,
+       42.901118
+      ]
+     },
+     "properties": {
+      "_type": "address",
+      "postcode": "09800",
+      "name": "Place de la Mairie",
+      "city": "Bordes-Uchentein",
+      "type": "street",
+      "context": "09, Ariège, Occitanie",
+      "score": 0.3460235573122529,
+      "label": "Place de la Mairie 09800 Bordes-Uchentein"
+     }
+    },
+    {
+     "geometry": {
+      "type": "Point",
+      "coordinates": [
+       5.989584,
+       43.111911
+      ]
+     },
+     "properties": {
+      "_type": "address",
+      "postcode": "83130",
+      "name": "Impasse de la Mairie Annexe",
+      "city": "La Garde",
+      "type": "street",
+      "context": "83, Var, Provence-Alpes-Côte d'Azur",
+      "score": 0.3059722966507177,
+      "label": "Impasse de la Mairie Annexe 83130 La Garde"
+     }
+    },
+    {
+     "geometry": {
+      "type": "Point",
+      "coordinates": [
+       -0.760851,
+       47.150438
+      ]
+     },
+     "properties": {
+      "_type": "address",
+      "postcode": "49120",
+      "name": "Rue de l'Ancienne Mairie",
+      "city": "Chemillé-en-Anjou",
+      "type": "street",
+      "context": "49, Maine-et-Loire, Pays de la Loire",
+      "score": 0.3038266771159875,
+      "label": "Rue de l'Ancienne Mairie 49120 Chemillé-en-Anjou"
+     }
+    }
+   ]
+  }
+ }
+}
