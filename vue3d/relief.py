@@ -29,6 +29,7 @@ laisser la vue basculer sur son repli mondial que rapiécer.
 """
 
 import base64
+import math
 import struct
 
 import numpy as np
@@ -45,6 +46,27 @@ RELIEF_PART_TROUS_MAX = 0.02
 # ALTI (0,54 à 0,72 m de médiane selon les sites).
 RELIEF_PAS_M = 0.1
 RELIEF_SENTINELLE = -32768
+# Le service rééchantillonne SANS masquer ses −99 999 : il les mélange à leurs
+# voisins, et sort des altitudes de −99 955 m, −8 700 m ou −13 m à quelques
+# pixels du trou. Sous ce seuil, une altitude est un trou ; le plus bas mesuré
+# hors trou est −5 m, sur l'estran de Saint-Malo.
+RELIEF_TROU_SOUS_M = -20
+# Le mélange déborde du contour à −20 m sur une bande de largeur à peu près
+# constante en mètres, quelle que soit la maille. Plus basse altitude restante
+# après élargissement de k pixels, mesurée le 2026-10-15 :
+#
+#                                maille    k=2     k=3     k=5
+#   Monaco, 1 000 m, 512 points   2 m     −13,4    0,5     0,5
+#   Menton port, 500 m, 256       2 m     −14,0   −0,5    −0,5
+#   Monaco, 1 000 m, 1 000        1 m     −13,4   −13,4    0,5
+#   Nice port, 1 000 m, 1 000     1 m     −18,5   −18,5   −0,1
+#
+# À Monaco, 372 de ces altitudes mêlées (−99 955 à −82 158 m) passaient pour
+# du relief à côté de 827 trous (0,3 %, relief accepté) : le minimum devenait
+# le zéro de la grille, tout le reste saturait les 16 bits, et la vue posait
+# l'anneau et l'horizon à 96 km au-dessus de la scène.
+RELIEF_TROU_ELARGISSEMENT_M = 6
+M_PAR_DEGRE_LAT = 111320
 
 
 def _bil(west, south, east, north, largeur, hauteur):
@@ -78,7 +100,7 @@ def _bil(west, south, east, north, largeur, hauteur):
 def fetch_altitudes(west, south, east, north, taille):
     """Grille brute du RGE ALTI, `taille` points de côté, ligne 0 au nord, trous
     compris (RELIEF_NODATA, ou ce que le service en mêle à leurs voisins :
-    voir ANNEAU_TROU_SOUS_M). Pour dire où est la mer (vehicules.fetch_mer),
+    voir RELIEF_TROU_SOUS_M). Pour dire où est la mer (vehicules.fetch_mer),
     jamais pour la scène.
 
     Raises:
@@ -88,17 +110,25 @@ def fetch_altitudes(west, south, east, north, taille):
 
 
 def _quantifier(grille, trous, west, south, east, north):
-    """Grille d'altitudes en décimètres au-dessus de son minimum, en base64."""
+    """Grille d'altitudes en décimètres au-dessus de son minimum, en base64.
+
+    Au-delà de 3 276,7 m d'étendue, le pas grandit d'autant de décimètres
+    qu'il faut : un plafond silencieux aplatirait tout ce qui dépasse.
+    """
     hauteur, largeur = grille.shape
     zero = float(np.floor(grille[~trous].min()))
-    quant = np.rint((grille - zero) / RELIEF_PAS_M)
+    pas = RELIEF_PAS_M
+    etendue = float(grille[~trous].max()) - zero
+    if np.rint(etendue / pas) > 32767:
+        pas = round(RELIEF_PAS_M * math.ceil(etendue / (RELIEF_PAS_M * 32767)), 1)
+    quant = np.rint((grille - zero) / pas)
     quant = np.clip(quant, RELIEF_SENTINELLE + 1, 32767)
     quant[trous] = RELIEF_SENTINELLE
     return {
         "width": largeur, "height": hauteur,
         "bbox": [west, south, east, north],
         "zero_m": round(zero, 1),
-        "pas_m": RELIEF_PAS_M,
+        "pas_m": pas,
         "source": "RGE ALTI (IGN)",
         "precision": "1 m, modèle de terrain",
         "altitudes": base64.b64encode(quant.astype("<i2").tobytes()).decode("ascii"),
@@ -116,7 +146,8 @@ def fetch_relief(west, south, east, north, taille=RELIEF_TAILLE):
     """
     west, south, east, north = map(float, (west, south, east, north))
     grille = _bil(west, south, east, north, taille, taille).astype(np.float64)
-    trous = grille <= RELIEF_NODATA + 1
+    maille = (north - south) * M_PAR_DEGRE_LAT / max(taille - 1, 1)
+    trous = _elargir(grille < RELIEF_TROU_SOUS_M, math.ceil(RELIEF_TROU_ELARGISSEMENT_M / maille))
     if trous.mean() > RELIEF_PART_TROUS_MAX:
         return None
     if trous.all():
@@ -145,12 +176,9 @@ ANNEAU_TAILLE = 128
 # quart de trous à Saint-Malo comme à Menton. Il n'est donc pas refusé pour
 # autant, ses trous restent simplement vides.
 #
-# Mais le service rééchantillonne SANS masquer ses −99 999 : il les mélange à
-# leurs voisins, et sort des altitudes de −8 700 m ou −61 m à plusieurs pixels
-# du trou. Mesuré à Saint-Malo et Menton, un seuil à −20 m suivi d'un
-# élargissement de deux pixels (31 m) est le premier qui ne laisse que des
-# altitudes plausibles (−5 m au plus bas, sur l'estran).
-ANNEAU_TROU_SOUS_M = -20
+# Ses trous mêlés aux voisins (RELIEF_TROU_SOUS_M) : mesuré à Saint-Malo et
+# Menton, un élargissement de deux pixels (31 m) est le premier qui ne laisse
+# que des altitudes plausibles (−5 m au plus bas, sur l'estran).
 ANNEAU_ELARGISSEMENT = 2
 
 
@@ -173,7 +201,7 @@ def fetch_relief_anneau(west, south, east, north, taille=ANNEAU_TAILLE):
     """
     west, south, east, north = map(float, (west, south, east, north))
     grille = _bil(west, south, east, north, taille, taille).astype(np.float64)
-    trous = _elargir(grille < ANNEAU_TROU_SOUS_M, ANNEAU_ELARGISSEMENT)
+    trous = _elargir(grille < RELIEF_TROU_SOUS_M, ANNEAU_ELARGISSEMENT)
     if trous.all():
         return None
     return _quantifier(grille, trous, west, south, east, north)

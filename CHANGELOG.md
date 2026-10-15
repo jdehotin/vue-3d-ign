@@ -98,6 +98,26 @@ messages de commit et dans les commentaires des modules.
   - Les toitures d'une scène coûtent un peu plus : 5,4 s → 5,8 s à
     Strasbourg en zone de 1 000 m, sur un seul processus.
 
+### Corrigé
+
+- **Des murs de 96 km autour de la scène, au port de Monaco.** Au bord de
+  la mer, le WMS du RGE ALTI mêle son −99 999 aux altitudes voisines : 372
+  pixels de −99 955 à −82 158 m, à côté de 827 vrais trous (0,3 %, relief
+  accepté). Le serveur ne comptait comme trous que les −99 999 : le plus bas
+  de ces mélanges devenait le zéro de la grille, et tout le reste saturait
+  les entiers 16 bits, à −96 678 m. L'anneau et l'horizon, justes, montaient
+  d'autant au-dessus de la scène, cousue à l'anneau par des murs.
+  - Une altitude sous −20 m est un trou, élargi de 6 m (mesuré à Monaco,
+    Menton, Nice : le mélange déborde de ~6 m quelle que soit la maille) ;
+    l'anneau suivait déjà le même seuil. Un relief de plus de 3 276,7 m
+    d'étendue n'est plus plafonné : son pas grandit.
+  - La page bouche les trous de proche en proche depuis leur bord, plus par
+    la moyenne de la grille, qui aurait posé le coin de mer de Monaco à 30 m
+    (rivage entre 0,5 et 6,8 m). Son propre repli sur le WMS suit la même
+    règle que le serveur, et elle écarte un relief déjà en cache sous −20 m.
+  - `SCENE_VERSION` inchangée : seul un relief à trous change, et des 155
+    scènes des deux caches, une seule en avait — Monaco, purgée en prod.
+
 ### Limites connues
 
 - Un toit-terrasse que l'orthophoto voit vert (toit végétalisé, sans doute)

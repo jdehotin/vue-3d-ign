@@ -686,4 +686,40 @@ console.log(`${ok ? 'OK ' : 'KO '} écarts aux toits : toits ${Array.from(toit).
 tout = tout && ok;
 }
 
+// --- Trous du relief ------------------------------------------------------------
+{
+const { boucherTrous, masqueTrous } = new Function(
+  extraireConst('RELIEF_TROU_SOUS_M') + '\n' + extraire('boucherTrous') + '\n' + extraire('masqueTrous')
+  + '\nreturn { boucherTrous, masqueTrous };')();
+// Monaco en petit : un plateau à 30 m, la mer en trou dans le coin sud-est,
+// un rivage de 0 à 5 m autour. Bouché par la moyenne de la grille, le trou
+// montait à 29 m ; bouché depuis son bord, il reste entre 0 et 5 m, et
+// symétrique comme son rivage.
+const L = 20, v = new Float64Array(L * L).fill(30);
+for (let y = 12; y < L; y++) for (let x = 12; x < L; x++) v[y * L + x] = NaN;
+for (let k = 11; k < L; k++) v[11 * L + k] = v[k * L + 11] = (k - 11) * 5 / 8;
+const n = boucherTrous(v, L);
+let dansRivage = true, symetrique = true;
+for (let y = 12; y < L; y++) {
+  for (let x = 12; x < L; x++) {
+    const a = v[y * L + x];
+    dansRivage &&= a >= 0 && a <= 5;
+    symetrique &&= a === v[x * L + y];
+  }
+}
+const vide = new Float64Array(16).fill(NaN);
+const toutEnTrous = boucherTrous(vide, 4) === 16 && vide.every(Number.isNaN);
+// Un mélange au centre d'une grille de 9 × 9, élargi de deux pixels en croix :
+// un losange de 13 pixels, comme relief._elargir.
+const g = new Float32Array(81).fill(10);
+g[40] = -99955;
+const m = masqueTrous(g, 9, 2);
+const losange = m.reduce((s, x) => s + x, 0) === 13 && m[40 - 18] === 1 && m[40 - 27] === 0 && m[40 - 10] === 1 && m[40 - 20] === 0;
+const ok = n === 64 && dansRivage && symetrique && toutEnTrous && losange;
+console.log(`${ok ? 'OK ' : 'KO '} trous du relief : ${n} bouchés, entre ${Math.min(...v).toFixed(2)} et 5 m `
+            + `${dansRivage ? 'oui' : 'non'}, symétrique ${symetrique ? 'oui' : 'non'}, `
+            + `grille vide ${toutEnTrous ? 'laissée' : 'touchée'}, losange ${losange ? 'oui' : 'non'}`);
+tout = tout && ok;
+}
+
 process.exit(tout ? 0 : 1);

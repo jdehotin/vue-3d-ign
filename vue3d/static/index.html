@@ -3107,8 +3107,12 @@ majCredits();
 //   Roches-Roussillon (pente)    0,54 m   1,47 m (biais +0,75)
 //   Lacq                         0,72 m   2,18 m (biais +2,18)
 const RGE_URL = 'https://data.geopf.fr/wms-r/wms';
-const RGE_NODATA = -99999;
-const TERRAIN_ZOOM = 15;          // maximum publié ; au-delà, 404
+// Le WMS mêle ses −99 999 (mer, étranger) aux altitudes voisines : sous
+// −20 m, c'est un trou, et le mélange déborde de ~6 m autour. Mêmes seuil et
+// élargissement que le serveur, mesurés dans vue3d/relief.py.
+const RELIEF_TROU_SOUS_M = -20;
+const RELIEF_TROU_ELARGISSEMENT_M = 6;
+const TERRAIN_ZOOM = 15;         // maximum publié ; au-delà, 404
 const TERRAIN_URL = (z, x, y) =>
     `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${z}/${x}/${y}.png`;
 
@@ -3164,14 +3168,74 @@ function echantillonneur(valeurs, largeur, hauteur, bornes) {
     };
 }
 
-/** Remplace les trous (NaN) par la moyenne des valeurs connues. */
-function boucherTrous(valeurs) {
-    let somme = 0, connus = 0;
-    for (const v of valeurs) if (!Number.isNaN(v)) { somme += v; connus++; }
-    if (!connus) return 0;
-    const moyenne = somme / connus;
-    for (let i = 0; i < valeurs.length; i++) if (Number.isNaN(valeurs[i])) valeurs[i] = moyenne;
-    return valeurs.length - connus;
+/**
+ * Bouche les trous (NaN) d'une grille de proche en proche depuis leur bord :
+ * chaque trou qui touche une valeur connue (4-voisinage) en prend la moyenne,
+ * puis ses voisins encore vides à la passe suivante. La moyenne de toute la
+ * grille posait le coin de mer de Monaco à 30 m, son rivage étant entre 0,5
+ * et 6,8 m. Rend le nombre de trous ; une grille toute en trous reste telle.
+ */
+function boucherTrous(valeurs, largeur) {
+    const n = valeurs.length;
+    let trous = 0;
+    for (let i = 0; i < n; i++) if (Number.isNaN(valeurs[i])) trous++;
+    if (trous === 0 || trous === n) return trous;
+    const voisins = new Int32Array(4);
+    const lireVoisins = i => {
+        const x = i % largeur;
+        voisins[0] = x > 0 ? i - 1 : -1;
+        voisins[1] = x < largeur - 1 ? i + 1 : -1;
+        voisins[2] = i >= largeur ? i - largeur : -1;
+        voisins[3] = i + largeur < n ? i + largeur : -1;
+    };
+    const vu = new Uint8Array(n);
+    let front = [];
+    for (let i = 0; i < n; i++) {
+        if (!Number.isNaN(valeurs[i])) continue;
+        lireVoisins(i);
+        if (voisins.some(v => v >= 0 && !Number.isNaN(valeurs[v]))) { front.push(i); vu[i] = 1; }
+    }
+    while (front.length) {
+        // Toutes les moyennes d'une passe avant d'en écrire une : le résultat
+        // ne dépend pas de l'ordre de parcours.
+        const moyennes = front.map(i => {
+            lireVoisins(i);
+            let somme = 0, connus = 0;
+            for (const v of voisins) if (v >= 0 && !Number.isNaN(valeurs[v])) { somme += valeurs[v]; connus++; }
+            return somme / connus;
+        });
+        front.forEach((i, k) => { valeurs[i] = moyennes[k]; });
+        const suivant = [];
+        for (const i of front) {
+            lireVoisins(i);
+            for (const v of voisins) if (v >= 0 && !vu[v] && Number.isNaN(valeurs[v])) { vu[v] = 1; suivant.push(v); }
+        }
+        front = suivant;
+    }
+    return trous;
+}
+
+/**
+ * Trous d'une grille brute du RGE ALTI : sous RELIEF_TROU_SOUS_M, élargis de
+ * `pas` pixels en croix, comme relief._elargir côté serveur.
+ */
+function masqueTrous(grille, largeur, pas) {
+    const n = grille.length;
+    let masque = new Uint8Array(n);
+    for (let i = 0; i < n; i++) if (grille[i] < RELIEF_TROU_SOUS_M) masque[i] = 1;
+    for (let p = 0; p < pas; p++) {
+        const m = masque.slice();
+        for (let i = 0; i < n; i++) {
+            if (!masque[i]) continue;
+            const x = i % largeur;
+            if (x > 0) m[i - 1] = 1;
+            if (x < largeur - 1) m[i + 1] = 1;
+            if (i >= largeur) m[i - largeur] = 1;
+            if (i + largeur < n) m[i + largeur] = 1;
+        }
+        masque = m;
+    }
+    return masque;
 }
 
 /**
@@ -3182,7 +3246,9 @@ function boucherTrous(valeurs) {
  *    répond 200 avec une grille entièrement nodata (ou pire, plausible) ;
  *  - le corps est du float32 little-endian brut, première ligne au NORD ;
  *  - hors couverture (étranger, Nouvelle-Calédonie) tout vaut -99999. Décodé
- *    sans filtre, ça creuse un gouffre de cent kilomètres sous la scène.
+ *    sans filtre, ça creuse un gouffre de cent kilomètres sous la scène. Au
+ *    bord d'un tel trou, le service mêle ce -99999 aux voisins (-99 955 m à
+ *    Monaco) : d'où le seuil et l'élargissement de masqueTrous.
  */
 async function chargerRgeAlti() {
     const [ax, ay] = toLocal(BORNES.o, BORNES.n);
@@ -3204,16 +3270,18 @@ async function chargerRgeAlti() {
     const grille = new Float32Array(await reponse.arrayBuffer());
     if (grille.length !== taille * taille) return null;
 
+    const maille = (BORNES.n - BORNES.s) * M_PAR_DEGRE_LAT / (taille - 1);
+    const trous = masqueTrous(grille, taille, Math.ceil(RELIEF_TROU_ELARGISSEMENT_M / maille));
     let nodata = 0;
     const valeurs = new Float64Array(grille.length);
     for (let i = 0; i < grille.length; i++) {
-        if (grille[i] <= RGE_NODATA + 1) { valeurs[i] = NaN; nodata++; }
+        if (trous[i]) { valeurs[i] = NaN; nodata++; }
         else valeurs[i] = grille[i];
     }
     // Au-delà de quelques pour cent de trous on est en bord de couverture :
     // mieux vaut le repli mondial qu'un rapiéçage.
     if (nodata / grille.length > 0.02) return null;
-    boucherTrous(valeurs);
+    boucherTrous(valeurs, taille);
 
     return { nom: 'RGE ALTI (IGN)', precision: '1 m, modèle de terrain',
              alt: echantillonneur(valeurs, taille, taille, BORNES) };
@@ -3255,7 +3323,7 @@ async function chargerTerrarium() {
         valeurs[i] = px[j + 3] === 0 ? NaN
                    : (px[j] * 256 + px[j + 1] + px[j + 2] / 256) - 32768;
     }
-    if (boucherTrous(valeurs) === valeurs.length) return null;
+    if (boucherTrous(valeurs, W) === valeurs.length) return null;
 
     // Emprise réelle du composite, alignée sur les tuiles.
     const [lonO, latN] = versLonLat(tx0, ty0, TERRAIN_ZOOM);
@@ -3480,11 +3548,18 @@ function decoderRelief(r, boucher) {
     for (let i = 0; i < brut.length; i++) octets[i] = brut.charCodeAt(i);
     const entiers = new Int16Array(octets.buffer);
     const valeurs = new Float64Array(n);
+    let connus = 0;
     for (let i = 0; i < n; i++) {
-        // -32768 marque un trou, comme côté serveur.
-        valeurs[i] = entiers[i] === -32768 ? NaN : r.zero_m + entiers[i] * r.pas_m;
+        // -32768 marque un trou, comme côté serveur. Sous RELIEF_TROU_SOUS_M
+        // aussi : une scène mise en cache avant que le serveur ne reconnaisse
+        // les trous mêlés aux voisins (Monaco : tout à −96 678 m) ne doit pas
+        // envoyer l'anneau et l'horizon à 96 km au-dessus d'elle.
+        const a = r.zero_m + entiers[i] * r.pas_m;
+        valeurs[i] = entiers[i] === -32768 || a < RELIEF_TROU_SOUS_M ? NaN : a;
+        if (!Number.isNaN(valeurs[i])) connus++;
     }
-    if (boucher) boucherTrous(valeurs);
+    if (!connus) return null;
+    if (boucher) boucherTrous(valeurs, r.width);
     const b = r.bbox;
     return echantillonneur(valeurs, r.width, r.height, { o: b[0], s: b[1], e: b[2], n: b[3] });
 }
