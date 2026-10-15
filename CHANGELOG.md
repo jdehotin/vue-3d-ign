@@ -15,6 +15,12 @@ messages de commit et dans les commentaires des modules.
 
 ### Ajouté
 
+- **Recentrer la scène sur un arbre, un véhicule, un bateau ou une
+  piscine**, comme sur un bâtiment. Un clic (ou un toucher) épingle leur
+  infobulle avec « Recentrer la scène sur ce véhicule », qui recharge la
+  page centrée sur l'objet, à la même zone. Au doigt, sans survol, c'est
+  ce toucher qui montre l'infobulle. Essayé au port de Monaco, souris et
+  doigt : le lien tombe au centre de l'objet (moins de 0,5 m).
 - **Un guide de prise en main.** Il s'ouvre de lui-même à la première
   visite, pendant que la scène se construit, puis par le bouton « ? » sous
   les commandes de la vue : tourner, zoomer, se déplacer, la fiche d'un

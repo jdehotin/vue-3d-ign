@@ -2141,9 +2141,13 @@ function lienStreetView(anneau) {
  */
 function lienRecentrer(anneau) {
     if (!anneau || anneau.length < 3) return '';
-    const [lon, lat] = centreAnneau(anneau);
+    return lienRecentrerSur(centreAnneau(anneau), 'sur ce bâtiment');
+}
+
+/** Le même lien, sur un point : un arbre, un véhicule, un bateau, une piscine. */
+function lienRecentrerSur([lon, lat], quoi) {
     return ' <a class="lien-ext lien-recentrer" href="?lat=' + lat.toFixed(6) + '&amp;lon=' + lon.toFixed(6) + PARAM_ZONE_LIEN.replace('&', '&amp;') + '">'
-        + 'Recentrer la scène sur ce bâtiment</a>';
+        + 'Recentrer la scène ' + quoi + '</a>';
 }
 
 // --- Orientation Street View --------------------------------------------
@@ -8899,6 +8903,60 @@ tip.addEventListener('click', e => {
     ouvrirTiroir(document.getElementById('fiche-batiment').closest('.section'));
 });
 
+/**
+ * Un arbre, un véhicule, un bateau ou une piscine sous le pointeur : son
+ * infobulle, son centre (lon, lat) et de quoi nommer le recentrage ; null pour
+ * tout le reste. Le survol l'affiche, le clic l'épingle avec un lien qui
+ * recharge la scène centrée dessus — au doigt, sans survol, c'est le clic qui
+ * la montre.
+ */
+function objetSous(touche) {
+    if (!touche) return null;
+    const ud = touche.object.userData;
+    if (ud.vegetation && touche.faceIndex != null) {
+        const info = elementSousFace(touche.object, touche.faceIndex);
+        if (!info) return null;
+        const dist = Math.hypot(info.x, info.y);
+        const azimut = (Math.atan2(info.x, info.y) * 180 / Math.PI + 360) % 360;
+        const essence = info.essence && !/^N[CR]$/.test(info.essence) ? info.essence : null;
+        const html =
+            `<b>${info.classe === 'vegetation' ? (info.nature || 'Végétation (orthophoto)') : 'Sursol non bâti'}</b>` +
+            (essence ? `<br>essence BD Forêt : ${essence} · port ${portDe(info).nom}` : `<br>port ${portDe(info).nom}`) +
+            `<br>hauteur ${info.h.toFixed(1)} m · rayon ${info.r.toFixed(1)} m · ${formeDe(info)}` +
+            (info.allongement >= 1.5 ? ` · allongé ×${info.allongement.toFixed(1)}` : '') +
+            `<br>${dist.toFixed(0)} m du point · azimut ${azimut.toFixed(0)}°` +
+            `<br>élévation ${(Math.atan2(info.h, Math.max(dist, 1)) * 180 / Math.PI).toFixed(0)}°` +
+            (info.classe === 'sursol' ? '<br><i>hors zone de végétation BD TOPO, pas vert à l\'orthophoto</i>' : '');
+        // Le houppier est posé en coordonnées de la scène, comme les bâtiments.
+        return { html, centre: toLonLat(info.x, info.y),
+                 quoi: info.classe === 'vegetation' ? 'sur cet arbre' : 'ici' };
+    }
+    if (ud.vehicules && touche.instanceId != null) {
+        const v = ud.vehicules[touche.instanceId];
+        return { html: `<b>${GABARITS_VEHICULE[v.gabarit].nom}</b>`
+            + `<br>boîte de ${enMetres(v.longueur)} sur ${enMetres(v.largeur)}, lue sur l'orthophoto`
+            + '<br><i>là où il était le jour de la prise de vue</i>'
+            + '<br><i>hauteur et forme de convention, avant et arrière non distingués</i>',
+                 centre: [v.lon, v.lat], quoi: 'sur ce véhicule' };
+    }
+    if (ud.navires && touche.instanceId != null) {
+        const n = ud.navires[touche.instanceId];
+        return { html: `<b>${GABARITS_NAVIRE[n.gabarit].nom}</b>`
+            + `<br>boîte de ${enMetres(n.longueur)} sur ${enMetres(n.largeur)}, lue sur l'orthophoto`
+            + '<br><i>là où il était le jour de la prise de vue</i>'
+            + '<br><i>hauteur et forme de convention, proue et poupe non distinguées</i>',
+                 centre: [n.lon, n.lat], quoi: 'sur ce bateau' };
+    }
+    if (ud.piscines && touche.instanceId != null) {
+        const p = ud.piscines[touche.instanceId];
+        return { html: '<b>Piscine</b>'
+            + `<br>boîte de ${enMetres(p.longueur)} sur ${enMetres(p.largeur)}, lue sur l'orthophoto`
+            + '<br><i>dessinée en rectangle, quelle que soit sa forme ; couleur de l\'eau ce jour-là</i>',
+                 centre: [p.lon, p.lat], quoi: 'sur cette piscine' };
+    }
+    return null;
+}
+
 renderer.domElement.addEventListener('pointermove', e => {
     if (tipEpingle) return;
     const r = renderer.domElement.getBoundingClientRect();
@@ -8909,20 +8967,9 @@ renderer.domElement.addEventListener('pointermove', e => {
     // (hauteur, distance, élévation). Traitée avant la logique des pastilles,
     // qui masque l'infobulle dès que le plus proche n'est ni pastille ni photo.
     const touche = raycaster.intersectObjects(ciblesSurvol, false)[0];
-    if (touche && touche.object.userData.vegetation && touche.faceIndex != null) {
-        const info = elementSousFace(touche.object, touche.faceIndex);
-        if (!info) { tip.style.display = 'none'; return; }
-        const dist = Math.hypot(info.x, info.y);
-        const azimut = (Math.atan2(info.x, info.y) * 180 / Math.PI + 360) % 360;
-        const essence = info.essence && !/^N[CR]$/.test(info.essence) ? info.essence : null;
-        tip.innerHTML =
-            `<b>${info.classe === 'vegetation' ? (info.nature || 'Végétation (orthophoto)') : 'Sursol non bâti'}</b>` +
-            (essence ? `<br>essence BD Forêt : ${essence} · port ${portDe(info).nom}` : `<br>port ${portDe(info).nom}`) +
-            `<br>hauteur ${info.h.toFixed(1)} m · rayon ${info.r.toFixed(1)} m · ${formeDe(info)}` +
-            (info.allongement >= 1.5 ? ` · allongé ×${info.allongement.toFixed(1)}` : '') +
-            `<br>${dist.toFixed(0)} m du point · azimut ${azimut.toFixed(0)}°` +
-            `<br>élévation ${(Math.atan2(info.h, Math.max(dist, 1)) * 180 / Math.PI).toFixed(0)}°` +
-            (info.classe === 'sursol' ? '<br><i>hors zone de végétation BD TOPO, pas vert à l\'orthophoto</i>' : '');
+    const objet = objetSous(touche);
+    if (objet) {
+        tip.innerHTML = objet.html + '<br><i>clic pour pouvoir y recentrer la scène</i>';
         placerTip(e, r);
         return;
     }
@@ -8933,35 +8980,6 @@ renderer.domElement.addEventListener('pointermove', e => {
             + (u.gestionnaire ? `<br>${u.gestionnaire}` : '')
             + `<br>pylône ${u.h.toFixed(1)} m `
             + (u.mesuree ? '<i>(BD TOPO)</i>' : '<i>(hauteur typique de la tension)</i>');
-        placerTip(e, r);
-        return;
-    }
-
-    if (touche && touche.object.userData.vehicules && touche.instanceId != null) {
-        const v = touche.object.userData.vehicules[touche.instanceId];
-        tip.innerHTML = `<b>${GABARITS_VEHICULE[v.gabarit].nom}</b>`
-            + `<br>boîte de ${enMetres(v.longueur)} sur ${enMetres(v.largeur)}, lue sur l'orthophoto`
-            + '<br><i>là où il était le jour de la prise de vue</i>'
-            + '<br><i>hauteur et forme de convention, avant et arrière non distingués</i>';
-        placerTip(e, r);
-        return;
-    }
-
-    if (touche && touche.object.userData.navires && touche.instanceId != null) {
-        const n = touche.object.userData.navires[touche.instanceId];
-        tip.innerHTML = `<b>${GABARITS_NAVIRE[n.gabarit].nom}</b>`
-            + `<br>boîte de ${enMetres(n.longueur)} sur ${enMetres(n.largeur)}, lue sur l'orthophoto`
-            + '<br><i>là où il était le jour de la prise de vue</i>'
-            + '<br><i>hauteur et forme de convention, proue et poupe non distinguées</i>';
-        placerTip(e, r);
-        return;
-    }
-
-    if (touche && touche.object.userData.piscines && touche.instanceId != null) {
-        const p = touche.object.userData.piscines[touche.instanceId];
-        tip.innerHTML = '<b>Piscine</b>'
-            + `<br>boîte de ${enMetres(p.longueur)} sur ${enMetres(p.largeur)}, lue sur l'orthophoto`
-            + '<br><i>dessinée en rectangle, quelle que soit sa forme ; couleur de l\'eau ce jour-là</i>';
         placerTip(e, r);
         return;
     }
@@ -9024,6 +9042,13 @@ function epinglerTip(ud, e, r) {
         : '<i>fiche dans le panneau</i>';
     tip.innerHTML = resumeBatiment(ud) + ligneDpe(ud) + '<br>' + fiche
         + '<br>' + lienRecentrer(ud.anneau).trim() + '<br>' + lienStreetView(ud.anneau);
+    placerTip(e, r);
+    tip.classList.add('epingle');
+    tipEpingle = true;
+}
+/** De même pour un arbre, un véhicule, un bateau ou une piscine (objetSous). */
+function epinglerObjet(objet, e, r) {
+    tip.innerHTML = objet.html + '<br>' + lienRecentrerSur(objet.centre, objet.quoi).trim();
     placerTip(e, r);
     tip.classList.add('epingle');
     tipEpingle = true;
@@ -9519,6 +9544,10 @@ renderer.domElement.addEventListener('pointerup', e => {
     raycaster.setFromCamera(souris, camera);
     const hit = raycaster.intersectObjects(ciblesSurvol, false)[0];
     if (!hit) return;
+    // Un arbre, un véhicule, un bateau, une piscine : pas de fiche, mais son
+    // infobulle épinglée, avec de quoi recentrer la scène dessus.
+    const objet = objetSous(hit);
+    if (objet) { epinglerObjet(objet, e, r); return; }
     const ud = hit.object.userData;
     // Une parcelle vendue, ou un bâtiment posé dessus : ses ventes dans le panneau.
     if (ud.parcelle) {
