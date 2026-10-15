@@ -1,7 +1,7 @@
 """Relevés des détections sur l'orthophoto : ce que les réseaux ont vu,
 rangé par morceau de terrain plutôt que par point.
 
-La couche des véhicules (ou des piscines) d'un point s'écrit à côté de sa
+La couche des véhicules (ou des piscines, ou des navires) d'un point s'écrit à côté de sa
 scène (scene.Cache) ; la détection qui la nourrit coûte, elle, de quelques
 secondes à une minute sur CoreML, cinq dans le conteneur (vehicules.MOTEURS).
 Or deux points voisins voient en grande partie le même terrain : une flèche
@@ -17,15 +17,15 @@ exactement, et le point décalé d'une flèche, arrondi au même pas, aussi. La
 bande qui manque après un décalage tombe juste sur la grille, sans liseré.
 
 **Le cœur et la marge.** Un relevé détecte sur son cœur élargi d'une
-marge de chaque côté (MARGE_VEHICULES_PX, MARGE_PISCINES_PX), et ne garde que les boîtes dont le centre tombe dans le cœur
+marge de chaque côté (MARGE_VEHICULES_PX, MARGE_PISCINES_PX, MARGE_NAVIRES_PX), et ne garde que les boîtes dont le centre tombe dans le cœur
 (à TOLERANCE_M près) : un véhicule ou un bassin à cheval sur la limite de
 deux relevés est vu entier par chacun.
 
 **Doublons.** Deux relevés voisins peuvent voir le même objet près de leur
 limite commune : de deux boîtes de relevés différents qui se doublent, la
 première dans l'ordre des détecteurs puis du score est gardée, avec les
-règles de vehicules.sans_doublons (et, pour les piscines, celle d'un
-détecteur à l'autre : le centre de l'une dans l'autre).
+règles de vehicules.sans_doublons (et, pour les piscines et les navires,
+celle d'un détecteur à l'autre : le centre de l'une dans l'autre).
 
 **Un relevé est écrit entier, ou pas du tout** : une orthophoto illisible
 ou une détection en échec lève, et rien n'est écrit pour lui ; la couche du
@@ -78,6 +78,11 @@ PAR_DEGRE = 10_000
 # lue pour elles sert aux véhicules, recadrée (`recadrer`).
 MARGE_VEHICULES_PX = 64
 MARGE_PISCINES_PX = 128
+# Les navires prennent 256 px (51 m), la moitié d'un yacht de 100 m : le plus
+# long vu entier fait 80 m (Monaco). L'image du lot est lue à cette marge, et
+# recadrée pour les piscines et les véhicules ; sa lecture et la détection
+# des navires y gagnent 6 % de pixels en zone de 1 000 m.
+MARGE_NAVIRES_PX = 256
 
 # Une boîte est gardée par son relevé si son centre tombe dans le cœur, ou
 # à moins de TOLERANCE_M au-dehors : d'un relevé à l'autre, le centre d'un
@@ -195,8 +200,8 @@ def _polygone(x, y, b):
 
 
 def _doublon(x, y, b, xo, yo, bo, centre_dans_l_autre):
-    """Les règles de vehicules.sans_doublons, en mètres ; pour les piscines,
-    aussi celle d'un détecteur à l'autre (detecter_piscines)."""
+    """Les règles de vehicules.sans_doublons, en mètres ; pour les piscines
+    et les navires, aussi celle d'un détecteur à l'autre (_detecter_classe)."""
     d2 = (x - xo) ** 2 + (y - yo) ** 2
     if d2 < DOUBLON_CENTRES_M ** 2:
         return True
@@ -243,8 +248,8 @@ def reunir(releves, detecteurs, centre_dans_l_autre=False):
 
 
 class Releves:
-    """Les relevés sur disque, un dossier par genre (`vehicules-<détecteur>`
-    ou `piscines-<mode>`, et la version), un fichier par relevé, nommé par
+    """Les relevés sur disque, un dossier par genre (`vehicules-<détecteur>`,
+    `piscines-<mode>` ou `navires-<mode>`, et la version), un fichier par relevé, nommé par
     son cœur : `ouest_sud_est_nord.json.gz`, en cellules."""
 
     def __init__(self, dossier):
@@ -327,8 +332,8 @@ class Releves:
 
         Args:
             detecter: (emprise de l'image, rgb=None) -> brut en pixels
-                (vehicules.Lecteur.piscines, .vehicules(d)).
-            cle: celle des boîtes dans le brut, "boites" ou "piscines".
+                (vehicules.Lecteur.piscines, .navires, .vehicules(d)).
+            cle: celle des boîtes dans le brut, "boites", "piscines" ou "navires".
             marge_px: celle de l'image de chaque relevé.
             images: {rectangle: (marge, orthophoto de son emprise_image)},
                 déjà lues ; recadrées à `marge_px`.

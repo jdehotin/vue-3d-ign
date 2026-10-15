@@ -293,6 +293,7 @@
                 <button class="toggle" id="t-nuage" hidden title="Tout le bâti en points du nuage LiDAR HD ; les ouvrages ajourés, comme la tour Eiffel, y sont toujours">Nuage LiDAR</button>
                 <button class="toggle on" id="t-vehicules" hidden title="Véhicules vus sur l'orthophoto, le jour de la prise de vue">Véhicules</button>
                 <button class="toggle on" id="t-piscines" hidden title="Piscines vues sur l'orthophoto">Piscines</button>
+                <button class="toggle on" id="t-navires" hidden title="Bateaux vus sur l'orthophoto, sur l'eau">Bateaux</button>
                 <button class="toggle on" id="t-panneaux" hidden title="Panneaux solaires du registre OpenPVMapper">Panneaux solaires</button>
                 <button class="toggle" id="t-dpe" title="Diagnostics de performance énergétique (ADEME) des bâtiments autour du point : lus au premier clic">DPE</button>
                 <button class="toggle" id="t-dvf" title="Ventes immobilières des cinq dernières années (DVF) autour du point : lues au premier clic">Ventes DVF</button>
@@ -833,7 +834,7 @@ selectZone.addEventListener('change', () => {
 document.getElementById('btn-reconstruire').addEventListener('click', async e => {
     const bouton = e.currentTarget;
     if (!confirm("Relire les données de l'IGN et reconstruire cette scène et ses couches ?\n"
-                 + 'Quelques secondes pour la scène ; véhicules et piscines se détectent ensuite.')) return;
+                 + 'Quelques secondes pour la scène ; véhicules, piscines et bateaux se détectent ensuite.')) return;
     bouton.disabled = true;
     try {
         const r = await fetch(`api/reconstruire?${REQUETE}`, { method: 'POST' });
@@ -1996,6 +1997,7 @@ function majCiblesSurvol() {
     if (groupeOuvrages && groupeOuvrages.visible) ciblesSurvol.push(...ouvragesSurvol);
     if (groupeVehicules && groupeVehicules.visible) ciblesSurvol.push(...groupeVehicules.children);
     if (groupePiscines && groupePiscines.visible) ciblesSurvol.push(...groupePiscines.children);
+    if (groupeNavires && groupeNavires.visible) ciblesSurvol.push(...groupeNavires.children);
     if (groupePanneaux && groupePanneaux.visible) ciblesSurvol.push(...groupePanneaux.children);
     if (groupeDpe && groupeDpe.visible) ciblesSurvol.push(...groupeDpe.children);
     if (groupeDvf && groupeDvf.visible) ciblesSurvol.push(...groupeDvf.children);
@@ -3339,6 +3341,7 @@ function appliquerExageration() {
     if (pointsNuage) placerNuage();
     if (vehiculesPoses && vehiculesPoses.length) placerVehicules();
     if (piscinesPosees) placerPiscines();
+    if (naviresPoses && naviresPoses.length) placerNavires();
     // Le grand plan gris sert de fond au-delà de l'emprise, et sous les trous
     // de l'anneau : on le glisse sous le point le plus bas du terrain pour
     // qu'il ne le traverse pas.
@@ -3436,6 +3439,7 @@ async function chargerRelief() {
         construireNuage();
         construireVehicules();
         construirePiscines();
+        construireNavires();
         construirePanneaux();
         return;
     }
@@ -3492,6 +3496,7 @@ async function chargerRelief() {
     construireNuage();
     construireVehicules();
     construirePiscines();
+    construireNavires();
     construirePanneaux();
     sourceRelief = source.nom;
     majCredits();
@@ -5421,9 +5426,9 @@ function ajouterVehicules(detecteur, couche) {
 }
 
 /**
- * Les couches de l'orthophoto, l'une après l'autre : les piscines (une
- * demi-seconde de détection), puis les véhicules de chaque détecteur du
- * service, du rapide au lent. Chacune s'affiche dès qu'elle est prête, sans
+ * Les couches de l'orthophoto, l'une après l'autre : les piscines et les
+ * bateaux (une demi-seconde de détection chacune), puis les véhicules de
+ * chaque détecteur du service, du rapide au lent. Chacune s'affiche dès qu'elle est prête, sans
  * attendre la suivante ; le serveur les calcule dans le même ordre.
  */
 async function chargerDetections() {
@@ -5436,6 +5441,7 @@ async function chargerDetections() {
     if (!service || !service.detecteurs || !service.detecteurs.length) return;   // sans détecteur
     VEHICULES.mode = service.mode;
     await chargerCouche('Piscines', URL_PISCINES, p => { PISCINES = p; construirePiscines(); });
+    await chargerCouche('Bateaux', URL_NAVIRES, n => { NAVIRES = n; construireNavires(); });
     for (const detecteur of service.detecteurs) {
         await chargerCouche(`Véhicules (${detecteur})`, urlVehicules(detecteur),
                             v => ajouterVehicules(detecteur, v));
@@ -5529,6 +5535,162 @@ function placerPiscines() {
 document.getElementById('t-piscines').addEventListener('click', e => {
     groupePiscines.visible = !groupePiscines.visible;
     e.currentTarget.classList.toggle('on', groupePiscines.visible);
+    majCiblesSurvol();
+});
+
+// --- Bateaux de l'orthophoto -------------------------------------------------------
+// Lus par les mêmes réseaux, classe « ship » (/api/navires), et gardés par le
+// serveur sur l'eau seulement : bassins des ports, lacs, rivières, mer. La
+// boîte donne la place, la longueur, la largeur et l'axe ; ni la hauteur, ni
+// le type, ni le sens : trois façons de deviner l'étrave, jugées sur 112
+// bateaux, en donnaient le bon sens deux fois sur trois (vue3d/vehicules.py,
+// NAVIRES). La coque est donc effilée aux deux bouts, la superstructure au
+// milieu. Gabarits et hauteurs de convention, d'après la longueur.
+const URL_NAVIRES = `api/navires?${REQUETE}`;
+const GABARITS_NAVIRE = {
+    // tirant : sous la flottaison ; franc : de la flottaison au pont ;
+    // roufs : [part de la longueur, part de la largeur, hauteur], de bas en haut.
+    annexe: { nom: 'Barque ou annexe', longueurMax: 7, tirant: 0.3, franc: 0.5, roufs: [] },
+    vedette: { nom: 'Vedette ou voilier', longueurMax: 15, tirant: 0.6, franc: 1.0, roufs: [[0.4, 0.62, 0.9]] },
+    yacht: { nom: 'Yacht', longueurMax: 35, tirant: 1.4, franc: 1.8, roufs: [[0.55, 0.8, 2.4], [0.32, 0.66, 2.2]] },
+    grand: { nom: 'Grand yacht ou navire', longueurMax: Infinity, tirant: 2.4, franc: 2.8,
+             roufs: [[0.62, 0.84, 2.8], [0.46, 0.74, 2.6], [0.26, 0.6, 2.4]] },
+};
+// Deux bateaux voisins d'un ponton ont des boîtes qui se touchent : la coque
+// est dessinée en retrait, comme les véhicules.
+const NAVIRE_PART_LONGUEUR = 0.96;
+const NAVIRE_PART_LARGEUR = 0.88;
+let NAVIRES = null;            // { mode, navires }
+// `var` : majCiblesSurvol() et appliquerExageration() les lisent avant que ce
+// bloc soit évalué.
+var groupeNavires = new THREE.Group();
+scene.add(groupeNavires);
+var naviresPoses = [];         // { maillages, liste } par gabarit
+
+/**
+ * Blocs d'un bateau : x de −0,5 à 0,5 (longueur), z de −0,5 à 0,5 (largeur),
+ * y en mètres, de 0 (quille) au toit du dernier rouf. Chaque bloc est un solide fermé
+ * entre deux polygones convexes horizontaux de même nombre de sommets,
+ * triangles tournés vers l'extérieur.
+ *
+ * Returns: [{ teinte: 'caisse' | 'vitre', tris: [[a, b, c], ...] }]
+ */
+function blocsNavire(gabarit) {
+    const g = GABARITS_NAVIRE[gabarit];
+    // Polygones parcourus comme la base de blocsVehicule : du bout x < 0, le
+    // long du flanc z < 0, puis retour par z > 0.
+    const prisme = (teinte, y0, y1, bas, haut) => {
+        const b = bas.map(([x, z]) => [x, y0, z]), h = haut.map(([x, z]) => [x, y1, z]);
+        const tris = [];
+        for (let i = 1; i + 1 < b.length; i++) {
+            tris.push([b[0], b[i], b[i + 1]]);                  // dessous
+            tris.push([h[0], h[i + 1], h[i]]);                  // dessus
+        }
+        for (let i = 0; i < b.length; i++) {
+            const j = (i + 1) % b.length;
+            tris.push([b[i], h[i], h[j]], [b[i], h[j], b[j]]);  // flancs
+        }
+        return { teinte, tris };
+    };
+    // La coque vue de dessus, effilée aux deux bouts.
+    const coque = (sx, sz) => [[-0.5, 0], [-0.42, -0.32], [-0.25, -0.5], [0.25, -0.5], [0.42, -0.32],
+                               [0.5, 0], [0.42, 0.32], [0.25, 0.5], [-0.25, 0.5], [-0.42, 0.32]]
+        .map(([x, z]) => [x * sx, z * sz]);
+    const rect = (l, b) => [[-l / 2, -b / 2], [l / 2, -b / 2], [l / 2, b / 2], [-l / 2, b / 2]];
+    const flottaison = g.tirant, pont = g.tirant + g.franc;
+    const blocs = [
+        prisme('caisse', 0, flottaison, coque(0.8, 0.35), coque(0.95, 0.9)),       // œuvres vives, en V
+        prisme('caisse', flottaison, pont, coque(0.95, 0.9), coque(1, 1)),          // œuvres mortes
+    ];
+    let y = pont;
+    for (const [l, b, h] of g.roufs) {
+        blocs.push(prisme('caisse', y, y + 0.3 * h, rect(l, b), rect(l, b)));
+        blocs.push(prisme('vitre', y + 0.3 * h, y + 0.85 * h, rect(l * 0.97, b * 0.97), rect(l * 0.94, b * 0.94)));
+        blocs.push(prisme('caisse', y + 0.85 * h, y + h, rect(l * 0.94, b * 0.94), rect(l * 0.94, b * 0.94)));
+        y += h;
+    }
+    return blocs;
+}
+
+function construireNavires() {
+    if (!NAVIRES || !reliefRegle || naviresPoses.length) return;
+    const parGabarit = Object.fromEntries(Object.keys(GABARITS_NAVIRE).map(g => [g, []]));
+    for (const [lon, lat, longueur, largeur, cap, couleur] of NAVIRES.navires || []) {
+        const gabarit = Object.keys(GABARITS_NAVIRE).find(g => longueur < GABARITS_NAVIRE[g].longueurMax);
+        parGabarit[gabarit].push({ lon, lat, longueur, largeur, cap, couleur, gabarit });
+    }
+    for (const [gabarit, liste] of Object.entries(parGabarit)) {
+        if (!liste.length) continue;
+        const blocs = blocsNavire(gabarit);
+        const geometrie = (teinte, colorer) => {
+            const pos = [], col = [];
+            for (const b of blocs) {
+                if (b.teinte !== teinte) continue;
+                for (const t of b.tris) for (const p of t) {
+                    pos.push(...p);
+                    if (colorer) col.push(...TEINTE_VITRE);
+                }
+            }
+            const geo = new THREE.BufferGeometry();
+            geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+            if (colorer) geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+            geo.computeVertexNormals();
+            return geo;
+        };
+        // La coque et les roufs teints du pont lu sur l'orthophoto ; les
+        // vitrages, sombres.
+        const maillages = [new THREE.InstancedMesh(geometrie('caisse', false), MAT_CARROSSERIE, liste.length)];
+        if (blocs.some(b => b.teinte === 'vitre')) {
+            maillages.push(new THREE.InstancedMesh(geometrie('vitre', true), MAT_VITRES, liste.length));
+        }
+        const teinte = new THREE.Color();
+        liste.forEach((n, i) => maillages[0].setColorAt(i, teinte.setHex(n.couleur)));
+        for (const m of maillages) {
+            m.castShadow = true; m.receiveShadow = true;
+            m.userData = { navires: liste };
+            groupeNavires.add(m);
+        }
+        naviresPoses.push({ maillages, liste });
+    }
+    if (!naviresPoses.length) return;
+    placerNavires();
+    const bouton = document.getElementById('t-navires');
+    bouton.hidden = false;
+    bouton.title = `${NAVIRES.navires.length} bateau(x) vus sur l'orthophoto, sur l'eau, le jour de la prise de vue `
+        + `(détecteur : ${NAVIRES.mode})`;
+    majCiblesSurvol();
+}
+
+/**
+ * De niveau, la flottaison sur l'eau dessinée (le sol exagéré du centre,
+ * EAU_DECALAGE au-dessus) ; dimensions réelles, comme les bâtiments. Hors
+ * relief, en mer le plus souvent, le sol est à 0.
+ */
+function placerNavires() {
+    const matrice = new THREE.Matrix4();
+    const axe = new THREE.Vector3(), haut = new THREE.Vector3(), travers = new THREE.Vector3();
+    for (const { maillages, liste } of naviresPoses) {
+        liste.forEach((n, i) => {
+            const cap = n.cap * Math.PI / 180, est = Math.sin(cap), nord = Math.cos(cap);
+            const [x, y] = toLocal(n.lon, n.lat);
+            const { X, Y, Z } = repereVehicule(est, nord, 1, 1, 0, 0, 0, 0);       // à plat
+            matrice.makeBasis(axe.fromArray(X).multiplyScalar(n.longueur * NAVIRE_PART_LONGUEUR),
+                              haut.fromArray(Y),
+                              travers.fromArray(Z).multiplyScalar(n.largeur * NAVIRE_PART_LARGEUR));
+            const flottaison = ySol(n.lon, n.lat) + EAU_DECALAGE;
+            matrice.setPosition(x, flottaison - GABARITS_NAVIRE[n.gabarit].tirant, -y);
+            for (const m of maillages) m.setMatrixAt(i, matrice);
+        });
+        for (const m of maillages) {
+            m.instanceMatrix.needsUpdate = true;
+            m.computeBoundingSphere();          // le lancer de rayon du survol s'y fie
+        }
+    }
+}
+
+document.getElementById('t-navires').addEventListener('click', e => {
+    groupeNavires.visible = !groupeNavires.visible;
+    e.currentTarget.classList.toggle('on', groupeNavires.visible);
     majCiblesSurvol();
 });
 
@@ -8233,6 +8395,16 @@ renderer.domElement.addEventListener('pointermove', e => {
             + `<br>boîte de ${enMetres(v.longueur)} sur ${enMetres(v.largeur)}, lue sur l'orthophoto`
             + '<br><i>là où il était le jour de la prise de vue</i>'
             + '<br><i>hauteur et forme de convention, avant et arrière non distingués</i>';
+        placerTip(e, r);
+        return;
+    }
+
+    if (touche && touche.object.userData.navires && touche.instanceId != null) {
+        const n = touche.object.userData.navires[touche.instanceId];
+        tip.innerHTML = `<b>${GABARITS_NAVIRE[n.gabarit].nom}</b>`
+            + `<br>boîte de ${enMetres(n.longueur)} sur ${enMetres(n.largeur)}, lue sur l'orthophoto`
+            + '<br><i>là où il était le jour de la prise de vue</i>'
+            + '<br><i>hauteur et forme de convention, proue et poupe non distinguées</i>';
         placerTip(e, r);
         return;
     }

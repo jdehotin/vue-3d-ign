@@ -27,8 +27,8 @@ vue3d/ouvrages.py) suivent le même chemin (`Cache.obtenir_ouvrages`) : rien de
 ce qu'ils décrivent n'entre dans un calcul de la scène, qui n'a donc pas à
 échouer avec eux ni à être reconstruite quand leur format change.
 
-Les véhicules et les piscines de l'orthophoto (vue3d/vehicules.py) sont une
-troisième couche à part, optionnelle : elle n'existe que si le service a été
+Les véhicules, les piscines et les navires de l'orthophoto (vue3d/vehicules.py)
+sont une troisième couche à part, optionnelle : elle n'existe que si le service a été
 lancé avec un détecteur (`Cache.obtenir_vehicules`, `VUE3D_VEHICULES`). Les
 panneaux solaires du registre OpenPVMapper (vue3d/panneaux.py) en sont une
 quatrième, optionnelle aussi (`Cache.obtenir_panneaux`, `VUE3D_PANNEAUX`).
@@ -82,12 +82,13 @@ from .ortho import fetch_exg_grid, fetch_ortho_jpeg
 from .nuage import NUAGE_VERSION, fetch_nuage, nuage_pour_emprise
 from .ouvrages import OUVRAGES_VERSION, fetch_ouvrages, ouvrages_pour_emprise
 from .panneaux import PANNEAUX_VERSION, panneaux_pour_emprise
-from .releves import MARGE_PISCINES_PX, MARGE_VEHICULES_PX, Releves, emprise_image
+from .releves import (MARGE_NAVIRES_PX, MARGE_PISCINES_PX, MARGE_VEHICULES_PX, Releves,
+                      emprise_image)
 from .releves import rectangle as rectangle_releve
 from .relief import RELIEF_TAILLE, fetch_relief, fetch_relief_anneau
 from .toits import TOITS_RESOLUTION_M, toits_pour_emprise
-from .vehicules import (PISCINES_VERSION, VEHICULES_VERSION, piscines_pour_emprise,
-                        vehicules_pour_emprise)
+from .vehicules import (NAVIRES_VERSION, PISCINES_VERSION, VEHICULES_VERSION, fetch_mer,
+                        navires_pour_emprise, piscines_pour_emprise, vehicules_pour_emprise)
 
 journal = logging.getLogger(__name__)
 
@@ -184,6 +185,11 @@ def nom_piscines(mode):
     """Fichier des piscines, vues de tous les détecteurs du mode."""
     return f"piscines-{mode}-v{PISCINES_VERSION}.json.gz"
 
+
+def nom_navires(mode):
+    """Fichier des navires, vus de tous les détecteurs du mode."""
+    return f"navires-{mode}-v{NAVIRES_VERSION}.json.gz"
+
 # Le service couvre la France. Au-delà, les couches répondent vide et la scène
 # n'aurait rien à montrer : mieux vaut le dire tout de suite.
 EMPRISE_SERVIE = {"lat": (41.0, 51.6), "lon": (-5.8, 10.0)}
@@ -194,9 +200,9 @@ class SceneIncomplete(RuntimeError):
 
 
 class VehiculesIndisponibles(RuntimeError):
-    """L'orthophoto des véhicules ou des piscines n'a pas pu être lue, ou la
-    détection a échoué : rien n'est mis en cache, la scène reste affichée
-    sans eux."""
+    """L'orthophoto des véhicules, des piscines ou des navires n'a pas pu
+    être lue, ou la détection a échoué, ou la mer des navires n'a pas été
+    lue : rien n'est mis en cache, la scène reste affichée sans eux."""
 
 
 class VehiculesDesactives(RuntimeError):
@@ -713,15 +719,17 @@ class Cache:
 
     def __init__(self, dossier, lire_monuments=fetch_monuments, lire_ouvrages=fetch_ouvrages,
                  lire_vehicules=None, lire_panneaux=None, lire_nuage=fetch_nuage,
-                 lire_dpe=fetch_dpe, lire_dvf=fetch_dvf):
+                 lire_dpe=fetch_dpe, lire_dvf=fetch_dvf, lire_mer=fetch_mer):
         """`lire_vehicules` : de `vehicules.lecteur()`, ou une doublure qui a
         la même forme — `mode`, `detecteurs`, `orthophoto(emprise)` -> tableau
-        RGB, `piscines(emprise, rgb=None)` et `vehicules(detecteur)` -> une
-        lecture `(emprise, rgb=None)` ; `rgb` est l'orthophoto déjà lue
-        (prelire_vehicules), None pour que la lecture lise la sienne. Ses
-        `sessions` d'inférence, s'il en a, cèdent le processeur aux scènes
-        (_qui_cede). None, et les couches des véhicules et des piscines
-        n'existent pas.
+        RGB, `piscines(emprise, rgb=None)`, `navires(emprise, rgb=None)` et
+        `vehicules(detecteur)` -> une lecture `(emprise, rgb=None)` ; `rgb`
+        est l'orthophoto déjà lue (prelire_vehicules), None pour que la
+        lecture lise la sienne. Ses `sessions` d'inférence, s'il en a, cèdent
+        le processeur aux scènes (_qui_cede). None, et les couches des
+        véhicules, des piscines et des navires n'existent pas.
+        `lire_mer` : (emprise) -> de quoi dire où est la mer
+        (vehicules.fetch_mer), lue pour les navires qui en ont.
         `lire_panneaux` : de `panneaux.lecteur()`, (emprise) -> installations ;
         None, et la couche des panneaux n'existe pas."""
         self.dossier = dossier
@@ -747,6 +755,7 @@ class Cache:
         self.lire_nuage = lire_nuage
         self.lire_dpe = lire_dpe
         self.lire_dvf = lire_dvf
+        self.lire_mer = lire_mer
         self._lectures = {}
         self._taches = {
             NOM_MONUMENTS: concurrent.futures.ThreadPoolExecutor(
@@ -760,11 +769,13 @@ class Cache:
         if lire_vehicules:
             # Un seul fil pour toutes les détections : chacune occupe déjà
             # tous les cœurs. Elles passent dans l'ordre où elles sont
-            # lancées — les piscines, puis les détecteurs du rapide au lent —
-            # et deux scènes demandées ensemble attendent leur tour.
+            # lancées — les piscines, les navires, puis les détecteurs du
+            # rapide au lent — et deux scènes demandées ensemble attendent
+            # leur tour.
             detection = concurrent.futures.ThreadPoolExecutor(max_workers=1,
                                                               thread_name_prefix="detection")
             self._taches[nom_piscines(self.mode_vehicules)] = detection
+            self._taches[nom_navires(self.mode_vehicules)] = detection
             for detecteur in lire_vehicules.detecteurs:
                 self._taches[nom_vehicules(detecteur)] = detection
             # L'orthophoto que les détections d'un point se partagent, lue à
@@ -1153,22 +1164,32 @@ class Cache:
         d'une image, clé de ses boîtes, marge de l'image de ses relevés)]."""
         lecteur, mode = self.lire_vehicules, self.mode_vehicules
         return [(nom_piscines(mode), f"piscines-{mode}", lecteur.piscines, "piscines",
-                 MARGE_PISCINES_PX)] + [
+                 MARGE_PISCINES_PX),
+                (nom_navires(mode), f"navires-{mode}", lecteur.navires, "navires",
+                 MARGE_NAVIRES_PX)] + [
             (nom_vehicules(d), f"vehicules-{d}", lecteur.vehicules(d), "boites", MARGE_VEHICULES_PX)
             for d in lecteur.detecteurs]
 
     def _relever(self, genre, lire, cle, marge_px, bbox, images=None):
         """Brut de la couche sur l'emprise, réuni des relevés qui la couvrent
         (vue3d/releves.py) ; ceux qui manquent sont détectés d'abord, sur
-        `images` quand elles y sont."""
-        return {cle: self.releves.relever(genre, bbox, lire, cle, self.lire_vehicules.detecteurs,
-                                          marge_px, centre_dans_l_autre=cle == "piscines",
+        `images` quand elles y sont.
+
+        Les navires lisent en plus la mer de l'emprise, s'ils en ont un : ni
+        les relevés ni la scène ne la portent (vehicules.fetch_mer). Loin de
+        l'eau, la détection n'en voit presque jamais, et rien n'est lu."""
+        brut = {cle: self.releves.relever(genre, bbox, lire, cle, self.lire_vehicules.detecteurs,
+                                          marge_px, centre_dans_l_autre=cle != "boites",
                                           images=images)}
+        if cle == "navires":
+            brut["mer"] = self.lire_mer(*bbox) if brut[cle] else None
+        return brut
 
     def prelire_vehicules(self, lat, lon, zone=None):
         """Lance en tâche de fond les détections sur l'orthophoto à 0,2 m, si
-        le service a un détecteur : les piscines d'abord (une demi-seconde),
-        puis les véhicules de chaque détecteur, du rapide au lent. Leur
+        le service a un détecteur : les piscines et les navires d'abord (une
+        demi-seconde chacun), puis les véhicules de chaque détecteur, du rapide
+        au lent. Leur
         orthophoto se lit pendant que la scène se construit ; au processeur,
         leurs inférences attendent qu'elle soit écrite (attendre_les_scenes).
 
@@ -1290,6 +1311,29 @@ class Cache:
             lambda bbox, brut, scene: piscines_pour_emprise(
                 *bbox, brut, self.mode_vehicules, scene.get("batiments"),
                 scene.get("eau")), zone=zone), nom
+
+    def obtenir_navires(self, lat, lon, construire=construire, zone=None):
+        """(dossier, nom du fichier) des navires du point.
+
+        La couche lit les bâtiments, l'eau et les ponts de la scène, et la
+        mer (vehicules.fetch_mer) : un navire n'est gardé que sur l'eau.
+
+        Raises:
+            VehiculesDesactives si le service tourne sans détecteur.
+            VehiculesIndisponibles si l'orthophoto ou la mer n'ont pas pu être
+            lues, ou si la détection a échoué : rien n'est écrit, la demande
+            suivante réessaie.
+        """
+        if not self.lire_vehicules:
+            raise VehiculesDesactives("service lancé sans détecteur de véhicules")
+        nom, genre, lire, cle, marge = self._detections()[1]
+        self._detections_si_absente(nom, lat, lon, zone)
+        return self._obtenir_couche(
+            nom, lat, lon, construire, lambda *bbox: self._relever(genre, lire, cle, marge, bbox),
+            lambda message: VehiculesIndisponibles(f"navires illisibles : {message}"),
+            lambda bbox, brut, scene: navires_pour_emprise(
+                *bbox, brut, self.mode_vehicules, scene.get("batiments"),
+                scene.get("eau"), scene.get("routes")), zone=zone), nom
 
     def obtenir_vehicules(self, lat, lon, detecteur, construire=construire, zone=None):
         """(dossier, nom du fichier) des véhicules du point vus d'un détecteur.

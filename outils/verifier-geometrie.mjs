@@ -18,6 +18,8 @@
 // - véhicules (blocsVehicule, repereVehicule) : chaque bloc fermé, tourné vers
 //   l'extérieur, dans le gabarit unité ; le repère d'un véhicule posé sur une
 //   pente reste orthonormé, direct, le toit vers le haut ;
+// - bateaux (blocsNavire) : de même, de la quille au dernier rouf, la coque
+//   symétrique d'un bout à l'autre ;
 // - normales et sphères englobantes que la page calcule elle-même, pour aller
 //   plus vite (normalesFacettes, normalesPliees, normalesIndexees,
 //   sphereEnglobante) : identiques à l'octet à celles de three.js
@@ -65,15 +67,15 @@ const M = 111320, MLON = 111320 * Math.cos(45 * Math.PI / 180);
 const toLocal = (lon, lat) => [(lon - 2) * MLON, (lat - 45) * M];
 const NOMS = ['couperPolygone', 'enveloppeConvexe', 'rectangleMin', 'rectangleSelonAxe',
               'geometrieToitDecoupe', 'stationsLeLong', 'prismeLeLong', 'dalle',
-              'blocsVehicule', 'repereVehicule', 'normalesFacettes', 'poserNormaleFacette', 'geometrieFacettes',
+              'blocsVehicule', 'repereVehicule', 'blocsNavire', 'normalesFacettes', 'poserNormaleFacette', 'geometrieFacettes',
               'normalesPliees', 'normalesIndexees', 'sphereEnglobante',
               'alea', 'portDe', 'portMesure', 'gabaritHouppier', 'facesHouppier', 'sommetsHouppier', 'ajouterHouppier',
               'nouveauTampon', 'facesHouppierSimple', 'sommetsHouppierSimple', 'ajouterHouppierSimple',
               'vegetationExtraite', 'partConstruite'];
 const CONSTS = ['PORTS', 'SEGMENTS_HOUPPIER', 'SEGMENTS_SIMPLE', 'ANGLES_HOUPPIER', 'COS_HOUPPIER', 'BOSSES_HOUPPIER',
-                'EMPRISE_HOUPPIER', 'HAUTEUR_MIN_TRONC', 'PART_LECTURES'];
+                'EMPRISE_HOUPPIER', 'HAUTEUR_MIN_TRONC', 'PART_LECTURES', 'GABARITS_NAVIRE'];
 const { rectangleMin, rectangleSelonAxe, geometrieToitDecoupe, stationsLeLong, prismeLeLong, dalle,
-        blocsVehicule, repereVehicule, normalesFacettes, normalesPliees, normalesIndexees, sphereEnglobante,
+        blocsVehicule, repereVehicule, blocsNavire, GABARITS_NAVIRE, normalesFacettes, normalesPliees, normalesIndexees, sphereEnglobante,
         alea, portDe, facesHouppier, sommetsHouppier, ajouterHouppier, nouveauTampon, vegetationExtraite, partConstruite,
         facesHouppierSimple, sommetsHouppierSimple, ajouterHouppierSimple,
         SEGMENTS_HOUPPIER, EMPRISE_HOUPPIER, HAUTEUR_MIN_TRONC, PART_LECTURES } =
@@ -278,6 +280,38 @@ const plat = repereVehicule(0, 1, 4.3, 1.8, 0, 0, 0, 0);       // cap nord, sol 
 const platOk = [plat.X, plat.Y, plat.Z].flat().every((c, i) => Math.abs(c - [0, 0, -1, 0, 1, 0, 1, 0, 0][i]) < 1e-12);
 console.log(`${mauvais === 0 && platOk ? 'OK ' : 'KO '} repère d'un véhicule : ${essais} poses, ${mauvais} fausses, écart à l'orthonormé ${pire.toExponential(1)}, à plat cap nord ${platOk ? 'avant au nord, droite à l\'est' : 'FAUX'}`);
 tout = tout && mauvais === 0 && platOk;
+}
+
+// --- Bateaux --------------------------------------------------------------------
+{
+for (const gabarit of Object.keys(GABARITS_NAVIRE)) {
+  const g = GABARITS_NAVIRE[gabarit];
+  const hauteur = g.tirant + g.franc + g.roufs.reduce((h, r) => h + r[2], 0);
+  const blocs = blocsNavire(gabarit);
+  let ouvertes = 0, dehors = 0, retournes = 0, volume = 0, asymetrie = 0;
+  const cle = p => p.map(c => c.toFixed(5)).join(',');
+  for (const b of blocs) {
+    const aretes = new Map();
+    let v = 0;
+    for (const [a, bb, c] of b.tris) {
+      v += (a[0] * (bb[1] * c[2] - bb[2] * c[1]) - a[1] * (bb[0] * c[2] - bb[2] * c[0]) + a[2] * (bb[0] * c[1] - bb[1] * c[0])) / 6;
+      for (const [u, w] of [[a, bb], [bb, c], [c, a]]) aretes.set(cle(u) + '>' + cle(w), (aretes.get(cle(u) + '>' + cle(w)) || 0) + 1);
+      for (const p of [a, bb, c]) if (Math.abs(p[0]) > 0.5 + 1e-9 || p[1] < -1e-9 || p[1] > hauteur + 1e-9 || Math.abs(p[2]) > 0.5 + 1e-9) dehors++;
+    }
+    for (const [k, n] of aretes) { const [u, w] = k.split('>'); if (n !== 1 || (aretes.get(w + '>' + u) || 0) !== 1) ouvertes++; }
+    if (v <= 0) retournes++;
+    volume += v;
+  }
+  // Proue et poupe ne sont pas distinguées : le bateau retourné bout pour
+  // bout a les mêmes sommets.
+  const sommets = new Set(blocs.flatMap(b => b.tris.flat().map(cle)));
+  for (const p of blocs.flatMap(b => b.tris.flat())) if (!sommets.has(cle([-p[0] || 0, p[1], p[2]]))) asymetrie++;
+  const teintes = new Set(blocs.map(b => b.teinte));
+  const ok = ouvertes === 0 && dehors === 0 && retournes === 0 && asymetrie === 0 && teintes.has('caisse')
+    && (g.roufs.length === 0 || teintes.has('vitre'));
+  console.log(`${ok ? 'OK ' : 'KO '} bateau « ${gabarit} » : ${blocs.length} blocs, volume ${volume.toFixed(2)} m sur le gabarit unité, hauteur ${hauteur.toFixed(1)} m, arêtes sans vis-à-vis ${ouvertes}, blocs retournés ${retournes}, sommets hors gabarit ${dehors}, sans symétrique ${asymetrie}`);
+  tout = tout && ok;
+}
 }
 
 // --- Normales et sphères calculées par la page ----------------------------------

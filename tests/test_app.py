@@ -48,7 +48,8 @@ def client(tmp_path):
 @pytest.fixture
 def client_vehicules(tmp_path):
     """Un service lancé avec un détecteur : la lecture rend une boîte au
-    centre d'une orthophoto à 0,2 m, sauf au sud de 46° où elle échoue."""
+    centre d'une orthophoto à 0,2 m, sauf au sud de 46° où elle échoue ; un
+    navire un peu au sud, et la mer partout."""
     scene = {"version": 1, "bbox": [0, 0, 1, 1], "batiments": {"features": []}, "eau": None}
 
     def construire(lat, lon, avancer=None):
@@ -68,6 +69,17 @@ def client_vehicules(tmp_path):
         return {"largeur": rgb.shape[1], "hauteur": rgb.shape[0],
                 "piscines": [[300, 400, 50, 25, 0.0, 0.3, 0x5AC8D2, "rtmdet"]]}
 
+    def lire_navires(west, south, east, north, rgb=None):
+        if rgb is None:
+            rgb = orthophoto(west, south, east, north)
+        largeur, hauteur = rgb.shape[1], rgb.shape[0]
+        return {"largeur": largeur, "hauteur": hauteur,
+                "navires": [[largeur / 2, hauteur / 2 + 100, 60, 20, 0.0, 0.8, 0xF0F0F0, 230, "rtmdet"]]}
+
+    def lire_mer(west, south, east, north):
+        return {"communes": [], "altitudes": {"bbox": (west, south, east, north), "taille": 1,
+                                              "valeurs": [[-99999.0]]}}
+
     def lire_vehicules(detecteur):
         def lire(west, south, east, north, rgb=None):
             if rgb is None:
@@ -78,13 +90,15 @@ def client_vehicules(tmp_path):
         return lire
 
     lecteur = types.SimpleNamespace(mode="rtmdet", detecteurs=("rtmdet",), orthophoto=orthophoto,
-                                    piscines=lire_piscines, vehicules=lire_vehicules)
+                                    piscines=lire_piscines, navires=lire_navires,
+                                    vehicules=lire_vehicules)
     # Les ouvrages aussi sont doublés : sans cela, /api/scene lançait le vrai
     # fetch_ouvrages, et la suite appelait la Géoplateforme (six connexions
     # par passage, relevées le 2 octobre 2026).
     appli = module_app.creer_app(str(tmp_path), construire=construire,
                                  lire_monuments=lambda *b: {"elements": []},
-                                 lire_ouvrages=lambda *b: {}, lire_vehicules=lecteur)
+                                 lire_ouvrages=lambda *b: {}, lire_vehicules=lecteur,
+                                 lire_mer=lire_mer)
     return appli.test_client()
 
 
@@ -206,11 +220,14 @@ def test_sans_detecteur_les_couches_de_l_orthophoto_le_disent(client):
     assert r.headers["Cache-Control"] == "no-store"
     r = client.get("/api/piscines?lat=48.8049&lon=2.1204")
     assert r.get_json() == {"mode": "aucun", "piscines": []} and r.headers["Cache-Control"] == "no-store"
+    r = client.get("/api/navires?lat=48.8049&lon=2.1204")
+    assert r.get_json() == {"mode": "aucun", "navires": []} and r.headers["Cache-Control"] == "no-store"
 
 
 def test_les_couches_de_l_orthophoto_sont_servies_a_part_detecteur_par_detecteur(client_vehicules):
     """La page apprend les détecteurs par /api/sante, demande les piscines,
-    puis les véhicules de chaque détecteur : chaque couche a sa route."""
+    les navires, puis les véhicules de chaque détecteur : chaque couche a sa
+    route."""
     sante = client_vehicules.get("/api/sante")
     assert sante.get_json()["vehicules"] == {"mode": "rtmdet", "detecteurs": ["rtmdet"]}
     assert sante.headers["Cache-Control"] == "no-store"
@@ -218,6 +235,10 @@ def test_les_couches_de_l_orthophoto_sont_servies_a_part_detecteur_par_detecteur
     assert r.status_code == 200 and r.headers["Content-Encoding"] == "gzip"
     couche = json.loads(gzip.decompress(r.data))
     assert couche["mode"] == "rtmdet" and [p[2:] for p in couche["piscines"]] == [[10.0, 5.0, 90.0, 0x5AC8D2]]
+    r = client_vehicules.get("/api/navires?lat=48.8049&lon=2.1204")
+    assert r.status_code == 200 and r.headers["Content-Encoding"] == "gzip"
+    couche = json.loads(gzip.decompress(r.data))
+    assert couche["mode"] == "rtmdet" and [n[2:] for n in couche["navires"]] == [[12.0, 4.0, 90.0, 0xF0F0F0]]
     r = client_vehicules.get("/api/vehicules?lat=48.8049&lon=2.1204&detecteur=rtmdet")
     assert r.status_code == 200 and r.headers["Content-Encoding"] == "gzip"
     couche = json.loads(gzip.decompress(r.data))
@@ -232,6 +253,7 @@ def test_les_couches_de_l_orthophoto_sont_servies_a_part_detecteur_par_detecteur
     assert client_vehicules.get("/api/vehicules?detecteur=rtmdet").status_code == 400
     assert client_vehicules.get("/api/vehicules?lat=40&lon=2&detecteur=rtmdet").status_code == 422
     assert client_vehicules.get("/api/piscines?lat=40&lon=2").status_code == 422
+    assert client_vehicules.get("/api/navires?lat=40&lon=2").status_code == 422
 
 
 def test_la_couche_des_vehicules_est_revalidee_a_chaque_demande(client_vehicules):
@@ -261,6 +283,8 @@ def test_une_panne_des_vehicules_rend_503_sans_toucher_la_scene(client_vehicules
     assert r.status_code == 503 and "véhicules" in r.get_json()["erreur"]
     r = client_vehicules.get("/api/piscines?lat=45.5&lon=2")
     assert r.status_code == 503 and "piscines" in r.get_json()["erreur"]
+    r = client_vehicules.get("/api/navires?lat=45.5&lon=2")
+    assert r.status_code == 503 and "navires" in r.get_json()["erreur"]
     assert client_vehicules.get("/api/scene?lat=45.5&lon=2").status_code == 200
 
 

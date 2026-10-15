@@ -75,6 +75,18 @@ def _bil(west, south, east, north, largeur, hauteur):
     return np.frombuffer(reponse.content[:attendu], dtype="<f4").reshape(hauteur, largeur)
 
 
+def fetch_altitudes(west, south, east, north, taille):
+    """Grille brute du RGE ALTI, `taille` points de côté, ligne 0 au nord, trous
+    compris (RELIEF_NODATA, ou ce que le service en mêle à leurs voisins :
+    voir ANNEAU_TROU_SOUS_M). Pour dire où est la mer (vehicules.fetch_mer),
+    jamais pour la scène.
+
+    Raises:
+        requests.RequestException si le service n'a pas répondu.
+    """
+    return _bil(*map(float, (west, south, east, north)), taille, taille).astype(np.float64)
+
+
 def _quantifier(grille, trous, west, south, east, north):
     """Grille d'altitudes en décimètres au-dessus de son minimum, en base64."""
     hauteur, largeur = grille.shape

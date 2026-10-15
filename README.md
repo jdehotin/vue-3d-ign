@@ -135,10 +135,10 @@ docker cp vue-3d-ign-vue3d-1:/modeles ./modeles
 docker cp vue-3d-ign-vue3d-1:/cache ./cache       # facultatif : les scènes déjà construites
 ```
 
-### Les véhicules et les piscines, en option
+### Les véhicules, les piscines et les bateaux, en option
 
-L'orthophoto montre des véhicules et des piscines ; un réseau de neurones
-peut les y lire, et la vue les pose en volume. C'est une option : `tous`
+L'orthophoto montre des véhicules, des piscines et des bateaux ; un réseau
+de neurones peut les y lire, et la vue les pose en volume. C'est une option : `tous`
 par défaut dans `run_macOS_CoreML.sh`, désactivée dans l'image Docker, où
 c'est un choix de construction :
 
@@ -158,8 +158,9 @@ Temps de calcul sur l'emprise de 356 m, mesurés sur un Mac à dix cœurs, hors
 conteneur (CoreML) puis dans le conteneur ; quatre fois plus en zone de
 1 000 m.
 La scène n'attend pas ces calculs, et chaque résultat s'affiche dès qu'il est
-prêt : les piscines une demi-seconde après la scène, puis les véhicules
-détecteur par détecteur, `rtmdet` avant `yolo`. Sur le processeur (le
+prêt : les piscines une demi-seconde après la scène, les bateaux une
+demi-seconde après elles, puis les véhicules détecteur par détecteur,
+`rtmdet` avant `yolo`. Sur le processeur (le
 conteneur), ils s'interrompent tant qu'une scène se construit, 30 s au plus
 par tuile, pour lui laisser les cœurs.
 Aucun des deux réseaux ne suffit partout : `rtmdet` lit mal un parking serré,
@@ -190,9 +191,10 @@ Aucun des deux réseaux ne suffit partout : `rtmdet` lit mal un parking serré,
   un peu de son rectangle, pour voir entier ce qui chevauche sa limite.
 - **Ce sont les véhicules du jour de la prise de vue**, et seulement ceux que
   le réseau a reconnus : voir [Limites](#limites).
-- **La variable s'appelle `VUE3D_VEHICULES` et apporte aussi les piscines** :
-  la même lecture de l'orthophoto, une demi-seconde de plus. Chacune a son
-  bouton dans la page.
+- **La variable s'appelle `VUE3D_VEHICULES` et apporte aussi les piscines
+  et les bateaux** : la même lecture de l'orthophoto, une demi-seconde à une
+  seconde de plus chacune. Chacune a son bouton dans la page. Loin de l'eau,
+  la couche des bateaux est vide.
 
 ### Les panneaux solaires, en option
 
@@ -444,6 +446,14 @@ Chaque premier chargement construit la scène, en quelques secondes.
 - **Les panneaux solaires**, avec une seconde option : les installations
   du registre OpenPVMapper, posées sur les toits tels qu'ils sont dessinés,
   avec leur surface, leur puissance estimée et l'année de la photo.
+- **Les bateaux**, avec la même option : ceux que l'orthophoto montre sur
+  l'eau — bassins des ports, lacs, rivières, et la mer, que la BD TOPO ne
+  dessine pas —, à flot, dans la couleur de leur pont. 433 au port Hercule
+  de Monaco, 283 en rade de Villefranche, 195 sur le lac d'Annecy, six
+  péniches sous Notre-Dame. Longueur, largeur et axe sont lus sur la photo ;
+  la coque, effilée aux deux bouts, et les superstructures sont de
+  convention, en quatre gabarits (annexe, vedette ou voilier, yacht, grand
+  yacht).
 - **Les piscines**, avec la même option : celles que l'orthophoto montre,
   dans la couleur de leur eau ce jour-là. La BD TOPO n'a pas celles des
   particuliers. L'eau est de niveau, au sol du centre du bassin ; sur une
@@ -492,8 +502,8 @@ géolocalisées d'Etalab (`files.data.gouv.fr/geo-dvf`), sous Licence Ouverte
 
 La couche optionnelle des panneaux solaires lit le registre
 [OpenPVMapper](https://doi.org/10.5281/zenodo.19188878) (G. Kasmi, CC-BY 4.0),
-téléchargé à la construction de l'image. La couche optionnelle des véhicules
-et des piscines n'ajoute pas de source : elle relit
+téléchargé à la construction de l'image. La couche optionnelle des véhicules,
+des piscines et des bateaux n'ajoute pas de source : elle relit
 l'orthophoto, à 0,2 m par pixel, avec un réseau de neurones — RTMDet-R
 ([MMRotate](https://github.com/open-mmlab/mmrotate)) ou YOLO11-OBB
 ([Ultralytics](https://github.com/ultralytics/ultralytics)), au choix de qui
@@ -660,6 +670,15 @@ principales :
   piscine que la BD TOPO porte comme un bâtiment reste un bâtiment. Sur une
   pente raide, où le relief lisse les terrasses, la cuve peut descendre de
   plusieurs mètres côté aval, et le terrain recouvrir l'eau côté amont.
+- **Un bateau n'est vu que sur l'eau, et sans sens de marche.** Ceux posés à
+  terre (aire de carénage, remorque) sont écartés avec les voitures des quais
+  que `rtmdet` prend pour des navires. La boîte ne dit pas où est l'étrave :
+  la coque est effilée aux deux bouts. En mer, la photo montre aussi ce qui
+  n'en est pas : les brise-lames immergés, assez sombres, sont écartés ; les
+  pontons des plages, clairs, passent parfois pour des yachts (un sur dix à
+  Cannes). La mer est ce qui n'est dans aucune commune, au niveau de la mer
+  pour le RGE ALTI : au-delà d'une frontière, le sol étranger bas l'est
+  aussi.
 - **Au pied des falaises, des arbres trop hauts.** En forêt, la hauteur d'un
   arbre accroché à une paroi se compte depuis le pied de celle-ci : 7 houppiers
   de 42 à 60 m à Rocamadour. Hors forêt, le plafond de 40 m efface aussi ce
@@ -680,6 +699,7 @@ principales :
 | `GET /api/ouvrages?lat=…&lon=…` | La couche des murs, ponts, voies ferrées et terrains de sport, en JSON gzippé (`null` sans ouvrage), demandée elle aussi après la scène |
 | `GET /api/nuage?lat=…&lon=…` | Le bâti du nuage de points LiDAR HD, en JSON gzippé (`null` hors couverture), demandé après la scène : 10 à 90 s à la première demande |
 | `GET /api/piscines?lat=…&lon=…` | Les piscines de l'orthophoto, en JSON gzippé, demandées après la scène ; `{"mode": "aucun", "piscines": []}` si le service n'a pas de détecteur |
+| `GET /api/navires?lat=…&lon=…` | Les bateaux de l'orthophoto, sur l'eau, en JSON gzippé, demandés après les piscines ; `{"mode": "aucun", "navires": []}` si le service n'a pas de détecteur, une liste vide loin de l'eau |
 | `GET /api/vehicules?lat=…&lon=…&detecteur=…` | Les véhicules vus d'un détecteur du service (`rtmdet` ou `yolo`), en JSON gzippé ; la page les demande dans l'ordre que donne `/api/sante`, du rapide au lent, et les réunit ; 400 sans le paramètre ou avec un détecteur que le service n'a pas |
 | `GET /api/avancement?lat=…&lon=…` | L'étape de la construction en cours (18 au total), que la page affiche pendant l'attente |
 | `GET /api/panneaux?lat=…&lon=…` | Les panneaux solaires du registre, en JSON gzippé ; `{"actif": false, "panneaux": []}` si le service n'a pas de registre |

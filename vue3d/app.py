@@ -8,6 +8,7 @@
     GET /api/ouvrages?lat=…&lon=…    la couche des ouvrages BD TOPO, JSON gzippé
     GET /api/nuage?lat=…&lon=…       le bâti du nuage LiDAR HD, JSON gzippé
     GET /api/piscines?lat=…&lon=…    les piscines de l'orthophoto, si le service a un détecteur
+    GET /api/navires?lat=…&lon=…     les navires de l'orthophoto, sur l'eau, de même
     GET /api/vehicules?lat=…&lon=…&detecteur=…   les véhicules vus d'un détecteur du service
     GET /api/panneaux?lat=…&lon=…    les panneaux solaires du registre, si le service en a un
     GET /api/dpe?lat=…&lon=…         les DPE de l'ADEME, à la demande de la page seulement
@@ -50,13 +51,14 @@ from .scene import (NOM_DPE, NOM_DVF, NOM_MONUMENTS, NOM_NUAGE, NOM_ORTHO, NOM_O
                     zone_normalisee)
 from .scene import construire as construire_scene
 from .toits import autoriser_bassin
-from .vehicules import MODE_PAR_DEFAUT
+from .vehicules import MODE_PAR_DEFAUT, fetch_mer
 from .vehicules import lecteur as lecteur_vehicules
 
 # Noms de couche pour dossier_scene : les fichiers, eux, dépendent du mode et
 # du détecteur.
 COUCHE_VEHICULES = "vehicules"
 COUCHE_PISCINES = "piscines"
+COUCHE_NAVIRES = "navires"
 
 logging.basicConfig(level=os.environ.get("VUE3D_LOG", "INFO"),
                     format="%(asctime)s %(levelname)s %(name)s : %(message)s")
@@ -125,13 +127,14 @@ class Quota:
 
 def creer_app(dossier_cache=None, construire=construire_scene, lire_monuments=fetch_monuments,
               lire_ouvrages=fetch_ouvrages, lire_vehicules=None, lire_panneaux=None,
-              lire_nuage=fetch_nuage, lire_dpe=fetch_dpe, lire_dvf=fetch_dvf,
+              lire_nuage=fetch_nuage, lire_dpe=fetch_dpe, lire_dvf=fetch_dvf, lire_mer=fetch_mer,
               quota=None, proxy=None):
     """`construire`, `lire_monuments`, `lire_ouvrages`, `lire_vehicules`,
-    `lire_panneaux`, `lire_nuage`, `lire_dpe` et `lire_dvf` sont injectables
+    `lire_panneaux`, `lire_nuage`, `lire_dpe`, `lire_dvf` et `lire_mer` sont injectables
     pour les tests, qui n'appellent ni l'IGN, ni Overpass, ni l'ADEME, ni
     data.gouv, et ne chargent aucun réseau ni registre. `lire_vehicules` :
-    de `vehicules.lecteur()` ; None, le service n'a ni véhicules ni piscines.
+    de `vehicules.lecteur()` ; None, le service n'a ni véhicules, ni piscines,
+    ni navires.
     `lire_panneaux` : de `panneaux.lecteur()` ; None, pas de panneaux.
     `quota` : scènes neuves par heure et par adresse IP, 0 sans limite ;
     `proxy` : proxys devant le service, dont on croit `X-Forwarded-For`.
@@ -155,7 +158,8 @@ def creer_app(dossier_cache=None, construire=construire_scene, lire_monuments=fe
     cache = Cache(os.path.abspath(dossier_cache or os.environ.get("VUE3D_CACHE", "/tmp/vue3d-cache")),
                   lire_monuments=lire_monuments, lire_ouvrages=lire_ouvrages,
                   lire_vehicules=lire_vehicules, lire_panneaux=lire_panneaux,
-                  lire_nuage=lire_nuage, lire_dpe=lire_dpe, lire_dvf=lire_dvf)
+                  lire_nuage=lire_nuage, lire_dpe=lire_dpe, lire_dvf=lire_dvf,
+                  lire_mer=lire_mer)
 
     def point():
         """(lat, lon, zone) de la requête ; None si l'un d'eux est illisible."""
@@ -223,6 +227,8 @@ def creer_app(dossier_cache=None, construire=construire_scene, lire_monuments=fe
                 return cache.obtenir_dvf(*p, construire=construire, zone=zone), None
             if couche == COUCHE_PISCINES:
                 return cache.obtenir_piscines(*p, construire=construire, zone=zone), None
+            if couche == COUCHE_NAVIRES:
+                return cache.obtenir_navires(*p, construire=construire, zone=zone), None
             if couche == NOM_PANNEAUX:
                 return cache.obtenir_panneaux(*p, construire=construire, zone=zone), None
             if couche == COUCHE_VEHICULES:
@@ -365,6 +371,18 @@ def creer_app(dossier_cache=None, construire=construire_scene, lire_monuments=fe
         if not cache.lire_vehicules:
             return sans_detecteur(piscines=[])
         trouve, err = dossier_scene(couche=COUCHE_PISCINES)
+        if err:
+            return err
+        return servir_gzip(*trouve)
+
+    @app.get("/api/navires")
+    def navires():
+        """Les navires de l'orthophoto, demandés par la page après les
+        piscines : une demi-seconde de détection. La liste est vide loin de
+        l'eau."""
+        if not cache.lire_vehicules:
+            return sans_detecteur(navires=[])
+        trouve, err = dossier_scene(couche=COUCHE_NAVIRES)
         if err:
             return err
         return servir_gzip(*trouve)

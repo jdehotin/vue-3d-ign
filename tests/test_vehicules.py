@@ -13,9 +13,9 @@ import numpy as np
 import pytest
 
 from vue3d import vehicules
-from vue3d.vehicules import (COTE, Lecteur, VehiculesMalConfigures, detecter, detecter_piscines,
-                             en_geographie, mode_demande, piscines_pour_emprise, sans_doublons,
-                             vehicules_pour_emprise)
+from vue3d.vehicules import (COTE, Lecteur, VehiculesMalConfigures, detecter, detecter_navires,
+                             detecter_piscines, en_geographie, mode_demande, navires_pour_emprise,
+                             piscines_pour_emprise, sans_doublons, vehicules_pour_emprise)
 
 
 # --- Configuration ------------------------------------------------------------
@@ -311,6 +311,149 @@ def test_les_piscines_passent_les_memes_filtres_que_les_vehicules():
     assert (longueur, largeur, cap, couleur) == (10.0, 5.0, 90.0, 0x5AC8D2)
 
 
+# --- Navires --------------------------------------------------------------------
+
+NAVIRE_YOLO = 1
+NAVIRES_NATIF = {"rtmdet": {**NATIF["rtmdet"], "seuil": 0.3, "classe": BATEAU},
+                 "yolo": {**NATIF["yolo"], "classe": NAVIRE_YOLO}}
+
+
+def test_les_navires_ont_leur_classe_et_leur_seuil_dans_chaque_reseau():
+    assert vehicules.NAVIRES["rtmdet"]["classe"] == 6 and vehicules.NAVIRES["yolo"]["classe"] == 1
+    # Sous 0,3, rtmdet prend les voitures des quais pour des navires.
+    assert vehicules.NAVIRES["rtmdet"]["seuil"] == 0.3
+    # Le réglage des piscines : l'échelle native de l'orthophoto.
+    for nom in ("rtmdet", "yolo"):
+        assert vehicules.NAVIRES[nom]["tuile_px"] == vehicules.PISCINES[nom]["tuile_px"] == COTE
+
+
+def test_un_navire_est_lu_avec_la_couleur_et_la_clarte_de_son_pont():
+    rgb = np.zeros((512, 512, 3), dtype=np.uint8)
+    rgb[85:115, 150:250] = (240, 240, 230)                     # un pont blanc sur l'eau noire
+    reseau = FauxReseau([[(400, 200, 200, 60, 0.0, BATEAU, 0.5),          # 20 m sur 6 m
+                          (800, 800, 44, 20, 0.0, PETIT, 0.9),            # une voiture : pas ici
+                          (600, 600, 100, 40, 0.0, BATEAU, 0.2)]])        # sous le seuil
+    (cx, cy, lo, la, angle, score, couleur, clarte, nom), = detecter_navires(
+        rgb, {"rtmdet": reseau}, NAVIRES_NATIF)
+    assert (cx, cy, lo, la) == pytest.approx((200, 100, 100, 30)) and nom == "rtmdet"
+    assert couleur == (240 << 16) | (240 << 8) | 230 and clarte == 239
+
+
+def test_un_haut_fond_est_sombre():
+    """Une teinte à peine plus claire que l'eau : sous NAVIRE_MER_CLARTE_MIN."""
+    rgb = np.full((512, 512, 3), (40, 90, 100), dtype=np.uint8)
+    rgb[85:115, 150:250] = (60, 110, 115)
+    reseau = FauxReseau([[(400, 200, 200, 60, 0.0, BATEAU, 0.8)]])
+    (boite,) = detecter_navires(rgb, {"rtmdet": reseau}, NAVIRES_NATIF)
+    assert boite[7] < vehicules.NAVIRE_MER_CLARTE_MIN
+
+
+def test_un_navire_vu_des_deux_detecteurs_n_est_garde_qu_une_fois():
+    rgb = np.zeros((512, 512, 3), dtype=np.uint8)
+    rtmdet = FauxReseau([[(400, 200, 200, 60, 0.0, BATEAU, 0.6)]])
+    yolo = FauxReseau([[(420, 204, 180, 56, 0.05, NAVIRE_YOLO, 0.8),       # le même, à 2 m
+                        (400, 400, 200, 60, 0.0, NAVIRE_YOLO, 0.5)]],      # son voisin de ponton
+                      ultralytics=True)
+    boites = detecter_navires(rgb, {"rtmdet": rtmdet, "yolo": yolo}, NAVIRES_NATIF)
+    assert [(round(b[1]), b[8]) for b in boites] == [(100, "rtmdet"), (200, "yolo")]
+
+
+def _navires(*boites):
+    """Boîtes (x, y, longueur, largeur, clarté) en pixels d'une image de
+    1 000 px de l'emprise, passées en coordonnées comme le fait un relevé."""
+    return en_geographie(*BBOX, {"largeur": 1000, "hauteur": 1000, "navires": [
+        [x, y, lo, la, 0.0, 0.5, 0xF0F0F0, clarte, "yolo"] for x, y, lo, la, clarte in boites]},
+        "navires")
+
+
+def _mer(communes=(), altitude=-99999.0):
+    """La mer d'après fetch_mer : `communes` en GeoJSON, une altitude partout."""
+    return {"communes": list(communes),
+            "altitudes": {"bbox": BBOX, "taille": 4, "valeurs": np.full((4, 4), altitude)}}
+
+
+def test_un_navire_n_est_garde_que_sur_l_eau():
+    """Dans un bassin de la BD TOPO, gardé ; à terre, sur un toit, écarté.
+    Sans mer lue (rien n'a été détecté), seule l'eau de la scène compte."""
+    dans_le_port, a_terre, sur_le_toit = ((300, 500, 50, 20, 200), (500, 800, 50, 20, 200),
+                                          (550, 500, 50, 20, 200))
+    batiments = {"features": [{"type": "Feature", "properties": {}, "geometry": _carre(5, -5, 15, 5)}]}
+    eau = {"surfaces": [{"geometrie": _carre(-50, -10, -30, 10)}], "cours": []}
+    brut = {"navires": _navires(dans_le_port, a_terre, sur_le_toit), "mer": None}
+    couche = navires_pour_emprise(*BBOX, brut, "yolo", batiments, eau)
+    assert couche["version"] == vehicules.NAVIRES_VERSION and couche["mode"] == "yolo"
+    (lon, lat, longueur, largeur, cap, couleur), = couche["navires"]
+    assert ((lon - LON) * KX, (lat - LAT) * KY) == pytest.approx((-40, 0), abs=0.01)
+    assert (longueur, largeur, cap, couleur) == (10.0, 4.0, 90.0, 0xF0F0F0)
+
+
+def test_en_mer_un_navire_est_hors_des_communes_au_niveau_de_la_mer_et_clair():
+    """La commune couvre la moitié nord de l'emprise : au sud, la mer. Un
+    navire sombre y est un haut-fond."""
+    au_mouillage, sombre, au_nord = ((500, 700, 50, 20, 200), (300, 700, 50, 20, 100),
+                                     (500, 300, 50, 20, 200))
+    commune = _carre(-200, 0, 200, 200)
+    brut = {"navires": _navires(au_mouillage, sombre, au_nord), "mer": _mer([commune])}
+    (navire,) = navires_pour_emprise(*BBOX, brut, "yolo")["navires"]
+    assert (navire[1] - LAT) * KY == pytest.approx(-40, abs=0.01)
+    # Le RGE ALTI au niveau de la mer, sans trou : en mer aussi.
+    brut["mer"] = _mer([commune], altitude=-0.4)
+    assert len(navires_pour_emprise(*BBOX, brut, "yolo")["navires"]) == 1
+
+
+def test_un_navire_sur_un_pont_est_un_vehicule():
+    """Le tablier déborde la chaussée : à 6 m de l'axe d'une route de 7 m sur
+    un pont, écarté ; à 9 m, sous le pont ou à côté, gardé. Une route au sol
+    n'écarte rien."""
+    pres, loin = (500, 470, 40, 12, 200), (500, 455, 40, 12, 200)       # 6 m et 9 m au nord
+    eau = {"surfaces": [{"geometrie": _carre(-100, -100, 100, 100)}], "cours": []}
+    route = {"type": "LineString", "coordinates": [[LON - 50 / KX, LAT], [LON + 50 / KX, LAT]]}
+    routes = {"features": [{"geometry": route, "properties": {
+        "position_par_rapport_au_sol": "1", "largeur_de_chaussee": 7}}]}
+    brut = {"navires": _navires(pres, loin), "mer": None}
+    (navire,) = navires_pour_emprise(*BBOX, brut, "yolo", None, eau, routes)["navires"]
+    assert (navire[1] - LAT) * KY == pytest.approx(9, abs=0.01)
+    routes["features"][0]["properties"]["position_par_rapport_au_sol"] = "0"
+    assert len(navires_pour_emprise(*BBOX, brut, "yolo", None, eau, routes)["navires"]) == 2
+
+
+def test_le_sol_etranger_hors_des_communes_n_est_pas_la_mer():
+    """Monaco n'est dans aucune commune française : ses quais, à 1,1 m et
+    plus, ne portent pas de navire."""
+    brut = {"navires": _navires((500, 700, 50, 20, 200)), "mer": _mer(altitude=1.2)}
+    assert navires_pour_emprise(*BBOX, brut, "yolo")["navires"] == []
+
+
+def test_hors_gabarit_la_boite_n_est_pas_un_navire():
+    bouee, paquebot = (500, 600, 10, 8, 200), (500, 500, 650, 100, 200)    # 2 m, 130 m
+    brut = {"navires": _navires(bouee, paquebot), "mer": _mer()}
+    assert navires_pour_emprise(*BBOX, brut, "yolo")["navires"] == []
+
+
+def test_sans_navire_la_couche_dit_quand_meme_son_mode():
+    assert navires_pour_emprise(*BBOX, None, "tous") == {
+        "version": vehicules.NAVIRES_VERSION, "mode": "tous", "navires": []}
+
+
+def test_la_mer_se_lit_dans_les_communes_et_le_rge_alti(monkeypatch):
+    lus = []
+
+    def lire_couche(couche, *bbox):
+        lus.append(couche)
+        return {"features": [{"geometry": _carre(0, 0, 10, 10)}, {"geometry": None}]}
+
+    def fetch_altitudes(west, south, east, north, taille):
+        lus.append("RGE ALTI")
+        return np.zeros((taille, taille))
+
+    monkeypatch.setattr(vehicules, "lire_couche", lire_couche)
+    monkeypatch.setattr(vehicules, "fetch_altitudes", fetch_altitudes)
+    mer = vehicules.fetch_mer(*BBOX)
+    assert lus == ["BDTOPO_V3:commune", "RGE ALTI"]
+    assert mer["communes"] == [_carre(0, 0, 10, 10)]
+    assert mer["altitudes"]["bbox"] == BBOX and mer["altitudes"]["valeurs"].shape == (256, 256)
+
+
 # --- De la boîte au véhicule ------------------------------------------------------
 
 # Emprise carrée de 200 m à 45° N, image de 1 000 px : 0,2 m par pixel.
@@ -401,6 +544,7 @@ def test_le_lecteur_a_une_lecture_par_fichier(monkeypatch):
     assert [b[8] for b in brut["boites"]] == ["yolo"] and (brut["largeur"], brut["hauteur"]) == (512, 512)
     assert [b[8] for b in lecteur.vehicules("rtmdet")(0, 0, 1, 1)["boites"]] == ["rtmdet"]
     assert lecteur.piscines(0, 0, 1, 1)["piscines"] == []
+    assert lecteur.navires(0, 0, 1, 1)["navires"] == []
 
 
 def test_le_lecteur_prend_l_orthophoto_deja_lue(monkeypatch):

@@ -45,17 +45,25 @@ plus, à l'échelle native de l'orthophoto et d'une demi-seconde, les ajoute à
 la couche (PISCINES) : 13 à Gordes et 9 à Carcassonne pour `rtmdet`, 8 et 8
 pour `yolo`, 14 et 9 pour les deux. Ici c'est rtmdet qui voit le mieux.
 
-**Une couche par fichier, le rapide d'abord.** Les piscines ont leur fichier
-et chaque détecteur de véhicules le sien : la page demande les piscines
-(prêtes une demi-seconde après la scène), puis les véhicules détecteur par
-détecteur, du rapide au lent, et dessine chaque couche dès qu'elle arrive.
+**Les navires aussi.** Les réseaux connaissent la classe « ship », et la même
+passe à l'échelle native les trouve dans les ports, sur les lacs et les
+rivières, et en mer (NAVIRES) : à Monaco, 431 pour `yolo` et 437 pour
+`rtmdet`, dont 428 vus des deux. Un navire n'est gardé que sur l'eau : celle
+de la scène, ou la mer, que la BD TOPO ne dessine pas (`fetch_mer`).
+
+**Une couche par fichier, le rapide d'abord.** Les piscines ont leur fichier,
+les navires le leur, et chaque détecteur de véhicules le sien : la page
+demande les piscines (prêtes une demi-seconde après la scène), les navires,
+puis les véhicules détecteur par détecteur, du rapide au lent, et dessine
+chaque couche dès qu'elle arrive.
 En mode `tous`, c'est elle qui réunit les détecteurs, avec la règle de
 DOUBLON_ENTRE_DETECTEURS_M.
 
 **Une couche est complète ou n'existe pas**, comme la scène : l'orthophoto
-illisible lève, rien n'est écrit. Le nom de chaque fichier de cache porte le
-détecteur (ou le mode) et la version (scene.nom_vehicules, nom_piscines) :
-changer de détecteur ne ressert jamais la couche d'un autre.
+illisible lève, et la mer des navires aussi ; rien n'est écrit. Le nom de
+chaque fichier de cache porte le détecteur (ou le mode) et la version
+(scene.nom_vehicules, nom_piscines, nom_navires) : changer de détecteur ne
+ressert jamais la couche d'un autre.
 
 **Détecté une fois par morceau de terrain.** Ce que les réseaux voient est
 gardé à part, en coordonnées, par rectangle de terrain (vue3d/releves.py) :
@@ -76,7 +84,9 @@ from shapely.geometry import Point, Polygon, shape
 from shapely.ops import unary_union
 
 from .batiments import DECOUPE_RETRAIT_M
+from .couches import lire_couche
 from .ortho import fetch_ortho_rgb
+from .relief import fetch_altitudes
 
 journal = logging.getLogger(__name__)
 
@@ -84,6 +94,7 @@ journal = logging.getLogger(__name__)
 # Véhicules — 2 : piscines ; 3 : un fichier par détecteur, les piscines à part.
 VEHICULES_VERSION = 3
 PISCINES_VERSION = 1
+NAVIRES_VERSION = 1
 
 # Détecteurs de chaque mode, dans l'ordre où la page les demande et où leurs
 # boîtes sont gardées : le rapide d'abord, pour que la vue montre ses
@@ -208,6 +219,68 @@ PISCINES = {
 # olympique.
 PISCINE_LONGUEUR_M = (3.0, 55.0)
 PISCINE_LARGEUR_M = (2.0, 30.0)
+
+# Navires : les mêmes réseaux, classe « ship », dans une passe à eux, au
+# réglage des piscines. Mesuré le 2026-10-15 en zone de 1 000 m, chaque lot
+# de boîtes regardé sur une planche : Monaco (port Hercule), Saint-Tropez,
+# Villefranche (rade), Cannes (Croisette), Annecy (lac), Notre-Dame (Seine),
+# et sans eau Gordes, Carcassonne et Lyon.
+#
+# `tuile_px`, `recouvrement_px` : ceux des piscines. À Monaco, 431 navires
+# pour yolo, 437 pour rtmdet, dont 428 vus des deux ; avec 256 ou 512 px de
+# recouvrement, 434 et 438 à 442, grands yachts compris (jusqu'à 80 m vus
+# entiers). Un car-ferry de plus de 205 m ne tient pas dans une tuile.
+#
+# `seuil` : le compte de yolo ne bouge presque pas de 0,1 à 0,5 (433 à 427 à
+# Monaco). Sous 0,3, rtmdet se trompe près des quais : de 80 boîtes entre 0,1
+# et 0,3 à Monaco et Saint-Tropez, 31 sont des voitures garées le long du
+# port, trois couvrent plusieurs bateaux à la fois. Au-dessus, deux boîtes
+# hors de l'eau sur 426 à Monaco.
+#
+# Sans eau, rien : Gordes et Carcassonne, 0 ; Lyon, 0 pour yolo, 5 pour
+# rtmdet à 0,2, une seule à 0,3, écartée hors de l'eau (navires_pour_emprise).
+NAVIRES = {
+    "rtmdet": {"tuile_px": 1024, "recouvrement_px": 128, "seuil": 0.3, "classe": 6},
+    "yolo": {"tuile_px": 1024, "recouvrement_px": 128, "seuil": 0.2, "classe": 1},
+}
+# Gabarit d'un navire, en mètres. Boîtes gardées sur les six lieux d'eau, des
+# deux détecteurs : de 3,4 à 80 m de long (médiane 9,4 m), de 1,3 à 15,9 m de
+# large. Les plus courtes sont des annexes ; les bouées, de 1 à 2 m, restent
+# sous les seuils.
+NAVIRE_LONGUEUR_M = (3.0, 120.0)
+NAVIRE_LARGEUR_M = (1.2, 20.0)
+# La mer, que la BD TOPO ne dessine pas (fetch_mer) : hors des communes, qui
+# s'arrêtent au rivage, et là où le RGE ALTI est au niveau de la mer. Il y a
+# un trou en rade de Villefranche (77 % de l'emprise), mais −0,4 à 0,5 m sous
+# les bateaux de Cannes et 0 m à Saint-Tropez ; or Monaco, hors des communes
+# françaises, a ses quais à 1,1 m et plus, où rtmdet prend des voitures pour
+# des navires.
+COUCHE_COMMUNES = "BDTOPO_V3:commune"
+MER_TAILLE = 256                       # grille du RGE ALTI : 4 m en zone de 1 000 m
+MER_ALTITUDE_MAX_M = 0.8
+# En mer, un navire est clair : 90e centile de la luminance de sa boîte
+# (_clarte). Les brise-lames immergés de la Croisette, que yolo annonce à 0,6
+# à 0,82, sont à 83-111 ; les bateaux au mouillage de Cannes et de
+# Villefranche, à 148 et plus. Dans un port, un bateau sombre descend à 90 :
+# la règle ne vaut qu'en mer.
+NAVIRE_MER_CLARTE_MIN = 130
+# Un pont passe au-dessus de l'eau : à Notre-Dame, rtmdet prend deux
+# véhicules d'un pont de la Seine pour des navires (0,32 et 0,40), à 6,3 m de
+# l'axe de la route (BD TOPO, `position_par_rapport_au_sol` positive). Le
+# tablier déborde la chaussée : à 4 m de son bord, ces deux-là sont écartés,
+# et aucun des six autres lieux d'eau ne perd de bateau ; à 2 m, aucun.
+NAVIRE_PONT_MARGE_M = 4.0
+CHAUSSEE_MIN_M = 5.0                   # largeur non renseignée, ou plus étroite
+# Ni marge à l'eau, ni sens de marche :
+# - à 10 m de l'eau, on ne trouvait que des voitures garées sur les quais
+#   (Saint-Tropez), des voiliers à terre sur leur aire (Annecy) et des
+#   pontons de plage (Cannes) ; à 5 m, un bateau de plus par lieu, au plus ;
+# - la boîte ne dit pas où est l'étrave. Trois façons de la deviner, jugées
+#   sur 112 bateaux dont le sens se lit à l'œil (Monaco, Villefranche,
+#   Annecy, Saint-Tropez) : les poupes alignées d'une rangée amarrée à la
+#   méditerranéenne, 66 % de bons sens ; l'eau visible aux coins de l'étrave,
+#   68 % ; la coque plus étroite à l'avant, 62 %. Trop peu : la vue dessine
+#   une coque symétrique.
 
 # Une boîte à moins de BORD_PX pixels du bord d'une tuile est tenue pour
 # coupée par lui.
@@ -450,6 +523,21 @@ def _couleur(rgb, cx, cy, lo, la, angle):
     return (r << 16) | (g << 8) | b
 
 
+def _clarte(rgb, cx, cy, lo, la, angle):
+    """90e centile de la luminance du cœur de la boîte, de 0 à 255 : le pont
+    ou la coque d'un bateau, plus clair que l'eau qu'il cache, là où un
+    haut-fond n'en est qu'une teinte (NAVIRE_MER_CLARTE_MIN)."""
+    h, w = rgb.shape[:2]
+    c, s = math.cos(angle), math.sin(angle)
+    lum = []
+    for u in np.linspace(-0.4, 0.4, 9):
+        for v in np.linspace(-0.35, 0.35, 5):
+            x, y = cx + u * lo * c - v * la * s, cy + u * lo * s + v * la * c
+            r, g, b = rgb[min(max(int(y), 0), h - 1), min(max(int(x), 0), w - 1)].astype(float)
+            lum.append(0.299 * r + 0.587 * g + 0.114 * b)
+    return int(round(float(np.percentile(lum, 90))))
+
+
 def _dans_l_ordre(fonction, elements, fils):
     """`fonction(e)` pour chaque élément, calculés `fils` à la fois et rendus
     dans l'ordre des éléments : ce qui en est tiré ne dépend pas de `fils`.
@@ -564,6 +652,30 @@ def detecter(rgb, sessions, detecteurs=DETECTEURS, fils=1):
     return toutes
 
 
+def _detecter_classe(rgb, sessions, reglages, fils, mesurer):
+    """Objets d'une classe, vus de chaque détecteur à son réglage, réunis :
+    [[cx, cy, longueur, largeur, angle, score, *mesurer(rgb, boîte),
+    detecteur]] en pixels de l'image."""
+    from PIL import Image
+    image = Image.fromarray(rgb)
+    toutes, polygones = [], []
+    for nom, session in sessions.items():
+        r = reglages[nom]
+        boites = sans_doublons(
+            _annonces(image, session, DETECTEURS[nom]["boites"], r["tuile_px"],
+                      r["recouvrement_px"], r["seuil"], (r["classe"],), fils),
+            DOUBLON_IOU, DOUBLON_CENTRES_M / RESOLUTION_M)
+        for b in boites:
+            # D'un détecteur à l'autre : le centre de l'une dans la boîte de
+            # l'autre. Chaque polygone fait une fois pour toutes : à Monaco,
+            # 437 navires de rtmdet et 431 de yolo, 4,8 s quand chaque
+            # comparaison refaisait le sien.
+            if all(not q.contains(Point(b[0], b[1])) for q in polygones):
+                toutes.append([*b[:6], *mesurer(rgb, b), nom])
+                polygones.append(Polygon(_coins(*b[:5])))
+    return toutes
+
+
 def detecter_piscines(rgb, sessions, reglages=None, fils=1):
     """Piscines d'une orthophoto.
 
@@ -572,21 +684,21 @@ def detecter_piscines(rgb, sessions, reglages=None, fils=1):
         pixels de l'image, comme `detecter`. La couleur est celle de l'eau ce
         jour-là : turquoise, verte, sombre sous une bâche.
     """
-    from PIL import Image
-    reglages = reglages or PISCINES
-    image = Image.fromarray(rgb)
-    toutes = []
-    for nom, session in sessions.items():
-        r = reglages[nom]
-        boites = sans_doublons(
-            _annonces(image, session, DETECTEURS[nom]["boites"], r["tuile_px"],
-                      r["recouvrement_px"], r["seuil"], (r["classe"],), fils),
-            DOUBLON_IOU, DOUBLON_CENTRES_M / RESOLUTION_M)
-        for b in boites:
-            # D'un détecteur à l'autre : le centre de l'une dans la boîte de l'autre.
-            if all(not Polygon(_coins(*t[:5])).contains(Point(b[0], b[1])) for t in toutes):
-                toutes.append([*b[:6], _couleur(rgb, *b[:5]), nom])
-    return toutes
+    return _detecter_classe(rgb, sessions, reglages or PISCINES, fils,
+                            lambda rgb, b: [_couleur(rgb, *b[:5])])
+
+
+def detecter_navires(rgb, sessions, reglages=None, fils=1):
+    """Navires d'une orthophoto, à flot ou non : la couche ne garde que ceux
+    sur l'eau (navires_pour_emprise).
+
+    Returns:
+        [[cx, cy, longueur, largeur, angle, score, couleur, clarte,
+        detecteur]] en pixels de l'image ; la couleur est celle du pont, la
+        clarté celle de _clarte.
+    """
+    return _detecter_classe(rgb, sessions, reglages or NAVIRES, fils,
+                            lambda rgb, b: [_couleur(rgb, *b[:5]), _clarte(rgb, *b[:5])])
 
 
 def _coeurs_disponibles():
@@ -617,10 +729,10 @@ def fils_inference(sessions, coeurs=None):
 class Lecteur:
     """Les lectures de la couche pour `scene.Cache` : une par fichier.
 
-    Les piscines sont un fichier, et chaque détecteur de véhicules le sien :
-    ce qui est vite lu est vite affiché, et le lent n'y change rien — sur
-    une même machine, rtmdet met 3 s là où yolo en met 14, et les piscines
-    une demi-seconde.
+    Les piscines sont un fichier, les navires un autre, et chaque détecteur
+    de véhicules le sien : ce qui est vite lu est vite affiché, et le lent
+    n'y change rien — sur une même machine, rtmdet met 3 s là où yolo en met
+    14, les piscines et les navires une demi-seconde chacun.
 
     L'orthophoto est lue une fois pour toutes : `orthophoto` la rend, et
     chaque lecture la prend en `rgb` (scene.Cache.prelire_vehicules). Sans
@@ -659,6 +771,14 @@ class Lecteur:
             rgb = self._orthophoto(west, south, east, north)
         return {"largeur": rgb.shape[1], "hauteur": rgb.shape[0],
                 "piscines": detecter_piscines(rgb, self.sessions, fils=self.fils)}
+
+    def navires(self, west, south, east, north, rgb=None):
+        """Les navires de l'emprise, vus de tous les détecteurs du mode ;
+        `rgb` : l'orthophoto de l'emprise, déjà lue."""
+        if rgb is None:
+            rgb = self._orthophoto(west, south, east, north)
+        return {"largeur": rgb.shape[1], "hauteur": rgb.shape[0],
+                "navires": detecter_navires(rgb, self.sessions, fils=self.fils)}
 
     def vehicules(self, detecteur):
         """La lecture des véhicules d'un détecteur : (emprise, rgb=None) -> brut."""
@@ -734,21 +854,57 @@ def en_geographie(west, south, east, north, brut, cle):
     return boites
 
 
-def _poser(west, south, east, north, boites, nom, longueurs, largeurs, batiments, eau):
-    """Boîtes (lon, lat, longueur_m, largeur_m, cap, couleur) -> objets de la
-    couche, ceux hors gabarit ou mal placés écartés : [[lon, lat,
-    longueur_m, largeur_m, cap, couleur]]."""
+def _batiments(batiments, kx, ky):
+    return _zone([f.get("geometry") for f in (batiments or {}).get("features", [])
+                  if f.get("geometry")], kx, ky)
+
+
+def _surfaces_eau(eau, kx, ky):
+    return _zone([s["geometrie"] for s in (eau or {}).get("surfaces", [])], kx, ky)
+
+
+def _ponts(routes, kx, ky):
+    """Tabliers des ponts de la scène, en mètres : les tronçons de route au-dessus
+    du sol, élargis de leur demi-chaussée et de NAVIRE_PONT_MARGE_M."""
+    import shapely
+    tabliers = []
+    for f in (routes or {}).get("features", []):
+        p = f.get("properties") or {}
+        try:
+            dessus = int(p.get("position_par_rapport_au_sol") or 0) > 0
+            chaussee = float(p.get("largeur_de_chaussee") or 0)
+        except (TypeError, ValueError):
+            continue
+        if not dessus or not f.get("geometry"):
+            continue
+        try:
+            ligne = shapely.force_2d(shape(f["geometry"]))
+        except Exception:
+            continue
+        tabliers.append(shapely.transform(ligne, lambda c: c * [kx, ky]).buffer(
+            max(chaussee, CHAUSSEE_MIN_M) / 2 + NAVIRE_PONT_MARGE_M))
+    return unary_union(tabliers) if tabliers else None
+
+
+def _poser(west, south, east, north, boites, nom, longueurs, largeurs, interdit, ecarter=None):
+    """Boîtes (lon, lat, longueur_m, largeur_m, cap, couleur, ...) -> objets
+    de la couche, ceux hors gabarit ou mal placés écartés : [[lon, lat,
+    longueur_m, largeur_m, cap, couleur]].
+
+    Args:
+        interdit: {raison: zone en mètres, ou None} ; une boîte dont le
+            centre y tombe est écartée.
+        ecarter: (boîte, x, y en mètres) -> raison de l'écarter, ou None ;
+            une condition de plus, après les zones interdites.
+    """
     kx = 111320 * math.cos(math.radians((south + north) / 2))
     ky = 111320
-    interdit = [z for z in (
-        _zone([f.get("geometry") for f in (batiments or {}).get("features", [])
-               if f.get("geometry")], kx, ky),
-        _zone([s["geometrie"] for s in (eau or {}).get("surfaces", [])], kx, ky)) if z is not None]
     # Au bord, la scène ne connaît pas les bâtiments (ils sont découpés en
     # retrait) et la boîte d'un objet coupé par le cadre n'est pas fiable.
     marge_x, marge_y = DECOUPE_RETRAIT_M / kx, DECOUPE_RETRAIT_M / ky
-    gardes, ecartes = [], {"gabarit": 0, "bord": 0, "bâti ou eau": 0}
-    for lon, lat, longueur, travers, cap, couleur in boites:
+    gardes, ecartes = [], collections.Counter({"gabarit": 0, "bord": 0, **dict.fromkeys(interdit, 0)})
+    for boite in boites:
+        lon, lat, longueur, travers, cap, couleur = boite[:6]
         if not (longueurs[0] <= longueur <= longueurs[1]
                 and largeurs[0] <= travers <= largeurs[1]):
             ecartes["gabarit"] += 1
@@ -757,14 +913,61 @@ def _poser(west, south, east, north, boites, nom, longueurs, largeurs, batiments
                 and south + marge_y <= lat <= north - marge_y):
             ecartes["bord"] += 1
             continue
-        if any(z.contains(Point(lon * kx, lat * ky)) for z in interdit):
-            ecartes["bâti ou eau"] += 1
+        x, y = lon * kx, lat * ky
+        raison = next((r for r, z in interdit.items() if z is not None and z.contains(Point(x, y))),
+                      None) or (ecarter and ecarter(boite, x, y))
+        if raison:
+            ecartes[raison] += 1
             continue
         gardes.append([round(lon, DECIMALES), round(lat, DECIMALES), round(longueur, 1),
                        round(travers, 1), round(cap, 1), couleur])
     journal.info("%s : %d gardé(s) ; écartés : %s", nom, len(gardes),
                  ", ".join(f"{n} {cle}" for cle, n in ecartes.items()))
     return gardes
+
+
+def fetch_mer(west, south, east, north):
+    """De quoi dire où est la mer sur l'emprise, que la BD TOPO ne dessine pas :
+    les communes, qui s'arrêtent au rivage, et la grille brute du RGE ALTI,
+    au niveau de la mer ou trouée au large (MER_ALTITUDE_MAX_M).
+
+    Returns:
+        dict(communes=[géométries GeoJSON], altitudes=dict(bbox, taille,
+        valeurs)) ; `valeurs` : tableau taille × taille, ligne 0 au nord,
+        trous compris (relief.RELIEF_NODATA).
+
+    Raises:
+        requests.RequestException si l'une des deux lectures a échoué.
+    """
+    communes = lire_couche(COUCHE_COMMUNES, west, south, east, north)
+    altitudes = fetch_altitudes(west, south, east, north, MER_TAILLE)
+    return {"communes": [f["geometry"] for f in communes.get("features", []) if f.get("geometry")],
+            "altitudes": {"bbox": (west, south, east, north), "taille": MER_TAILLE,
+                          "valeurs": altitudes}}
+
+
+def _en_mer(mer, kx, ky):
+    """(lon, lat) -> en mer, d'après `fetch_mer` ; None sans lecture de la mer.
+
+    À une frontière, le sol étranger est hors des communes : seule
+    l'altitude l'écarte. Celui de Monaco commence à 1,1 m."""
+    if not mer:
+        return None
+    communes = _zone(mer["communes"], kx, ky)
+    a = mer["altitudes"]
+    w, s, e, n = a["bbox"]
+    taille = a["taille"]
+    grille = np.asarray(a["valeurs"], dtype=float).reshape(taille, taille)
+
+    def en_mer(lon, lat):
+        if communes is not None and communes.contains(Point(lon * kx, lat * ky)):
+            return False
+        i = min(max(int((n - lat) / (n - s) * taille), 0), taille - 1)
+        j = min(max(int((lon - w) / (e - w) * taille), 0), taille - 1)
+        # Un trou (−99 999, ou ce que le service en mêle à ses voisins) est
+        # bien en dessous.
+        return grille[i, j] <= MER_ALTITUDE_MAX_M
+    return en_mer
 
 
 def vehicules_pour_emprise(west, south, east, north, brut, detecteur, batiments=None, eau=None):
@@ -791,11 +994,12 @@ def vehicules_pour_emprise(west, south, east, north, brut, detecteur, batiments=
         dessinée n'est pas ajoutée.
     """
     brut = brut or {}
+    kx, ky = 111320 * math.cos(math.radians((south + north) / 2)), 111320
     # La longueur maximale d'un véhicule est déjà celle de son détecteur.
     vehicules = _poser(west, south, east, north,
                        [(*b[:5], b[7]) for b in brut.get("boites", [])],
                        f"Véhicules ({detecteur})", (LONGUEUR_MIN_M, math.inf), LARGEUR_M,
-                       batiments, eau)
+                       {"bâti": _batiments(batiments, kx, ky), "eau": _surfaces_eau(eau, kx, ky)})
     return {"version": VEHICULES_VERSION, "detecteur": detecteur, "vehicules": vehicules}
 
 
@@ -815,7 +1019,55 @@ def piscines_pour_emprise(west, south, east, north, brut, mode, batiments=None, 
         ci-dessus, la boîte étant celle du bassin, rectangulaire ou non.
     """
     brut = brut or {}
+    kx, ky = 111320 * math.cos(math.radians((south + north) / 2)), 111320
     piscines = _poser(west, south, east, north,
                       [(*b[:5], b[6]) for b in brut.get("piscines", [])],
-                      f"Piscines ({mode})", PISCINE_LONGUEUR_M, PISCINE_LARGEUR_M, batiments, eau)
+                      f"Piscines ({mode})", PISCINE_LONGUEUR_M, PISCINE_LARGEUR_M,
+                      {"bâti": _batiments(batiments, kx, ky), "eau": _surfaces_eau(eau, kx, ky)})
     return {"version": PISCINES_VERSION, "mode": mode, "piscines": piscines}
+
+
+def navires_pour_emprise(west, south, east, north, brut, mode, batiments=None, eau=None,
+                         routes=None):
+    """Navires de l'emprise, prêts pour la vue : ceux qui sont sur l'eau.
+
+    Args:
+        brut: {"navires": boîtes de tous les détecteurs du mode, en
+            coordonnées comme pour les véhicules ; "mer": de `fetch_mer`,
+            None si la détection n'a rien vu}.
+        mode: celui du lecteur, inscrit dans la couche.
+        batiments: un « navire » sur un toit est une verrière.
+        eau: eau de la scène (vue3d/eau.py) : bassins des ports, lacs,
+            rivières larges.
+        routes: tronçons de route de la scène : un « navire » sur un pont
+            est un véhicule (_ponts).
+
+    Un navire est gardé si son centre tombe sur une surface d'eau de la
+    scène, ou en mer (_en_mer) à condition d'être clair
+    (NAVIRE_MER_CLARTE_MIN). Les bateaux à terre (aire de carénage,
+    remorque) sont écartés avec les voitures que rtmdet prend pour eux.
+
+    Returns:
+        dict(version, mode, navires) ; `navires` comme `vehicules` : cap du
+        grand axe de 0 à 180, l'avant et l'arrière ne sont pas distingués
+        (NAVIRES) ; couleur du pont lue sur l'orthophoto. La liste est vide
+        loin de l'eau.
+    """
+    brut = brut or {}
+    kx, ky = 111320 * math.cos(math.radians((south + north) / 2)), 111320
+    surfaces = _surfaces_eau(eau, kx, ky)
+    en_mer = _en_mer(brut.get("mer"), kx, ky)
+
+    def ecarter(boite, x, y):
+        if surfaces is not None and surfaces.contains(Point(x, y)):
+            return None
+        if en_mer is not None and en_mer(boite[0], boite[1]):
+            return None if boite[6] >= NAVIRE_MER_CLARTE_MIN else "sombres en mer"
+        return "hors de l'eau"
+
+    navires = _poser(west, south, east, north,
+                     [(*b[:5], b[6], b[7]) for b in brut.get("navires", [])],
+                     f"Navires ({mode})", NAVIRE_LONGUEUR_M, NAVIRE_LARGEUR_M,
+                     {"bâti": _batiments(batiments, kx, ky), "sur un pont": _ponts(routes, kx, ky)},
+                     ecarter)
+    return {"version": NAVIRES_VERSION, "mode": mode, "navires": navires}

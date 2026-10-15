@@ -7,7 +7,8 @@ import time
 import pytest
 
 from vue3d import scene
-from vue3d.releves import MARGE_PISCINES_PX, MARGE_VEHICULES_PX, emprise_image, rectangle
+from vue3d.releves import (MARGE_NAVIRES_PX, MARGE_PISCINES_PX, MARGE_VEHICULES_PX, emprise_image,
+                           rectangle)
 from vue3d.scene import Cache, HorsEmprise, SceneIncomplete, emprise, point_normalise
 
 
@@ -542,8 +543,8 @@ def _scene_nue(lat, lon, avancer=None):
 
 def _lecteur_vehicules(mode, appels=None, en_panne=None, images=None):
     """Doublure de vehicules.Lecteur : `appels` note chaque lecture de
-    l'orthophoto ('orthophoto') et chaque détection, par fichier ('piscines'
-    ou le détecteur). `en_panne` : [n] — les n lectures de l'orthophoto à
+    l'orthophoto ('orthophoto') et chaque détection, par fichier ('piscines',
+    'navires' ou le détecteur). Aucun navire : la mer n'est pas lue. `en_panne` : [n] — les n lectures de l'orthophoto à
     venir échouent, toutes si n est True. `images` : chaque orthophoto lue."""
     import types
 
@@ -571,12 +572,15 @@ def _lecteur_vehicules(mode, appels=None, en_panne=None, images=None):
             if quoi == "piscines":
                 return {"largeur": rgb.shape[1], "hauteur": rgb.shape[0],
                         "piscines": [[300, 400, 50, 25, 0.0, 0.3, 0x5AC8D2, mode]]}
+            if quoi == "navires":
+                return {"largeur": rgb.shape[1], "hauteur": rgb.shape[0], "navires": []}
             return {"largeur": rgb.shape[1], "hauteur": rgb.shape[0],
                     "boites": [[586.5, 890.5, 22, 10, 0.0, 0.6, 0, 0x808080, quoi]]}
         return lire
 
     return types.SimpleNamespace(mode=mode, detecteurs=MODES[mode], orthophoto=orthophoto,
-                                 piscines=lecture("piscines"), vehicules=lecture)
+                                 piscines=lecture("piscines"), navires=lecture("navires"),
+                                 vehicules=lecture)
 
 
 def test_sans_detecteur_les_couches_de_l_orthophoto_n_existent_pas(tmp_path):
@@ -589,7 +593,8 @@ def test_sans_detecteur_les_couches_de_l_orthophoto_n_existent_pas(tmp_path):
 
 
 def test_un_fichier_par_detecteur_et_un_pour_les_piscines(tmp_path):
-    """Le nom du fichier porte le détecteur (ou le mode, pour les piscines)
+    """Le nom du fichier porte le détecteur (ou le mode, pour les piscines et
+    les navires)
     et la version : relancer le service avec un autre détecteur ne ressert
     jamais la couche du précédent, et chaque fichier n'est lu qu'une fois.
     Demandée sans la scène, la première couche lance toutes les détections
@@ -609,7 +614,11 @@ def test_un_fichier_par_detecteur_et_un_pour_les_piscines(tmp_path):
     assert nom_piscines == f"piscines-tous-v{scene.PISCINES_VERSION}.json.gz"
     couche = json.loads(gzip.decompress(open(os.path.join(dossier, nom_piscines), "rb").read()))
     assert couche["mode"] == "tous" and len(couche["piscines"]) == 1
-    assert appels == ["orthophoto", "piscines", "rtmdet", "yolo"]
+    _, nom_navires = cache.obtenir_navires(48.8049, 2.1204, construire=_scene_nue)
+    assert nom_navires == f"navires-tous-v{scene.NAVIRES_VERSION}.json.gz"
+    couche = json.loads(gzip.decompress(open(os.path.join(dossier, nom_navires), "rb").read()))
+    assert couche == {"version": scene.NAVIRES_VERSION, "mode": "tous", "navires": []}
+    assert appels == ["orthophoto", "piscines", "navires", "rtmdet", "yolo"]
     # Un détecteur que ce service n'a pas.
     with pytest.raises(scene.VehiculesDesactives):
         cache.obtenir_vehicules(48.8049, 2.1204, "inconnu", construire=_scene_nue)
@@ -634,16 +643,17 @@ def test_une_panne_de_detection_ne_met_rien_en_cache_et_epargne_la_scene(tmp_pat
 
 def test_les_detections_sont_lancees_pendant_que_la_scene_se_construit(tmp_path):
     """La lecture anticipée sert la demande : une seule détection par
-    fichier, les piscines d'abord, puis les détecteurs du rapide au lent,
-    et une seule lecture de l'orthophoto pour toutes."""
+    fichier, les piscines et les navires d'abord, puis les détecteurs du
+    rapide au lent, et une seule lecture de l'orthophoto pour toutes."""
     appels = []
     cache = Cache(str(tmp_path), lire_vehicules=_lecteur_vehicules("tous", appels))
     cache.prelire_vehicules(48.8049, 2.1204)
     cache.prelire_vehicules(48.8049, 2.1204)              # page rechargée : pas de second calcul
     cache.obtenir_piscines(48.8049, 2.1204, construire=_scene_nue)
+    cache.obtenir_navires(48.8049, 2.1204, construire=_scene_nue)
     cache.obtenir_vehicules(48.8049, 2.1204, "yolo", construire=_scene_nue)
     cache.obtenir_vehicules(48.8049, 2.1204, "rtmdet", construire=_scene_nue)
-    assert appels == ["orthophoto", "piscines", "rtmdet", "yolo"]
+    assert appels == ["orthophoto", "piscines", "navires", "rtmdet", "yolo"]
 
 
 def test_une_couche_effacee_se_reunit_de_ses_releves_sans_rien_detecter(tmp_path):
@@ -682,7 +692,7 @@ def test_une_couche_effacee_se_reunit_de_ses_releves_sans_rien_detecter(tmp_path
 def _lecteur_qui_note(notes, retenir=None):
     """Doublure de vehicules.Lecteur en mode rtmdet, sans boîte : `notes`
     reçoit l'emprise de chaque orthophoto lue et de chaque détection
-    ('piscines' ou le détecteur). `retenir` : Event que chaque détection
+    ('piscines', 'navires' ou le détecteur). `retenir` : Event que chaque détection
     attend."""
     import types
 
@@ -699,25 +709,28 @@ def _lecteur_qui_note(notes, retenir=None):
         def lire(*bbox, rgb=None):
             assert retenir is None or retenir.wait(10)
             notes.append((quoi, bbox))
-            return {"largeur": 4, "hauteur": 4, "boites": [], "piscines": []}
+            return {"largeur": 4, "hauteur": 4, "boites": [], "piscines": [], "navires": []}
         return lire
 
     return types.SimpleNamespace(mode="rtmdet", detecteurs=("rtmdet",), orthophoto=orthophoto,
-                                 piscines=lecture("piscines"), vehicules=lecture)
+                                 piscines=lecture("piscines"), navires=lecture("navires"),
+                                 vehicules=lecture)
 
 
 # Gordes, puis une flèche vers le nord : un quart de zone, la bande nouvelle
 # de 8 cellules sur les 32 de l'emprise. L'image est lue à la marge des
-# piscines ; les véhicules la prennent recadrée à la leur.
+# navires ; les piscines et les véhicules la prennent recadrée à la leur.
 DEPART, NORD = (43.9116, 5.2003), (43.9124, 5.2003)
-ENTIER = emprise_image(rectangle(*emprise(*DEPART)), MARGE_PISCINES_PX)
-BANDE = emprise_image((51987, 439132, 52019, 439140), MARGE_PISCINES_PX)
+ENTIER = emprise_image(rectangle(*emprise(*DEPART)), MARGE_NAVIRES_PX)
+BANDE = emprise_image((51987, 439132, 52019, 439140), MARGE_NAVIRES_PX)
 
 
 def _sans_marge(notes):
     """Les notes, chaque emprise ramenée à son cœur au mètre près : celle des
-    véhicules, recadrée, ne tombe sur la grille qu'au pixel près."""
-    marges = {"orthophoto": MARGE_PISCINES_PX, "piscines": MARGE_PISCINES_PX}
+    véhicules ou des piscines, recadrée, ne tombe sur la grille qu'au pixel
+    près."""
+    marges = {"orthophoto": MARGE_NAVIRES_PX, "navires": MARGE_NAVIRES_PX,
+              "piscines": MARGE_PISCINES_PX}
     return [(quoi, _retirer(bbox, marges.get(quoi, MARGE_VEHICULES_PX))) for quoi, bbox in notes]
 
 
@@ -738,10 +751,10 @@ def test_un_point_decale_ne_detecte_que_la_bande_nouvelle(tmp_path):
         cache.obtenir_vehicules(*point, "rtmdet", construire=_scene_nue)
     os.remove(cache.chemin(*DEPART, scene.nom_vehicules("rtmdet")))
     cache.obtenir_vehicules(*DEPART, "rtmdet", construire=_scene_nue)
-    assert [n[0] for n in notes] == ["orthophoto", "piscines", "rtmdet", "orthophoto", "piscines", "rtmdet"]
-    assert notes[0][1] == ENTIER and notes[3][1] == BANDE
+    assert [n[0] for n in notes] == ["orthophoto", "piscines", "navires", "rtmdet"] * 2
+    assert notes[0][1] == ENTIER and notes[4][1] == BANDE
     entier, bande = rectangle(*emprise(*DEPART)), (51987, 439132, 52019, 439140)
-    assert [c for _, c in _sans_marge(notes)] == [entier] * 3 + [bande] * 3
+    assert [c for _, c in _sans_marge(notes)] == [entier] * 4 + [bande] * 4
 
 
 def test_un_decalage_pendant_la_detection_du_point_d_avant_ne_refait_pas_ce_qu_elle_voit(tmp_path):
@@ -758,8 +771,10 @@ def test_un_decalage_pendant_la_detection_du_point_d_avant_ne_refait_pas_ce_qu_e
     assert sorted(b for q, b in notes if q == "orthophoto") == sorted([ENTIER, BANDE])
     entier, bande = rectangle(*emprise(*DEPART)), (51987, 439132, 52019, 439140)
     assert [n for n in _sans_marge(notes) if n[0] != "orthophoto"] == [
-        ("piscines", entier), ("rtmdet", entier), ("piscines", bande), ("rtmdet", bande)]
-    assert cache._releves_en_attente == {"piscines-rtmdet": [], "vehicules-rtmdet": []}
+        ("piscines", entier), ("navires", entier), ("rtmdet", entier),
+        ("piscines", bande), ("navires", bande), ("rtmdet", bande)]
+    assert cache._releves_en_attente == {"piscines-rtmdet": [], "navires-rtmdet": [],
+                                         "vehicules-rtmdet": []}
 
 
 def test_reconstruire_refait_aussi_les_detections(tmp_path):
@@ -772,20 +787,87 @@ def test_reconstruire_refait_aussi_les_detections(tmp_path):
     cache.reconstruire(48.8049, 2.1204)
     del notes[:]
     cache.obtenir_vehicules(48.8049, 2.1204, "rtmdet", construire=_scene_nue)
-    assert [q for q, _ in notes] == ["orthophoto", "piscines", "rtmdet"]
+    assert [q for q, _ in notes] == ["orthophoto", "piscines", "navires", "rtmdet"]
+
+
+def _lecteur_avec_un_navire(appels):
+    """Le lecteur de _lecteur_vehicules, dont les navires voient un bateau
+    clair au centre de l'image."""
+    lecteur = _lecteur_vehicules("rtmdet", appels)
+
+    def navires(*bbox, rgb=None):
+        if rgb is None:
+            rgb = lecteur.orthophoto(*bbox)
+        appels.append("navires")
+        largeur, hauteur = rgb.shape[1], rgb.shape[0]
+        return {"largeur": largeur, "hauteur": hauteur,
+                "navires": [[largeur / 2, hauteur / 2, 60, 20, 0.0, 0.8, 0xF0F0F0, 230, "rtmdet"]]}
+    lecteur.navires = navires
+    return lecteur
+
+
+def _mer_partout(appels, en_panne=None):
+    def lire_mer(west, south, east, north):
+        appels.append("mer")
+        if en_panne and en_panne[0]:
+            raise ConnectionError("Read timed out")
+        return {"communes": [], "altitudes": {"bbox": (west, south, east, north), "taille": 1,
+                                              "valeurs": [[-99999.0]]}}
+    return lire_mer
+
+
+def test_la_mer_n_est_lue_que_s_il_y_a_un_navire(tmp_path):
+    """Loin de l'eau, la détection ne voit rien, et la mer n'est pas lue ;
+    un navire vu, elle l'est une fois, avec l'emprise du point."""
+    import gzip
+    import json
+    appels = []
+    cache = Cache(str(tmp_path / "sans"), lire_vehicules=_lecteur_vehicules("rtmdet", appels),
+                  lire_mer=_mer_partout(appels))
+    dossier, nom = cache.obtenir_navires(48.8049, 2.1204, construire=_scene_nue)
+    assert "mer" not in appels
+    assert json.loads(gzip.decompress(open(os.path.join(dossier, nom), "rb").read()))["navires"] == []
+    appels = []
+    cache = Cache(str(tmp_path / "avec"), lire_vehicules=_lecteur_avec_un_navire(appels),
+                  lire_mer=_mer_partout(appels))
+    dossier, nom = cache.obtenir_navires(48.8049, 2.1204, construire=_scene_nue)
+    assert appels.count("mer") == 1
+    (lon, lat, longueur, largeur, cap, couleur), = json.loads(
+        gzip.decompress(open(os.path.join(dossier, nom), "rb").read()))["navires"]
+    assert (round(lat, 4), round(lon, 4), couleur) == (48.8049, 2.1204, 0xF0F0F0)
+
+
+def test_sans_la_mer_les_navires_ne_s_ecrivent_pas(tmp_path):
+    """La mer illisible : la couche n'est pas écrite (elle dirait « pas de
+    navire » là où l'on n'a pas su lire), la demande suivante réessaie, et
+    la détection, gardée dans ses relevés, n'est pas refaite."""
+    appels, en_panne = [], [True]
+    cache = Cache(str(tmp_path), lire_vehicules=_lecteur_avec_un_navire(appels),
+                  lire_mer=_mer_partout(appels, en_panne))
+    with pytest.raises(scene.VehiculesIndisponibles, match="navires"):
+        cache.obtenir_navires(48.8049, 2.1204, construire=_scene_nue)
+    assert not os.path.exists(cache.chemin(48.8049, 2.1204, scene.nom_navires("rtmdet")))
+    for tache in list(cache._lectures.values()):     # les autres détections du lot
+        tache.exception()
+    en_panne[0] = False
+    del appels[:]
+    cache.obtenir_navires(48.8049, 2.1204, construire=_scene_nue)
+    assert appels == ["mer"]
+    assert os.path.exists(cache.chemin(48.8049, 2.1204, scene.nom_navires("rtmdet")))
 
 
 def test_si_l_orthophoto_partagee_echoue_chaque_detection_retente_la_sienne(tmp_path):
-    """Une lecture manquée ne fait pas tomber trois couches : chacune relit
+    """Une lecture manquée ne fait pas tomber quatre couches : chacune relit
     l'orthophoto, comme avant le partage. Ici, la lecture partagée et la
-    première reprise (celle des piscines) échouent ; les deux suivantes
+    première reprise (celle des piscines) échouent ; les trois suivantes
     passent."""
     appels = []
     cache = Cache(str(tmp_path), lire_vehicules=_lecteur_vehicules("tous", appels, en_panne=[2]))
     cache.prelire_vehicules(48.8049, 2.1204)
     for tache in list(cache._lectures.values()):
         tache.exception()
-    assert appels == ["orthophoto", "orthophoto", "orthophoto", "rtmdet", "orthophoto", "yolo"]
+    assert appels == ["orthophoto", "orthophoto", "orthophoto", "navires",
+                      "orthophoto", "rtmdet", "orthophoto", "yolo"]
     with pytest.raises(scene.VehiculesIndisponibles):
         cache.obtenir_piscines(48.8049, 2.1204, construire=_scene_nue)
     assert not os.path.exists(cache.chemin(48.8049, 2.1204, scene.nom_piscines("tous")))
@@ -794,7 +876,7 @@ def test_si_l_orthophoto_partagee_echoue_chaque_detection_retente_la_sienne(tmp_
     # La demande suivante d'une couche du point relance celle qui manque :
     # les piscines, sur une nouvelle lecture.
     cache.obtenir_piscines(48.8049, 2.1204, construire=_scene_nue)
-    assert appels[6:] == ["orthophoto", "piscines"]
+    assert appels[8:] == ["orthophoto", "piscines"]
 
 
 def test_une_detection_attendue_par_une_demande_n_est_pas_relancee(tmp_path):
@@ -869,15 +951,16 @@ def test_les_orthophotos_tenues_en_attendant_le_fil_des_detections_sont_bornees(
         # Par le centre de l'image : celle des véhicules est recadrée.
         centre = (round((south + north) / 2, 4), round((west + east) / 2, 4))
         assert rgb is not None and libres[centre].wait(10)
-        return {"largeur": 4, "hauteur": 4, "boites": [], "piscines": []}
+        return {"largeur": 4, "hauteur": 4, "boites": [], "piscines": [], "navires": []}
 
     lecteur = types.SimpleNamespace(mode="rtmdet", detecteurs=("rtmdet",), orthophoto=orthophoto,
-                                    piscines=detection, vehicules=lambda detecteur: detection)
+                                    piscines=detection, navires=detection,
+                                    vehicules=lambda detecteur: detection)
     cache = Cache(str(tmp_path), lire_vehicules=lecteur)
     assert Cache.IMAGES_TENUES == 2
     points = [point_normalise(48.8049 + i / 100, 2.1204) for i in range(4)]
     # Des points éloignés : un relevé chacun, son image autour de l'emprise.
-    image = {p: emprise_image(rectangle(*emprise(*p)), MARGE_PISCINES_PX) for p in points}
+    image = {p: emprise_image(rectangle(*emprise(*p)), MARGE_NAVIRES_PX) for p in points}
     for lat, lon in points:
         libres[(lat, lon)] = threading.Event()
         cache.prelire_vehicules(lat, lon)
@@ -903,7 +986,7 @@ def test_les_orthophotos_tenues_en_attendant_le_fil_des_detections_sont_bornees(
 
 def _noter_le_fil(lecteur, fils):
     """Le lecteur dont chaque lecture note le nom du fil qui la fait."""
-    piscines, vehicules = lecteur.piscines, lecteur.vehicules
+    piscines, navires, vehicules = lecteur.piscines, lecteur.navires, lecteur.vehicules
 
     def noter(lire):
         def lire_et_noter(*bbox, **options):
@@ -911,6 +994,7 @@ def _noter_le_fil(lecteur, fils):
             return lire(*bbox, **options)
         return lire_et_noter
     lecteur.piscines = noter(piscines)
+    lecteur.navires = noter(navires)
     lecteur.vehicules = lambda detecteur: noter(vehicules(detecteur))
     return lecteur
 
@@ -924,9 +1008,9 @@ def test_une_detection_sans_tache_de_fond_passe_par_le_fil_des_detections(tmp_pa
     cache = Cache(str(tmp_path), lire_vehicules=_noter_le_fil(_lecteur_vehicules("tous"), fils))
     cache.obtenir_piscines(48.8049, 2.1204, construire=_scene_nue)
     cache.obtenir_vehicules(48.8049, 2.1204, "yolo", construire=_scene_nue)
-    # Piscines, rtmdet et yolo : la première demande lance toutes celles qui
-    # manquent, sur une seule lecture de l'orthophoto.
-    assert len(fils) == 3 and all(nom.startswith("detection") for nom in fils)
+    # Piscines, navires, rtmdet et yolo : la première demande lance toutes
+    # celles qui manquent, sur une seule lecture de l'orthophoto.
+    assert len(fils) == 4 and all(nom.startswith("detection") for nom in fils)
     assert os.path.exists(cache.chemin(48.8049, 2.1204, scene.nom_vehicules("yolo")))
 
 

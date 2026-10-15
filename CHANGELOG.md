@@ -15,6 +15,28 @@ messages de commit et dans les commentaires des modules.
 
 ### Ajouté
 
+- **Les bateaux, à flot.** Avec un détecteur (`VUE3D_VEHICULES`), les
+  bateaux que l'orthophoto montre sur l'eau sont posés en volume : bassins
+  des ports, lacs, rivières, et la mer, que la BD TOPO ne dessine pas. Les
+  mêmes réseaux, classe « ship », sur l'orthophoto déjà lue : une seconde
+  de plus en zone de 1 000 m sur CoreML. 433 bateaux au port Hercule de
+  Monaco, 283 en rade de Villefranche, 211 à Saint-Tropez, 195 sur le lac
+  d'Annecy, six péniches sous Notre-Dame ; aucun à Gordes, Carcassonne ou
+  Lyon. Bouton « Bateaux », infobulle, route `/api/navires`.
+  - Seulement sur l'eau : les voitures des quais que `rtmdet` prend pour des
+    navires sous 0,3, les voiliers à terre sur leur aire (Annecy), les
+    véhicules d'un pont de la Seine restent dehors.
+  - La mer est ce qui n'est dans aucune commune, là où le RGE ALTI est au
+    niveau de la mer ou troué ; un bateau y doit être clair : les
+    brise-lames immergés de la Croisette, que `yolo` annonce à 0,6-0,8, ne
+    passent pas.
+  - Coque effilée aux deux bouts et superstructures de convention, en quatre
+    gabarits selon la longueur : la boîte ne dit pas où est l'étrave, et
+    trois façons de la deviner, jugées sur 112 bateaux, n'en donnaient le
+    bon sens que deux fois sur trois.
+  - Limite : en mer, un ponton de plage passe parfois pour un yacht (un sur
+    dix à Cannes).
+
 - **Un quota de scènes neuves par visiteur, pour un service public.**
   `VUE3D_QUOTA=20` limite chaque adresse IP à vingt lieux construits par
   heure glissante ; au-delà, l'API répond 429 avec `Retry-After`, et la page

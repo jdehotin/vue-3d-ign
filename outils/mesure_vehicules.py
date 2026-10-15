@@ -15,11 +15,15 @@ annotée (--images), à l'œil.
 Usage :
     . .venv/bin/activate && pip install -r requirements-vehicules.txt
     python outils/mesure_vehicules.py modeles/ [--images dossier] [--balayage] [lat lon ...]
+    python outils/mesure_vehicules.py modeles/ --navires [--images dossier] [lat lon ...]
 
 `modeles/` contient les réseaux exportés par outils/exporter_vehicules.py.
 Sans coordonnées : le village de Gordes et la ville basse de Carcassonne.
 --balayage ajoute celui des tailles de tuile et de leur recouvrement :
 plusieurs minutes par lieu.
+--navires mesure les navires seuls, en zone de 1 000 m : ports, rade, lac,
+rivière, et des lieux sans eau pour témoins (LIEUX_NAVIRES). La couche lit
+la mer comme le service (vehicules.fetch_mer).
 """
 
 import io
@@ -33,12 +37,17 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from vue3d import vehicules
-from vue3d.couches import COUCHE_BATIMENTS, lire_couche
+from vue3d.couches import COUCHE_BATIMENTS, COUCHE_ROUTES, lire_couche
 from vue3d.eau import COUCHE_COURS_EAU, COUCHE_SURFACES_EAU, eau_pour_emprise
-from vue3d.ortho import fetch_ortho_jpeg
+from vue3d.ortho import fetch_ortho_jpeg, fetch_ortho_rgb
 from vue3d.scene import emprise
 
 LIEUX = {"Gordes": (43.9116, 5.2003), "Carcassonne": (43.2075, 2.3680)}
+LIEUX_NAVIRES = {"Monaco": (43.737416, 7.420812), "Cannes": (43.5485, 7.0230),
+                 "Villefranche": (43.6990, 7.3125), "Saint-Tropez": (43.2722, 6.6393),
+                 "Annecy": (45.8990, 6.1300), "Notre-Dame": (48.8530, 2.3499),
+                 "Lyon": (45.7600, 4.8350), "Gordes": (43.9116, 5.2003)}
+SEUILS_NAVIRES = (0.1, 0.2, 0.3, 0.5)
 SEUILS = {"rtmdet": (0.1, 0.15, 0.2, 0.3), "yolo": (0.15, 0.25, 0.35, 0.5)}
 TUILES = {"rtmdet": (1024, 768, 640, 512, 400, 320), "yolo": (320, 256, 200, 160, 128)}
 RECOUVREMENTS = {"rtmdet": (65, 128, 256, 384), "yolo": (32, 80)}
@@ -178,6 +187,59 @@ def mesurer_piscines(nom_lieu, image, rgb, sessions, couche, images, balayage):
               + ", ".join(f"{sum(b[7] == n for b in union)} de {n}" for n in sessions))
 
 
+def mesurer_navires(nom_lieu, lat, lon, sessions, images):
+    """Navires, en zone de 1 000 m : par détecteur selon le seuil, puis
+    l'union telle que la couche la garde, et une planche des navires gardés
+    (score et clarté en légende)."""
+    from PIL import Image, ImageDraw
+    bbox = emprise(lat, lon, 1000)
+    rgb = fetch_ortho_rgb(*bbox, vehicules.RESOLUTION_M)
+    batiments = lire_couche(COUCHE_BATIMENTS, *bbox)
+    routes = lire_couche(COUCHE_ROUTES, *bbox)
+    eau = eau_pour_emprise(*bbox, lire_couche(COUCHE_SURFACES_EAU, *bbox),
+                           lire_couche(COUCHE_COURS_EAU, *bbox))
+    print(f"\n## {nom_lieu} ({lat}, {lon}), zone de 1 000 m — orthophoto {rgb.shape[1]} × {rgb.shape[0]} px")
+    regles = lambda nom, **v: {nom: {**vehicules.NAVIRES[nom], **v}}       # noqa: E731
+    for nom, session in sessions.items():
+        brutes = vehicules.detecter_navires(rgb, {nom: session}, regles(nom, seuil=min(SEUILS_NAVIRES)))
+        print(f"- {nom}, selon le seuil : " + ", ".join(
+            f"{s} → {sum(b[5] >= s for b in brutes)}" for s in SEUILS_NAVIRES))
+    t0 = time.time()
+    union = vehicules.detecter_navires(rgb, sessions)
+    duree = time.time() - t0
+    geo = vehicules.en_geographie(*bbox, {"largeur": rgb.shape[1], "hauteur": rgb.shape[0],
+                                          "navires": union}, "navires")
+    mer = vehicules.fetch_mer(*bbox) if geo else None
+    gardes = vehicules.navires_pour_emprise(*bbox, {"navires": geo, "mer": mer}, "tous",
+                                            batiments, eau, routes)["navires"]
+    print(f"- union : {len(union)} boîte(s) en {duree:.1f} s, {len(gardes)} navire(s) gardé(s) ; "
+          + ", ".join(f"{sum(b[8] == n for b in union)} de {n}" for n in sessions))
+    if gardes:
+        lo = sorted(n[2] for n in gardes)
+        print(f"  longueur {lo[0]} / {statistics.median(lo)} / {lo[-1]} m (min, médiane, max)")
+    if images and gardes:
+        # Les boîtes gardées, retrouvées par leur centre dans l'union.
+        cles = {(n[0], n[1]) for n in gardes}
+        retenues = [b for b, g in zip(union, geo)
+                    if (round(g[0], vehicules.DECIMALES), round(g[1], vehicules.DECIMALES)) in cles]
+        image, cote, colonnes = Image.fromarray(rgb), 160, 10
+        planche = Image.new("RGB", (colonnes * (cote + 4), ((len(retenues) + colonnes - 1) // colonnes) * (cote + 4)),
+                            "white")
+        for i, b in enumerate(sorted(retenues, key=lambda b: b[5])):
+            demi = max(40, int(b[2] * 0.75))
+            x0, y0 = int(b[0]) - demi, int(b[1]) - demi
+            vignette = image.crop((x0, y0, x0 + 2 * demi, y0 + 2 * demi)).resize((cote, cote), Image.LANCZOS)
+            dessin = ImageDraw.Draw(vignette)
+            k = cote / (2 * demi)
+            dessin.polygon([((x - x0) * k, (y - y0) * k) for x, y in vehicules._coins(*b[:5])],
+                           outline=(255, 0, 255))
+            dessin.text((3, 2), f"{b[5]:.2f} · {b[7]}", fill=(255, 255, 255))
+            planche.paste(vignette, ((i % colonnes) * (cote + 4), (i // colonnes) * (cote + 4)))
+        chemin = Path(images) / f"{nom_lieu.lower()}-navires.jpg"
+        planche.save(chemin, quality=88)
+        print(f"  planche : {chemin}")
+
+
 if __name__ == "__main__":
     args = sys.argv[1:]
     images = None
@@ -187,12 +249,16 @@ if __name__ == "__main__":
         Path(images).mkdir(parents=True, exist_ok=True)
         del args[i:i + 2]
     balayage = "--balayage" in args
-    args = [a for a in args if a != "--balayage"]
+    navires = "--navires" in args
+    args = [a for a in args if a not in ("--balayage", "--navires")]
     if not args:
         sys.exit(__doc__)
     sessions = vehicules.charger("tous", args[0])
     coords = [float(a) for a in args[1:]]
     lieux = ({f"{la}, {lo}": (la, lo) for la, lo in zip(coords[::2], coords[1::2])}
-             if coords else LIEUX)
+             if coords else LIEUX_NAVIRES if navires else LIEUX)
     for nom_lieu, (lat, lon) in lieux.items():
-        mesurer(nom_lieu, lat, lon, sessions, images, balayage)
+        if navires:
+            mesurer_navires(nom_lieu, lat, lon, sessions, images)
+        else:
+            mesurer(nom_lieu, lat, lon, sessions, images, balayage)
