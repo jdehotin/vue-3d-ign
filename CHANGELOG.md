@@ -100,6 +100,14 @@ messages de commit et dans les commentaires des modules.
 
 ### Corrigé
 
+- **Le pincement à deux doigts zoome de nouveau, sur téléphone comme sur
+  l'écran d'une Tesla.** Pour remplacer la molette d'OrbitControls (un
+  facteur fixe par événement, qu'un pavé tactile compose jusqu'à faire
+  plonger la caméra), la page coupait son zoom : dans three.js, cela coupe
+  aussi le pincement, et deux doigts ne faisaient plus que déplacer la vue.
+  Le zoom d'OrbitControls reste désormais actif pour le tactile ; la molette
+  est interceptée avant lui, au même facteur qu'avant (×1,1618 pour 100 px,
+  vérifié dans le navigateur, sans le ×0,95 d'OrbitControls en plus).
 - **Des murs de 96 km autour de la scène, au port de Monaco.** Au bord de
   la mer, le WMS du RGE ALTI mêle son −99 999 aux altitudes voisines : 372
   pixels de −99 955 à −82 158 m, à côté de 827 vrais trous (0,3 %, relief

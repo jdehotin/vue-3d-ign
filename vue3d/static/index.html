@@ -9350,10 +9350,18 @@ function majDrone(dt, maintenant) {
 // On dolly donc nous-mêmes, proportionnellement à la distance réellement
 // parcourue. L'exponentielle rend le zoom géométrique, donc d'allure constante
 // quelle que soit la distance courante.
+//
+// Le zoom d'OrbitControls reste actif pour le pincement à deux doigts : le
+// couper (enableZoom = false) coupait aussi le tactile, et sur iPhone comme
+// sur l'écran d'une Tesla deux doigts ne faisaient plus que déplacer la vue.
+// La molette est donc interceptée en capture, sur la fenêtre, avant
+// d'atteindre la toile où OrbitControls l'écoute : son facteur fixe ne
+// s'ajoute pas au nôtre.
 const SENSIBILITE_ZOOM = 0.0015;
-controls.enableZoom = false;
-renderer.domElement.addEventListener('wheel', e => {
+window.addEventListener('wheel', e => {
+    if (e.target !== renderer.domElement) return;
     e.preventDefault();
+    e.stopPropagation();
     if (orbite) { orbite = false; btnOrbit.classList.remove('on'); }
     // deltaMode : 0 = pixels, 1 = lignes, 2 = pages. Firefox et les molettes
     // renvoient souvent des lignes, d'où la normalisation.
@@ -9370,7 +9378,7 @@ renderer.domElement.addEventListener('wheel', e => {
         controls.minDistance), controls.maxDistance);
     camera.position.copy(controls.target).add(versCamera.setLength(distance));
     controls.update();
-}, { passive: false });
+}, { capture: true, passive: false });
 
 // Un clic doit être distingué de la fin d'une orbite : OrbitControls consomme le
 // glissement, mais le navigateur émet quand même un pointerup au relâchement.
