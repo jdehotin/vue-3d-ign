@@ -53,7 +53,7 @@ from shapely.geometry import shape
 from shapely.ops import transform
 
 from .ortho import EXG_SEUIL
-from .pans import pans_du_toit, proches
+from .pans import PANS_COUVERTURE_MIN, pans_du_toit, part_plate, proches, segmenter
 
 journal = logging.getLogger(__name__)
 
@@ -662,21 +662,39 @@ def cellules_du_toit(polygone_m, hauteurs, xs, ys, gouttiere, verdure=None):
             "valides": valides, "lisse": _mediane_3x3(h, valides)}
 
 
-def pans_toit(polygone_m, cellules, sol=None, sol_bas=None):
+def _z_redresse(cellules, sol=None, sol_bas=None):
+    """Le MNH lissé de la fenêtre, redressé sur le terrain et comblé : la
+    surface que segmentent les pans."""
+    i0, i1, j0, j1 = cellules["i0"], cellules["i1"], cellules["j0"], cellules["j1"]
+    z = cellules["lisse"]
+    if sol is not None and sol_bas is not None:
+        z = z + np.nan_to_num(np.asarray(sol[j0:j1, i0:i1], dtype=np.float64) - sol_bas)
+    return _combler(np.where(cellules["valides"], z, np.nan))
+
+
+def segmenter_toit(cellules, sol=None, sol_bas=None):
+    """(z, etiquettes, plans) : la surface redressée et ses pans."""
+    z = _z_redresse(cellules, sol, sol_bas)
+    return (z, *segmenter(z, cellules["valides"], cellules["X"], cellules["Y"]))
+
+
+def pans_toit(polygone_m, cellules, sol=None, sol_bas=None, segmentation=None):
     """Toit en pans (vue3d/pans.py) sur la fenêtre d'un toit, ou None.
 
     Même surface que surface_toit — le MNH lissé, redressé sur le terrain —
     mais réduite à quelques plans et fermée par ses murs.
+
+    Args:
+        segmentation: résultat de segmenter_toit sur ces mêmes entrées, s'il
+            est déjà calculé.
     """
-    i0, i1, j0, j1 = cellules["i0"], cellules["i1"], cellules["j0"], cellules["j1"]
-    valides = cellules["valides"]
-    z = cellules["lisse"]
-    if sol is not None and sol_bas is not None:
-        z = z + np.nan_to_num(np.asarray(sol[j0:j1, i0:i1], dtype=np.float64) - sol_bas)
-    pans = pans_du_toit(polygone_m, cellules["X"], cellules["Y"],
-                        _combler(np.where(valides, z, np.nan)), valides)
+    if segmentation is None:
+        z, deja = _z_redresse(cellules, sol, sol_bas), None
+    else:
+        z, deja = segmentation[0], segmentation[1:]
+    pans = pans_du_toit(polygone_m, cellules["X"], cellules["Y"], z, cellules["valides"], deja)
     if pans:
-        pans.update(i0=i0, j0=j0)
+        pans.update(i0=cellules["i0"], j0=cellules["j0"])
     return pans
 
 
@@ -740,6 +758,36 @@ def surface_toit(polygone_m, hauteurs, xs, ys, gouttiere, verdure=None, sol=None
 # les toits peu pentus (0,37 pour le bon résumé de Gordes, 0,30 pour les deux
 # niveaux).
 SURFACE_ECART_RESUME_M = 0.7
+# Toit-terrasse : le résumé ne sait dessiner qu'une pente (deux pans, corps,
+# pyramide), dès que p85 − p15 dépasse 0,5 m — une marche entre deux
+# terrasses, ou la pente du terrain sous un toit plat, le profil lisant le
+# MNH non redressé. Et l'écart médian ne le voit pas : un toit de 1 à 1,5 m
+# de dénivelé posé sur des terrasses ne s'en écarte que d'environ 0,5 m.
+# Mesuré sur un coteau provençal de villas récentes à toits-terrasses
+# étagés : sept villas dessinées en corps (six) ou en deux pans, à 0,29 à
+# 0,60 m du LiDAR, quand les pans en retrouvent les niveaux plats, à 0,2 à
+# 2,6° — et ferment chacune leur volume.
+#
+# Un toit est donc plat quand des pans à moins de TOITS_PLAT_PENTE_DEG
+# portent au moins PANS_COUVERTURE_MIN de ses cellules ; il reçoit alors ses
+# pans. Une part et non « tous les pans » : la marche entre deux terrasses
+# laisse un pan raide de quelques cellules (30 cellules à 44° sur 442).
+#
+# Le seuil, mesuré sur ce coteau avec la couleur de l'orthophoto pour juge
+# ((R − B) / moyenne RGB, ~0 pour un toit gris, ~0,25 pour la tuile) : pans
+# des toits gris (≤ 0,11) de 0,3 à 2,6° ; premier toit de tuiles (0,30) à
+# 4,1° ; toits de 14° et plus, médiane 0,24. Entre 4 et 14°, des appentis de
+# tuiles de 15 à 60 m², qui gardent leur résumé.
+TOITS_PLAT_PENTE_DEG = 3.0
+# Étendue minimale d'un pan plat dans sa direction la plus étroite
+# (écart-type des centres de ses cellules ; environ 3,5 m de large). Sur une
+# annexe de 2,5 m de large, une fois écartées les cellules à moins de
+# SURFACE_RETRAIT_M du contour, il reste un ruban de deux cellules (écart-type
+# 0,24 m) : la pente en travers s'y lit sur 0,5 m, au décimètre près, soit à
+# 11° près, et un appentis de cour à Strasbourg — 1,7 m de dénivelé sur ses
+# 2,5 m — y passait pour plat. Sur 3,5 m, le décimètre fait 1,6°. Les pans
+# des toits-terrasses du coteau : 1,1 m au plus étroit, 4,4 m au plus large.
+TOITS_PLAT_ETENDUE_M = 1.0
 
 
 def _tourner(x, y, ang):
@@ -1040,12 +1088,23 @@ def _toit_du_batiment(f, valeurs, hauteurs, exg, sol, verdure, xs, ys, lon0, lat
         if fenetre is not None:
             ecart = ecart_au_resume(profil, poly_seul, fenetre)
             profil["ecart_resume"] = round(ecart, 2)
-            if ecart > SURFACE_ECART_RESUME_M:
+            # Le résumé tel que la vue le dessine (construire() dans
+            # index.html, hauteur_resumee) : en pente au-delà de 0,5 m de
+            # dénivelé, ou dès qu'il a plusieurs corps.
+            en_pente = (len(profil.get("corps") or []) >= 2
+                        or profil["faitage"] - profil["gouttiere"] > 0.5)
+            if ecart > SURFACE_ECART_RESUME_M or en_pente:
                 bas = _sol_bas(sol, geom, xs, ys, lon0, lat0, m_lon) if sol is not None else None
+                segmentation = segmenter_toit(fenetre, sol, bas)
+            # Un toit-terrasse que le résumé dessinerait en pente reçoit ses
+            # pans, même proche du résumé (TOITS_PLAT_PENTE_DEG).
+            if ecart > SURFACE_ECART_RESUME_M or (en_pente and part_plate(
+                    *segmentation[1:], fenetre["valides"], fenetre["X"], fenetre["Y"],
+                    TOITS_PLAT_PENTE_DEG, TOITS_PLAT_ETENDUE_M) >= PANS_COUVERTURE_MIN):
                 # Les pans d'abord : la forme de la surface, sans son
                 # grain. La surface reste le repli d'un toit qui n'est pas
                 # fait de plans.
-                pans = pans_toit(poly_seul, fenetre, sol, bas)
+                pans = pans_toit(poly_seul, fenetre, sol, bas, segmentation)
                 if pans:
                     profil["pans"] = pans
                 else:

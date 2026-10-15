@@ -23,7 +23,7 @@ from vue3d.couches import COUCHE_BATIMENTS, lire_couche
 from vue3d.mnh import fetch_mnh_grid, fetch_sol_grid
 from vue3d.ortho import fetch_exg_grid
 from vue3d.scene import emprise
-from vue3d.toits import TOITS_RESOLUTION_M, toits_pour_emprise
+from vue3d.toits import SURFACE_ECART_RESUME_M, TOITS_RESOLUTION_M, toits_pour_emprise
 
 LIEUX = {"Gordes": (43.9116, 5.2003), "Strasbourg": (48.5819, 7.7510)}
 
@@ -43,10 +43,16 @@ def mesurer(nom, lat, lon):
     pans = [p["pans"] for p in toits.values() if "pans" in p]
     surfaces = [p["surface"] for p in toits.values() if "surface" in p]
     candidats = len(pans) + len(surfaces)
+    # Proches du résumé, ils n'ont de forme mesurée que plats (toits.TOITS_PLAT_PENTE_DEG).
+    # Inégalité stricte : ecart_resume est arrondi au centième, et à 0,70 tout
+    # juste l'arrondi ne dit pas de quel côté du seuil était l'écart.
+    terrasses = sum(1 for p in toits.values()
+                    if ("pans" in p or "surface" in p) and p["ecart_resume"] < SURFACE_ECART_RESUME_M)
     poids = lambda liste: len(json.dumps(liste, separators=(",", ":"))) / 1024
     print(f"\n## {nom} ({lat}, {lon})")
     print(f"- toits à forme mesurée : {candidats} ; en pans : {len(pans)} "
           f"({100 * len(pans) / max(candidats, 1):.0f} %), surface en repli : {len(surfaces)}")
+    print(f"- dont toits-terrasses, proches du résumé mais plats : {terrasses}")
     if pans:
         n = sorted(p["n_pans"] for p in pans)
         e = sorted(p["ecart_m"] for p in pans)

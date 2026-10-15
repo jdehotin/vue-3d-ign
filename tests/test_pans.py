@@ -133,3 +133,44 @@ def test_un_toit_sans_plans_garde_sa_surface():
 def test_le_volume_est_deterministe():
     emprise = affinity.rotate(box(-8, -5, 8, 5), 30, origin=(0, 0))
     assert _pans(_deux_pans_tourne, emprise)[0] == _pans(_deux_pans_tourne, emprise)[0]
+
+
+def test_les_pans_reutilisent_la_segmentation():
+    """Segmenter d'abord, pour juger le toit plat, puis passer la segmentation
+    aux pans : le même volume qu'en segmentant dans pans_toit."""
+    from vue3d.toits import segmenter_toit
+    emprise = affinity.rotate(box(-8, -5, 8, 5), 30, origin=(0, 0))
+    p, cel = _pans(_deux_pans_tourne, emprise)
+    assert p is not None and pans_toit(emprise, cel, segmentation=segmenter_toit(cel)) == p
+
+
+def _part_plate(fonction, emprise):
+    from vue3d.pans import part_plate
+    from vue3d.toits import TOITS_PLAT_ETENDUE_M, TOITS_PLAT_PENTE_DEG, segmenter_toit
+    h, xs, ys = _grille(fonction)
+    cel = cellules_du_toit(emprise, h, xs, ys, 3.0)
+    _, etiquettes, plans = segmenter_toit(cel)
+    return part_plate(etiquettes, plans, cel["valides"], cel["X"], cel["Y"],
+                      TOITS_PLAT_PENTE_DEG, TOITS_PLAT_ETENDUE_M)
+
+
+def test_part_plate_compte_la_terrasse_et_pas_le_versant():
+    """Une terrasse à l'ouest, un versant à 31° à l'est : la moitié du toit
+    est plate ; deux terrasses étagées, tout le toit."""
+    emprise = box(-10, -6, 10, 6)
+    dedans = lambda x, y: abs(x) <= 10 and abs(y) <= 6
+    terrasse_et_versant = lambda x, y: (6.0 if x < 0 else 6.0 + 0.6 * x) if dedans(x, y) else 0.0
+    assert 0.35 <= _part_plate(terrasse_et_versant, emprise) <= 0.65
+    etagees = lambda x, y: (6.0 if x < 0 else 5.0) if dedans(x, y) else 0.0
+    assert _part_plate(etagees, emprise) >= 0.95
+    assert _part_plate(_deux_pans_tourne, affinity.rotate(box(-8, -5, 8, 5), 30, origin=(0, 0))) == 0
+
+
+def test_un_ruban_de_cellules_ne_passe_pas_pour_plat():
+    """Une annexe de 2,5 m de large : sans le bord, il reste deux cellules en
+    travers, où la pente ne se lit pas. Son pan, horizontal ou non, ne compte
+    pas ; à 5 m de large, il compte."""
+    etroite = box(-8, -1.25, 8, 1.25)
+    assert _part_plate(lambda x, y: 6.0 if etroite.contains(Point(x, y)) else 0.0, etroite) == 0
+    large = box(-8, -2.5, 8, 2.5)
+    assert _part_plate(lambda x, y: 6.0 if large.contains(Point(x, y)) else 0.0, large) == 1

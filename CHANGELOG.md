@@ -11,6 +11,35 @@ Les plus récents en premier. Les chiffres cités sont ceux mesurés au moment d
 changement, sur des lieux publics ; le détail et la méthode sont dans les
 messages de commit et dans les commentaires des modules.
 
+## Scène v15 — 15 octobre 2026
+
+### Modifié
+
+- **Les toits-terrasses ne sont plus dessinés en pente.** Le toit résumé —
+  deux pans, un toit par faîtage, pyramide — met une pente dès que le haut
+  du toit dépasse le bas de 0,5 m : la marche entre deux terrasses, ou la
+  pente du terrain sous un toit plat, suffisait. Et les pans mesurés n'en
+  prenaient la place qu'à plus de 0,7 m d'écart au LiDAR, qu'un toit de 1 m
+  de dénivelé posé sur des terrasses n'atteint pas. Un toit dont les pans à
+  moins de 3° portent 80 % des cellules reçoit désormais ses pans, quel que
+  soit l'écart : chaque terrasse à sa hauteur, un mur à chaque marche.
+  - Signalé sur un coteau provençal de villas récentes à toits-terrasses
+    étagés : sept villas sur 369 bâtiments y passent en pans, toutes grises
+    sur l'orthophoto. Aucun toit ne change à Gordes (672 bâtiments) ni à
+    Strasbourg (1 374) ; tous les autres toits sont identiques à l'octet.
+  - Un pan plat ne compte que s'il s'étend sur environ 3,5 m de large : sur
+    une annexe étroite, la pente en travers ne se lit pas, et un appentis de
+    cour à Strasbourg passait pour plat.
+  - Les toitures d'une scène coûtent un peu plus : 5,4 s → 5,8 s à
+    Strasbourg en zone de 1 000 m, sur un seul processus.
+
+### Limites connues
+
+- Un toit-terrasse que l'orthophoto voit vert (toit végétalisé, sans doute)
+  reste « sous les arbres », en volume pâle : la planéité ne suffit pas à le
+  distinguer d'un houppier, que la segmentation trouve plat aussi.
+- Avec « Toits mesurés » éteint, le toit résumé reste en pente.
+
 ## Scène v14 — 1er octobre 2026
 
 ### Ajouté

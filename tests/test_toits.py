@@ -592,3 +592,58 @@ def test_les_cellules_d_une_boite_sont_celles_de_la_grille_dans_le_meme_ordre():
         assert _cellules_de_la_boite(valeurs, xs, ys, boite).tolist() == attendu
     # Emprise vide : ses bornes ne sont pas des nombres.
     assert _cellules_de_la_boite(valeurs, xs, ys, Polygon().bounds).tolist() == []
+
+
+def _terrasses(haut, bas, pente):
+    """Toit plat en deux niveaux (ouest à `haut`, est à `bas`, au-dessus du
+    point bas du terrain) sur 20 × 12 m, terrain qui monte de `pente` vers
+    l'est : (toit publié, triangles du toit en sommets (u, v, w))."""
+    from vue3d.toits import toits_pour_emprise
+    sol = lambda X, Y: pente * (X + 10)
+    dedans = lambda X, Y: (np.abs(X) <= 10) & (np.abs(Y) <= 6)
+    bbox, grille, rectangle = _scene_60m(
+        lambda X, Y: np.where(dedans(X, Y), np.where(X < 0, haut, bas) - sol(X, Y), 0.0))
+    xs = (np.arange(120) + 0.5) * 0.5 - 30
+    X, Y = np.meshgrid(xs, -xs)
+    t = toits_pour_emprise(*bbox, {"features": [rectangle("VILLA", -10, -6, 10, 6)]}, grille, None,
+                           sol=sol(X, Y).ravel().tolist())["toits"]["VILLA"]
+    if "pans" not in t:
+        return t, None
+    s = np.array(t["pans"]["sommets"]).reshape(-1, 3)
+    return t, s[np.array(t["pans"]["triangles"]).reshape(-1, 3)[:t["pans"]["n_toit"]]]
+
+
+def test_une_terrasse_sur_un_coteau_recoit_ses_pans():
+    """Un toit plat sur un terrain qui monte de 2 m : le MNH, hauteur au-dessus
+    du sol local, y lit 1,2 m de dénivelé, et le résumé en faisait deux pans
+    à 0,5 m du LiDAR — sous le seuil où la forme mesurée le remplace. Les
+    pans, sur la surface redressée, n'y voient qu'un plan horizontal."""
+    from vue3d.toits import SURFACE_ECART_RESUME_M
+    t, toit = _terrasses(6.0, 6.0, 0.1)
+    assert t["fiable"] and t["faitage"] - t["gouttiere"] > 0.5
+    assert t["ecart_resume"] <= SURFACE_ECART_RESUME_M
+    assert t["pans"]["n_pans"] == 1
+    assert (toit[:, :, 2] == 60).all()
+
+
+def test_des_terrasses_etagees_recoivent_leurs_pans():
+    """Deux terrasses, 6 et 5 m : le résumé en faisait deux pans de 1 m, à
+    0,5 m du LiDAR. Chaque terrasse à sa hauteur, horizontale."""
+    from vue3d.toits import SURFACE_ECART_RESUME_M
+    t, toit = _terrasses(6.0, 5.0, 0.0)
+    assert t["fiable"] and t["faitage"] - t["gouttiere"] > 0.5
+    assert t["ecart_resume"] <= SURFACE_ECART_RESUME_M
+    assert t["pans"]["n_pans"] == 2
+    assert (toit[:, :, 2].min(axis=1) == toit[:, :, 2].max(axis=1)).all()
+    assert set(np.unique(toit[:, :, 2])) == {50, 60}
+
+
+def test_un_toit_a_deux_pans_proche_du_resume_garde_son_resume():
+    """Un vrai toit à deux pans (31°) n'est pas plat : il garde son résumé."""
+    from vue3d.toits import SURFACE_ECART_RESUME_M, toits_pour_emprise
+    bbox, grille, rectangle = _scene_60m(
+        lambda X, Y: np.where((np.abs(X) <= 8) & (np.abs(Y) <= 5), 7.0 - 3.0 * np.abs(Y) / 5, 0.0))
+    t = toits_pour_emprise(*bbox, {"features": [rectangle("MAISON", -8, -5, 8, 5)]},
+                           grille, None)["toits"]["MAISON"]
+    assert t["fiable"] and t["ecart_resume"] <= SURFACE_ECART_RESUME_M
+    assert "pans" not in t and "surface" not in t

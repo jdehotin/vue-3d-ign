@@ -322,6 +322,37 @@ def segmenter(z, valides, X, Y):
     return np.array(lab, dtype=np.int32).reshape(ny + 2, W)[1:-1, 1:-1].copy(), plans
 
 
+def part_plate(etiquettes, plans, valides, X, Y, pente_max_deg, etendue_min_m):
+    """Part des cellules lues comme toit que portent des pans presque
+    horizontaux : moins de `pente_max_deg` entre leur normale et la verticale.
+
+    Un pan ne compte que si ses cellules s'étendent d'au moins `etendue_min_m`
+    (écart-type) dans leur direction la plus étroite : sur un ruban, la pente
+    en travers n'est pas mesurée.
+
+    Args:
+        etiquettes, plans: résultat de `segmenter`.
+        valides: cellules lues comme toit.
+        X, Y: centres des cellules, mètres.
+    """
+    n = int(valides.sum())
+    if not n:
+        return 0.0
+    cos_min = math.cos(math.radians(pente_max_deg))
+    plates = 0
+    for k, p in enumerate(plans):
+        if p is None or p[1][2] < cos_min:
+            continue
+        m = (etiquettes == k) & valides
+        if m.sum() < 2:
+            continue
+        # Plus petite valeur propre de la covariance des centres : la
+        # variance dans la direction la plus étroite du pan.
+        if np.linalg.eigvalsh(np.cov(X[m], Y[m]))[0] >= etendue_min_m ** 2:
+            plates += int(m.sum())
+    return plates / n
+
+
 def _prolonger(etiquettes, plans, z, zone, X, Y):
     """Étend les étiquettes à toute la zone : pan voisin de moindre écart.
 
@@ -708,7 +739,7 @@ def construire_volume(emprise, lab, plans, X, Y):
     return sommets, toit, murs, plancher
 
 
-def pans_du_toit(emprise, X, Y, z, valides):
+def pans_du_toit(emprise, X, Y, z, valides, segmentation=None):
     """Toit en pans d'un bâtiment, prêt pour la vue, ou None.
 
     Args:
@@ -716,6 +747,9 @@ def pans_du_toit(emprise, X, Y, z, valides):
         X, Y: centres des cellules de la fenêtre MNH (y vers le nord).
         z: hauteurs du toit au-dessus du point bas du terrain, comblées.
         valides: cellules lues comme toit.
+        segmentation: (etiquettes, plans) de `segmenter` sur ces mêmes
+            entrées, s'ils sont déjà calculés — la segmentation est
+            déterministe, le résultat est le même.
 
     Returns:
         dict(sommets, triangles, n_toit, n_pans, ecart_m) : sommets en
@@ -726,7 +760,7 @@ def pans_du_toit(emprise, X, Y, z, valides):
         vérifié, n'est pas transmis : il n'est jamais vu. None si les pans
         couvrent trop peu du toit ou si le volume n'est pas fermé.
     """
-    etiquettes, plans = segmenter(z, valides, X, Y)
+    etiquettes, plans = segmentation or segmenter(z, valides, X, Y)
     if (etiquettes >= 0).sum() < PANS_COUVERTURE_MIN * valides.sum():
         return None
     zone = proches(emprise, X, Y, PANS_DEBORD_M)

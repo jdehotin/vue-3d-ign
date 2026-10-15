@@ -111,7 +111,9 @@ journal = logging.getLogger(__name__)
 # 14 : constructions ponctuelles qui dépassent leur bâtiment, fût des très
 #      hautes cheminées dont le LiDAR perd le sommet, tours de
 #      refroidissement (constructions.py).
-SCENE_VERSION = 14
+# 15 : toits-terrasses en pans, même proches du toit résumé
+#      (toits.TOITS_PLAT_PENTE_DEG) : le résumé n'a qu'une pente.
+SCENE_VERSION = 15
 # Demi-côté de l'emprise, en degrés : ~178 m de part et d'autre du point.
 SCENE_DELTA = 0.0016
 # Demi-côté de l'anneau, en mètres et non en degrés : carré sur le terrain.
