@@ -4,6 +4,11 @@
     <meta charset="utf-8" />
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🌳%3C/text%3E%3C/svg%3E" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- Ajoutée à l'écran d'accueil, la page s'ouvre sans la barre du
+         navigateur : le seul plein écran de l'iPhone, qui n'a pas l'API. -->
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="theme-color" content="#1f2328" />
     <title>Vue 3D IGN</title>
     <style>
         :root { --accent:#e07b00; --panel:#1f2328; --panel-soft:#2b3138;
@@ -55,8 +60,11 @@
         .lien-ext:hover { border-color:var(--accent); }
         button.lien-ext { background:none; font-family:inherit; cursor:pointer; margin-right:4px; }
         button.lien-ext:disabled { color:var(--muted); cursor:wait; }
-        #scene { flex:1; position:relative; }
-        #scene canvas { display:block; }
+        /* min-width et le canvas hors du flux : sinon la vue gardait la
+           largeur de son canvas et débordait de l'écran, boussole et crédits
+           coupés (iPhone en paysage, 600 px de vue pour 544 de place). */
+        #scene { flex:1; position:relative; min-width:0; overflow:hidden; }
+        #scene canvas { display:block; position:absolute; left:0; top:0; }
         /* En haut : le bas de la vue est aux crédits, qu'il chevauchait. */
         #haut-gauche { position:absolute; left:12px; top:12px; z-index:2; max-width:calc(100% - 110px);
                        display:flex; flex-direction:column; align-items:flex-start; gap:6px;
@@ -156,17 +164,89 @@
                display:none; max-width:230px; line-height:1.4; }
         /* Épinglée par un clic : elle ne suit plus la souris et ses liens se cliquent. */
         #tip.epingle { pointer-events:auto; }
-        @media (max-width:780px) { #app { flex-direction:column; }
-            #panel { width:100%; flex:0 0 auto; max-height:45%; }
-            /* Sous 16 px, Safari iOS zoome sur le champ qui prend le focus. */
-            .form-point input { font-size:16px; }
-            #credits { max-width:none; left:12px; } }
+        /* Commandes de la vue, en colonne sous la boussole : la navigation,
+           pas l'affichage. Centrées sous elle (64 px, à 14 px du bord). */
+        .bouton-vue { width:40px; height:40px; padding:0; border-radius:50%; display:flex;
+                      align-items:center; justify-content:center; cursor:pointer;
+                      background:rgba(31,35,40,.85); border:1px solid var(--line); color:var(--text); }
+        .bouton-vue:hover { border-color:var(--accent); }
+        .bouton-vue:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+        .bouton-vue.on { background:var(--accent); border-color:var(--accent); color:#fff; }
+        .bouton-vue[hidden] { display:none; }
+        .bouton-vue svg { width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.8;
+                          stroke-linecap:round; stroke-linejoin:round; }
+        #nav-vue { position:absolute; top:88px; right:26px; z-index:3; display:flex;
+                   flex-direction:column; gap:8px; }
+        #btn-plein-ecran .sortir, html.plein-ecran #btn-plein-ecran .entrer { display:none; }
+        html.plein-ecran #btn-plein-ecran .sortir { display:inline; }
+        /* Le drone au doigt : deux croix de touches, au-dessus des crédits. */
+        #pad-drone { position:absolute; left:0; right:0; bottom:72px; z-index:3; display:flex;
+                     justify-content:space-between; padding:0 16px; pointer-events:none; }
+        #pad-drone[hidden] { display:none; }
+        .pad { display:grid; grid-template-columns:repeat(3, 52px); grid-template-rows:repeat(2, 52px);
+               gap:6px; }
+        .pad button { pointer-events:auto; touch-action:none; user-select:none; -webkit-user-select:none;
+                      -webkit-touch-callout:none; padding:0; border-radius:12px; font-size:20px;
+                      background:rgba(31,35,40,.8); border:1px solid var(--line); color:var(--text); }
+        .pad button.appui { background:var(--accent); border-color:var(--accent); color:#fff; }
+        #tip .voir-fiche { margin-top:6px; padding:6px 10px; border-radius:5px; border:0; cursor:pointer;
+                           background:var(--accent); color:#fff; font:inherit; font-weight:600; }
+        /* Le tiroir : la vue prend tout l'écran, le panneau glisse par-dessus
+           depuis la gauche, ouvert par ☰, refermé par ×, Échap ou un toucher à
+           côté. Caché, il sort aussi de l'ordre de tabulation (visibility). */
+        #btn-tiroir { position:absolute; left:12px; top:12px; z-index:3; display:none; }
+        #btn-fermer-tiroir { display:none; float:right; margin:-6px -6px 0 8px; width:36px; height:36px;
+                             padding:0; border:0; background:none; color:var(--muted); font-size:26px;
+                             line-height:1; cursor:pointer; }
+        #voile { display:none; position:fixed; inset:0; z-index:19; background:rgba(0,0,0,.35); }
+        html.tiroir #btn-tiroir { display:flex; }
+        html.tiroir #btn-fermer-tiroir { display:block; }
+        html.tiroir #haut-gauche { left:62px; max-width:calc(100% - 152px); }
+        html.tiroir #panel { position:fixed; left:0; top:0; bottom:0; z-index:20; width:min(340px, 88vw);
+                             transform:translateX(-100%); visibility:hidden;
+                             transition:transform .25s ease-out, visibility 0s linear .25s;
+                             box-shadow:2px 0 16px rgba(0,0,0,.5); }
+        html.tiroir.tiroir-ouvert #panel { transform:none; visibility:visible;
+                                           transition:transform .25s ease-out; }
+        html.tiroir.tiroir-ouvert #voile { display:block; }
+        html.tiroir #credits { left:12px; max-width:none; }
+        @media (prefers-reduced-motion: reduce) { html.tiroir #panel { transition:none; } }
+        /* Au doigt : des cibles d'au moins 36 px ; 16 px dans les champs, sous
+           lesquels Safari iOS zoome sur celui qui prend le focus. */
+        @media (pointer: coarse) {
+            .toggle { padding:9px 12px; font-size:13px; }
+            .row { margin-top:14px; }
+            .row label { font-size:12px; }
+            .form-point input, .zone select { font-size:16px; padding:7px 8px; }
+            .form-point button { padding:9px 14px; font-size:15px; }
+            #suggestions li { padding:10px 8px; font-size:14px; }
+            #panel header .reconstruire, #panel header a { font-size:13px; padding:4px 0; }
+        }
     </style>
+    <script>
+    // Petit écran, ou plein écran : la vue prend toute la place et le panneau
+    // devient un tiroir (html.tiroir). Posée ici, avant le premier rendu : le
+    // module, qui attend three.js, l'aurait posée après un premier affichage
+    // à deux colonnes. 780 px : en dessous, le panneau de 300 px laissait moins
+    // de 480 px à la vue ; 520 px de haut : un téléphone tenu en paysage.
+    (() => {
+        const petit = matchMedia('(max-width: 780px), (max-height: 520px)');
+        const racine = document.documentElement;
+        window.majTiroir = () => {
+            const tiroir = petit.matches || racine.classList.contains('plein-ecran');
+            racine.classList.toggle('tiroir', tiroir);
+            if (!tiroir) racine.classList.remove('tiroir-ouvert');
+        };
+        window.majTiroir();
+        petit.addEventListener('change', window.majTiroir);
+    })();
+    </script>
 </head>
 <body>
 <div id="app">
     <div id="panel">
         <header>
+            <button type="button" id="btn-fermer-tiroir" aria-label="Fermer le panneau">×</button>
             <h1>Vue 3D IGN</h1>
             <div id="nom-point" hidden></div>
             <div class="sub" id="coord-point">—</div>
@@ -200,7 +280,6 @@
                 <button class="toggle on" id="t-mesure" title="Pans mesurés au LiDAR là où le toit résumé s'en écarte de plus de 0,7 m">Toits mesurés</button>
                 <button class="toggle on" id="t-monuments" hidden title="Parties de bâtiments modélisées dans OpenStreetMap (building:part)">Monuments OSM</button>
                 <button class="toggle" id="t-orbit">Orbite</button>
-                <button class="toggle" id="t-drone" title="Piloter un drone au clavier, vu de derrière : flèches, Q D, espace et Maj">Drone</button>
                 <button class="toggle on" id="t-fond">Photo aérienne</button>
                 <button class="toggle" id="t-plan">Plan IGN</button>
                 <button class="toggle on" id="t-relief">Relief</button>
@@ -337,7 +416,12 @@
         </div>
     </div>
 
+    <div id="voile"></div>
     <div id="scene">
+        <button type="button" id="btn-tiroir" class="bouton-vue" aria-label="Ouvrir le panneau"
+                aria-controls="panel" aria-expanded="false" title="Recherche, affichage, fiches">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+        </button>
         <div id="haut-gauche">
             <div id="hint">Glisser pour pivoter · molette pour zoomer · survol pour mesurer · clic sur un bâtiment pour sa fiche</div>
             <div id="hud-drone" class="etat-couche" role="status" hidden></div>
@@ -358,6 +442,40 @@
                 <div class="aiguille"></div>
                 <span class="n">N</span><span class="e">E</span>
                 <span class="s">S</span><span class="o">O</span>
+            </div>
+        </div>
+        <div id="nav-vue">
+            <button type="button" id="btn-plein-ecran" class="bouton-vue" hidden title="Plein écran"
+                    aria-label="Plein écran">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path class="entrer" d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>
+                    <path class="sortir" d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/>
+                </svg>
+            </button>
+            <button type="button" id="t-drone" class="bouton-vue" aria-label="Drone"
+                    title="Piloter un drone, vu de derrière : au clavier, flèches, Q D, espace et Maj ; au doigt, les flèches à l'écran">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <circle cx="5.5" cy="5.5" r="3"/><circle cx="18.5" cy="5.5" r="3"/>
+                    <circle cx="5.5" cy="18.5" r="3"/><circle cx="18.5" cy="18.5" r="3"/>
+                    <path d="M7.6 7.6l2.4 2.4M16.4 7.6L14 10M7.6 16.4l2.4-2.4M16.4 16.4L14 14"/>
+                    <rect x="10" y="10" width="4" height="4" rx="1"/>
+                </svg>
+            </button>
+        </div>
+        <!-- Les touches du drone, au doigt : chacune tient enfoncée la touche
+             du clavier qu'elle porte (touchesDrone). -->
+        <div id="pad-drone" hidden>
+            <div class="pad" aria-label="Avancer et tourner">
+                <button type="button" data-touche="ArrowUp" style="grid-area:1/2" aria-label="Avancer">↑</button>
+                <button type="button" data-touche="ArrowLeft" style="grid-area:2/1" aria-label="Tourner à gauche">↶</button>
+                <button type="button" data-touche="ArrowDown" style="grid-area:2/2" aria-label="Reculer">↓</button>
+                <button type="button" data-touche="ArrowRight" style="grid-area:2/3" aria-label="Tourner à droite">↷</button>
+            </div>
+            <div class="pad" aria-label="Monter, descendre et glisser">
+                <button type="button" data-touche="Space" style="grid-area:1/2" aria-label="Monter">▲</button>
+                <button type="button" data-touche="KeyA" style="grid-area:2/1" aria-label="Glisser à gauche">◀</button>
+                <button type="button" data-touche="ShiftLeft" style="grid-area:2/2" aria-label="Descendre">▼</button>
+                <button type="button" data-touche="KeyD" style="grid-area:2/3" aria-label="Glisser à droite">▶</button>
             </div>
         </div>
         <div id="decalage" hidden>
@@ -8057,6 +8175,19 @@ const raycaster = new THREE.Raycaster();
 const souris = new THREE.Vector2();
 const tip = document.getElementById('tip');
 const rose = document.getElementById('rose');
+/** Pose l'infobulle près du pointeur, sans qu'elle sorte de la vue, qui la
+ *  couperait (overflow:hidden) : au bord d'un téléphone, elle sortait. */
+function placerTip(e, r) {
+    tip.style.display = 'block';
+    const x = e.clientX - r.left + 14, y = e.clientY - r.top + 14;
+    tip.style.left = Math.max(4, Math.min(x, r.width - tip.offsetWidth - 4)) + 'px';
+    tip.style.top = Math.max(4, Math.min(y, r.height - tip.offsetHeight - 4)) + 'px';
+}
+tip.addEventListener('click', e => {
+    if (!e.target.closest('.voir-fiche')) return;
+    detacherTip();
+    ouvrirTiroir(document.getElementById('fiche-batiment').closest('.section'));
+});
 
 renderer.domElement.addEventListener('pointermove', e => {
     if (tipEpingle) return;
@@ -8082,9 +8213,7 @@ renderer.domElement.addEventListener('pointermove', e => {
             `<br>${dist.toFixed(0)} m du point · azimut ${azimut.toFixed(0)}°` +
             `<br>élévation ${(Math.atan2(info.h, Math.max(dist, 1)) * 180 / Math.PI).toFixed(0)}°` +
             (info.classe === 'sursol' ? '<br><i>hors zone de végétation BD TOPO, pas vert à l\'orthophoto</i>' : '');
-        tip.style.display = 'block';
-        tip.style.left = (e.clientX - r.left + 14) + 'px';
-        tip.style.top = (e.clientY - r.top + 14) + 'px';
+        placerTip(e, r);
         return;
     }
 
@@ -8094,9 +8223,7 @@ renderer.domElement.addEventListener('pointermove', e => {
             + (u.gestionnaire ? `<br>${u.gestionnaire}` : '')
             + `<br>pylône ${u.h.toFixed(1)} m `
             + (u.mesuree ? '<i>(BD TOPO)</i>' : '<i>(hauteur typique de la tension)</i>');
-        tip.style.display = 'block';
-        tip.style.left = (e.clientX - r.left + 14) + 'px';
-        tip.style.top = (e.clientY - r.top + 14) + 'px';
+        placerTip(e, r);
         return;
     }
 
@@ -8106,9 +8233,7 @@ renderer.domElement.addEventListener('pointermove', e => {
             + `<br>boîte de ${enMetres(v.longueur)} sur ${enMetres(v.largeur)}, lue sur l'orthophoto`
             + '<br><i>là où il était le jour de la prise de vue</i>'
             + '<br><i>hauteur et forme de convention, avant et arrière non distingués</i>';
-        tip.style.display = 'block';
-        tip.style.left = (e.clientX - r.left + 14) + 'px';
-        tip.style.top = (e.clientY - r.top + 14) + 'px';
+        placerTip(e, r);
         return;
     }
 
@@ -8117,17 +8242,13 @@ renderer.domElement.addEventListener('pointermove', e => {
         tip.innerHTML = '<b>Piscine</b>'
             + `<br>boîte de ${enMetres(p.longueur)} sur ${enMetres(p.largeur)}, lue sur l'orthophoto`
             + '<br><i>dessinée en rectangle, quelle que soit sa forme ; couleur de l\'eau ce jour-là</i>';
-        tip.style.display = 'block';
-        tip.style.left = (e.clientX - r.left + 14) + 'px';
-        tip.style.top = (e.clientY - r.top + 14) + 'px';
+        placerTip(e, r);
         return;
     }
 
     if (touche && touche.object.userData.infobulle) {
         tip.innerHTML = touche.object.userData.infobulle;
-        tip.style.display = 'block';
-        tip.style.left = (e.clientX - r.left + 14) + 'px';
-        tip.style.top = (e.clientY - r.top + 14) + 'px';
+        placerTip(e, r);
         return;
     }
 
@@ -8135,9 +8256,7 @@ renderer.domElement.addEventListener('pointermove', e => {
     const ud = hit ? hit.object.userData : null;
     if (!ud || !ud.anneau) { tip.style.display = 'none'; return; }
     tip.innerHTML = resumeBatiment(ud) + ligneDpe(ud) + '<br><i>clic pour la fiche</i>';
-    tip.style.display = 'block';
-    tip.style.left = (e.clientX - r.left + 14) + 'px';
-    tip.style.top = (e.clientY - r.top + 14) + 'px';
+    placerTip(e, r);
 });
 
 /** Les deux lignes de l'infobulle d'un bâtiment ou d'une partie OSM. */
@@ -8179,11 +8298,13 @@ function resumeBatiment(ud) {
 // souris qui va vers le lien.
 let tipEpingle = false;
 function epinglerTip(ud, e, r) {
-    tip.innerHTML = resumeBatiment(ud) + ligneDpe(ud) + '<br><i>fiche dans le panneau</i>'
+    // En tiroir, le panneau est caché : un bouton l'ouvre sur la fiche.
+    const fiche = document.documentElement.classList.contains('tiroir')
+        ? '<button type="button" class="voir-fiche">Voir la fiche</button>'
+        : '<i>fiche dans le panneau</i>';
+    tip.innerHTML = resumeBatiment(ud) + ligneDpe(ud) + '<br>' + fiche
         + '<br>' + lienRecentrer(ud.anneau).trim() + '<br>' + lienStreetView(ud.anneau);
-    tip.style.display = 'block';
-    tip.style.left = (e.clientX - r.left + 14) + 'px';
-    tip.style.top = (e.clientY - r.top + 14) + 'px';
+    placerTip(e, r);
     tip.classList.add('epingle');
     tipEpingle = true;
 }
@@ -8351,9 +8472,18 @@ const DRONE_GARDE = 1.5;                            // m au-dessus de ce qu'il s
 const DRONE_PLAFOND = 4000;                         // m au-dessus du point
 const DRONE_RECUL = { min: 4, depart: 9, max: 80 }; // caméra derrière le drone, m
 const DRONE_INCLINAISON = 18 * Math.PI / 180;       // à pleine vitesse, pour l'œil seulement
+// Au doigt (téléphone, tablette, écran d'une voiture), ni molette, ni survol,
+// ni clavier : l'aide le dit, et le drone a ses touches à l'écran.
+const AU_DOIGT = matchMedia('(pointer: coarse)').matches;
+const TACTILE = AU_DOIGT || navigator.maxTouchPoints > 0;
+if (AU_DOIGT) aideVue.textContent = 'Glisser pour pivoter · pincer pour zoomer · '
+    + 'toucher un bâtiment pour sa fiche';
 const AIDE_ORBITE = aideVue.textContent;
-const AIDE_DRONE = 'Drone : ↑ ↓ avancer, reculer · ← → tourner · Q D glisser · espace monter · '
-    + 'Maj descendre · molette pour le recul · Échap pour sortir';
+const AIDE_DRONE = AU_DOIGT
+    ? 'Drone : à gauche avancer, reculer, tourner · à droite monter, descendre, glisser · '
+      + 'son bouton pour sortir'
+    : 'Drone : ↑ ↓ avancer, reculer · ← → tourner · Q D glisser · espace monter · '
+      + 'Maj descendre · molette pour le recul · Échap pour sortir';
 const TOUCHES_DRONE = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
                                'KeyW', 'KeyA', 'KeyS', 'KeyD', 'Space', 'ShiftLeft', 'ShiftRight']);
 
@@ -8363,6 +8493,20 @@ const drone = { position: new THREE.Vector3(), vitesse: new THREE.Vector3(), cap
 const touchesDrone = new Set();
 const btnDrone = document.getElementById('t-drone');
 const hudDrone = document.getElementById('hud-drone');
+const padDrone = document.getElementById('pad-drone');
+// Une touche à l'écran tient enfoncée sa touche du clavier tant que le doigt
+// est dessus ; capturé, il la relâche même s'il glisse hors du bouton.
+for (const b of padDrone.querySelectorAll('button')) {
+    const relacher = () => { touchesDrone.delete(b.dataset.touche); b.classList.remove('appui'); };
+    b.addEventListener('pointerdown', e => {
+        e.preventDefault();
+        b.setPointerCapture(e.pointerId);
+        touchesDrone.add(b.dataset.touche);
+        b.classList.add('appui');
+    });
+    for (const fin of ['pointerup', 'pointercancel', 'lostpointercapture']) b.addEventListener(fin, relacher);
+    b.addEventListener('contextmenu', e => e.preventDefault());
+}
 
 // Un quadricoptère d'un mètre d'envergure, l'avant vers −Z et marqué
 // d'orange. Il ne porte pas d'ombre : en vol, il ferait redessiner la carte
@@ -8457,6 +8601,7 @@ function entrerDrone() {
     groupeDrone.visible = true;
     aideVue.textContent = AIDE_DRONE;
     hudDrone.hidden = false;
+    padDrone.hidden = !TACTILE;
     decalage.hidden = true;
 }
 
@@ -8468,6 +8613,8 @@ function sortirDrone() {
     groupeDrone.visible = false;
     aideVue.textContent = AIDE_ORBITE;
     hudDrone.hidden = true;
+    padDrone.hidden = true;
+    for (const b of padDrone.querySelectorAll('.appui')) b.classList.remove('appui');
     decalage.hidden = !ARTEFACT;
     controls.update();
     // Cachées pendant le vol, les flèches pointaient encore où elles étaient
@@ -8611,7 +8758,12 @@ renderer.domElement.addEventListener('pointerup', e => {
     if (!hit) return;
     const ud = hit.object.userData;
     // Une parcelle vendue, ou un bâtiment posé dessus : ses ventes dans le panneau.
-    if (ud.parcelle) { afficherVentesParcelle(ud.parcelle); return; }
+    if (ud.parcelle) {
+        afficherVentesParcelle(ud.parcelle);
+        // En tiroir, le panneau est caché : il s'ouvre sur les ventes.
+        if (document.documentElement.classList.contains('tiroir')) ouvrirTiroir(document.getElementById('sec-dvf'));
+        return;
+    }
     const vendu = dvfActif && ud.p && venteParBatiment.get(ud.p.cleabs);
     if (vendu) afficherVentesParcelle(vendu.parcelle);
     // La végétation se survole mais ne s'ouvre pas : elle n'a pas de fiche.
@@ -8828,6 +8980,55 @@ document.getElementById('saison-aujourdhui').addEventListener('click', e => {
 });
 majSoleil(DATE_SCENE.heure);
 
+// --- Tiroir et plein écran ---------------------------------------------------
+// En tiroir (html.tiroir, posée dans <head>), le panneau passe par-dessus la
+// vue, qui garde tout l'écran. Le plein écran y met aussi le panneau : sans
+// cela, il n'aurait plus été joignable.
+const racine = document.documentElement;
+const btnTiroir = document.getElementById('btn-tiroir');
+/** Ouvre le tiroir, sur `section` si elle est donnée. */
+function ouvrirTiroir(section) {
+    racine.classList.add('tiroir-ouvert');
+    btnTiroir.setAttribute('aria-expanded', 'true');
+    if (section) section.scrollIntoView({ block: 'start' });
+}
+function fermerTiroir() {
+    racine.classList.remove('tiroir-ouvert');
+    btnTiroir.setAttribute('aria-expanded', 'false');
+}
+btnTiroir.addEventListener('click', () => ouvrirTiroir());
+document.getElementById('btn-fermer-tiroir').addEventListener('click', fermerTiroir);
+document.getElementById('voile').addEventListener('click', fermerTiroir);
+// Échap ferme d'abord la liste des lieux, qui l'a déjà pris (defaultPrevented).
+window.addEventListener('keydown', e => {
+    if (e.code === 'Escape' && !e.defaultPrevented && racine.classList.contains('tiroir-ouvert')) {
+        fermerTiroir();
+    }
+});
+
+const btnPleinEcran = document.getElementById('btn-plein-ecran');
+const elementPleinEcran = () => document.fullscreenElement || document.webkitFullscreenElement;
+// L'iPhone n'a pas l'API, seulement la page ajoutée à l'écran d'accueil : pas
+// de bouton qui ne ferait rien.
+btnPleinEcran.hidden = !(document.fullscreenEnabled || document.webkitFullscreenEnabled);
+btnPleinEcran.addEventListener('click', () => {
+    const p = elementPleinEcran()
+        ? (document.exitFullscreen || document.webkitExitFullscreen).call(document)
+        : (racine.requestFullscreen || racine.webkitRequestFullscreen).call(racine);
+    if (p && p.catch) p.catch(() => {});
+});
+function majPleinEcran() {
+    const plein = !!elementPleinEcran();
+    racine.classList.toggle('plein-ecran', plein);
+    const libelle = plein ? 'Quitter le plein écran' : 'Plein écran';
+    btnPleinEcran.title = libelle;
+    btnPleinEcran.setAttribute('aria-label', libelle);
+    window.majTiroir();
+    btnPleinEcran.blur();
+}
+document.addEventListener('fullscreenchange', majPleinEcran);
+document.addEventListener('webkitfullscreenchange', majPleinEcran);
+
 // --- Boucle de rendu -----------------------------------------------------
 function dimensionner() {
     const w = host.clientWidth, h = host.clientHeight;
@@ -8841,8 +9042,8 @@ function dimensionner() {
     camera.updateProjectionMatrix();
 }
 window.addEventListener('resize', dimensionner);
-// Le panneau latéral passe au-dessus de la scène en dessous de 780 px : la
-// hauteur du conteneur change alors sans que la fenêtre soit redimensionnée.
+// Le passage en tiroir (fenêtre rétrécie, plein écran) change la largeur du
+// conteneur sans toujours redimensionner la fenêtre.
 if (window.ResizeObserver) new ResizeObserver(dimensionner).observe(host);
 dimensionner();
 

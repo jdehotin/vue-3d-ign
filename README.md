@@ -423,12 +423,19 @@ Chaque premier chargement construit la scène, en quelques secondes.
   d'autant plus grossières qu'elles sont loin de la caméra, sous un ciel qui
   suit l'heure. Le Ventoux se voit de Gordes, la baie du Mont-Saint-Michel
   s'étend jusqu'à la mer. Le bouton « Horizon » rend le fond sombre d'avant.
-- **Un drone**, au bouton « Drone » : vu de derrière et piloté au clavier —
-  flèches pour avancer et tourner, Q et D pour glisser, espace et Maj pour
-  monter et descendre, la molette pour le recul de la caméra, Échap pour
-  rendre la main à la souris. Il quitte la scène et survole l'horizon, sans
-  jamais passer sous le sol ni dans un toit ; le curseur « vitesse » règle sa
-  vitesse de pointe, jusqu'à 216 km/h.
+- **Un drone**, au bouton en forme de quadricoptère, sur la vue sous la
+  boussole : vu de derrière et piloté au clavier — flèches pour avancer et
+  tourner, Q et D pour glisser, espace et Maj pour monter et descendre, la
+  molette pour le recul de la caméra, Échap pour rendre la main à la souris.
+  Sur un écran tactile, deux croix de touches à l'écran font de même. Il
+  quitte la scène et survole l'horizon, sans jamais passer sous le sol ni
+  dans un toit ; le curseur « vitesse » règle sa vitesse de pointe, jusqu'à
+  216 km/h.
+- **Sur téléphone, sur l'écran d'une voiture, ou en plein écran** (le bouton
+  au-dessus du drone) : la vue prend tout l'écran, et le panneau devient un
+  tiroir ouvert par ☰. Un bâtiment touché ouvre sa fiche par « Voir la fiche ».
+  L'iPhone n'a pas de plein écran pour une page : ajoutée à l'écran d'accueil,
+  elle s'ouvre sans la barre du navigateur.
 - **Les véhicules**, si le service a été lancé avec un détecteur : ceux que
   l'orthophoto montre, à leur place et dans leur couleur du jour de la prise
   de vue, posés sur la pente. Longueur, largeur et orientation sont lues sur

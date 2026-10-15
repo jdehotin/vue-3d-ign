@@ -288,6 +288,23 @@ messages de commit et dans les commentaires des modules.
 
 ### Modifié
 
+- **Sur téléphone et sur l'écran d'une voiture, la vue prend tout l'écran.**
+  Sous 780 px de large ou 520 px de haut, le panneau passait au-dessus de la
+  vue et lui prenait près de la moitié de l'écran (380 px sur 844 sur un
+  iPhone) ; c'est désormais un tiroir, ouvert par ☰ et refermé par ×, Échap
+  ou un toucher à côté. Un bâtiment touché ouvre sa fiche par « Voir la
+  fiche », une parcelle vendue ses ventes. Au doigt, l'aide parle de pincer
+  plutôt que de molette, et boutons et champs grandissent.
+  - Un bouton plein écran, sur la vue sous la boussole ; en plein écran, le
+    panneau passe aussi en tiroir. Absent sur l'iPhone, qui n'a pas l'API :
+    la page ajoutée à l'écran d'accueil s'y ouvre sans barre.
+  - Le drone quitte les boutons d'affichage pour la vue, sous le plein
+    écran : il est de la navigation. Sur un écran tactile, deux croix de
+    touches à l'écran le pilotent comme le clavier.
+  - Corrigé : sur un téléphone en paysage, la vue gardait la largeur de son
+    canvas et débordait de l'écran, boussole et crédits coupés. Les
+    infobulles ne sortent plus de la vue.
+
 - **La page s'ouvre en zone de 1 000 m.** Sans `zone=` dans l'URL, elle
   demande la plus grande zone plutôt que l'emprise de 356 m du serveur : la
   première construction y prend 4 s à Gordes et 6 s à Strasbourg sur un Mac
