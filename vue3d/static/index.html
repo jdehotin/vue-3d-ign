@@ -179,6 +179,7 @@
         .bouton-vue:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
         .bouton-vue.on { background:var(--accent); border-color:var(--accent); color:#fff; }
         .bouton-vue[hidden] { display:none; }
+        .bouton-vue:disabled { cursor:wait; opacity:.6; }
         .bouton-vue svg { width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.8;
                           stroke-linecap:round; stroke-linejoin:round; }
         #nav-vue { position:absolute; top:88px; right:26px; z-index:3; display:flex;
@@ -303,7 +304,6 @@
                 <button class="toggle on" id="t-panneaux" hidden title="Panneaux solaires du registre OpenPVMapper">Panneaux solaires</button>
                 <button class="toggle" id="t-dpe" title="Diagnostics de performance énergétique (ADEME) des bâtiments autour du point : lus au premier clic">DPE</button>
                 <button class="toggle" id="t-dvf" title="Ventes immobilières des cinq dernières années (DVF) autour du point : lues au premier clic">Ventes DVF</button>
-                <button class="toggle" id="t-moi">Ma position</button>
             </div>
             <div class="row">
                 <label for="speed" title="Orbite : degrés par seconde. Drone : vitesse de pointe, 3 m/s par cran.">vitesse</label>
@@ -439,6 +439,7 @@
             <div id="etat-nuage" class="etat-couche" role="status" hidden><i class="roue"></i><span></span></div>
             <div id="etat-vehicules" class="etat-couche" role="status" hidden><i class="roue"></i><span></span></div>
             <div id="etat-foncier" class="etat-couche" role="status" hidden><i class="roue"></i><span></span></div>
+            <div id="etat-moi" class="etat-couche" role="status" hidden><i class="roue"></i><span></span></div>
             <div id="conseil-veg" class="etat-couche conseil" role="status" hidden>
                 <span></span>
                 <button type="button" class="agir">Masquer la végétation</button>
@@ -459,6 +460,13 @@
                 <svg viewBox="0 0 24 24" aria-hidden="true">
                     <path class="entrer" d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>
                     <path class="sortir" d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/>
+                </svg>
+            </button>
+            <button type="button" id="t-moi" class="bouton-vue" aria-label="Ma position"
+                    title="Ma position : un repère dans la scène, suivi en continu ; cliquer à nouveau pour arrêter">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <circle cx="12" cy="12" r="6.5"/><circle cx="12" cy="12" r="2"/>
+                    <path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3"/>
                 </svg>
             </button>
             <button type="button" id="t-drone" class="bouton-vue" aria-label="Drone"
@@ -6687,6 +6695,18 @@ const MESSAGES_GEOLOC = {
 const btnMoi = document.getElementById('t-moi');
 let suiviPosition = null;   // identifiant du watchPosition en cours
 
+// Le bouton est sur la vue, et sur téléphone le panneau est replié : chaque
+// message du suivi s'y affiche aussi, et s'efface après ANNONCE_MOI_S s'il
+// n'annonce pas une attente.
+const ANNONCE_MOI_S = 8;
+let effacerAnnonceMoi = null;
+function annoncerMoi(texte, enCours = false) {
+    document.getElementById('m-note').textContent = texte;
+    clearTimeout(effacerAnnonceMoi);
+    etatCouche('etat-moi', texte, enCours);
+    if (texte && !enCours) effacerAnnonceMoi = setTimeout(() => etatCouche('etat-moi', null), ANNONCE_MOI_S * 1000);
+}
+
 btnMoi.addEventListener('click', () => {
     if (suiviPosition === null) {
         demarrerSuivi();
@@ -6696,25 +6716,24 @@ btnMoi.addEventListener('click', () => {
     suiviPosition = null;
     groupePosition.visible = false;
     btnMoi.classList.remove('on');
-    document.getElementById('m-note').textContent = "Suivi arrêté.";
+    annoncerMoi("Suivi arrêté.");
 });
 
 function demarrerSuivi() {
-    const note = document.getElementById('m-note');
     document.getElementById('sec-moi').hidden = false;
     if (!navigator.geolocation) {
-        note.textContent = "Ce navigateur ne propose pas de géolocalisation.";
+        annoncerMoi("Ce navigateur ne propose pas de géolocalisation.");
         return;
     }
     // La géolocalisation exige un contexte sécurisé : sur http, l'API existe
     // mais échoue avec PERMISSION_DENIED sans que l'utilisateur ait rien refusé.
     if (!window.isSecureContext) {
-        note.textContent = "La géolocalisation exige une page en https.";
+        annoncerMoi("La géolocalisation exige une page en https.");
         return;
     }
 
     btnMoi.disabled = true;
-    note.textContent = "Localisation…";
+    annoncerMoi("Localisation…", true);
     let premiere = true;
     suiviPosition = navigator.geolocation.watchPosition(
         pos => {
@@ -6727,17 +6746,20 @@ function demarrerSuivi() {
                 // relevé — on bouge en marchant, et chaque recentrage relance
                 // une construction de plusieurs secondes.
                 if (!RELANCE_MOI && distanceAEmprise(moi.lon, moi.lat) > (moi.precision || 0)) {
-                    note.textContent = "Hors de la scène : recentrage sur votre position…";
+                    annoncerMoi("Hors de la scène : recentrage sur votre position…", true);
                     location.assign(urlRecentree());
                     return;
                 }
+                // Le détail (précision, hors de la scène) reste au panneau.
+                clearTimeout(effacerAnnonceMoi);
+                etatCouche('etat-moi', null);
                 cadrerSurMoi();
                 btnMoi.disabled = false;
                 btnMoi.classList.add('on');
             }
         },
         err => {
-            note.textContent = MESSAGES_GEOLOC[err.code] || ("Géolocalisation impossible : " + err.message);
+            annoncerMoi(MESSAGES_GEOLOC[err.code] || ("Géolocalisation impossible : " + err.message));
             btnMoi.disabled = false;
             if (suiviPosition !== null) navigator.geolocation.clearWatch(suiviPosition);
             suiviPosition = null;

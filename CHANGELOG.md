@@ -76,6 +76,10 @@ messages de commit et dans les commentaires des modules.
 
 ### Modifié
 
+- **« Ma position » est une icône sur la vue**, sous le bouton plein écran,
+  et non plus un bouton du panneau : sur téléphone, le panneau est replié.
+  Ses messages (localisation en cours, refus, https exigé) s'affichent aussi
+  sur la vue ; le détail reste dans le panneau.
 - **Les toits-terrasses ne sont plus dessinés en pente.** Le toit résumé —
   deux pans, un toit par faîtage, pyramide — met une pente dès que le haut
   du toit dépasse le bas de 0,5 m : la marche entre deux terrasses, ou la
