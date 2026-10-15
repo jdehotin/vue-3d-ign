@@ -108,7 +108,7 @@ for (const [format, bouton, debutFichier, finFichier] of [
     const dossier = path.dirname(path.resolve(sortie));
     const nom = await page.evaluate(f => {
       const q = new URLSearchParams(location.search);
-      return `vue3d-${q.get('lat') ?? 43.9116}-${q.get('lon') ?? 5.2003}${q.get('zone') ? '-z' + q.get('zone') : ''}.${f}`;
+      return `vue3d-${q.get('lat') ?? 43.9116}-${q.get('lon') ?? 5.2003}-z${q.get('zone') ?? 1000}.${f}`;
     }, format);
     const fichier = path.join(dossier, nom);
     fs.rmSync(fichier, { force: true });
@@ -153,8 +153,9 @@ try {
 // l'orbite, arrêtée plus haut, ne repart pas.
 try {
   const depart = new URL(page.url()).searchParams;
-  const zone = Number(depart.get('zone')) || null;
-  const demi = zone ? Math.min(Math.max(Math.round(zone / 50) * 50, 150), 1000) / 2 / 111320 : 0.0016;
+  // Sans zone= dans l'URL, la page prend 1 000 m.
+  const zone = Number(depart.get('zone')) || 1000;
+  const demi = Math.min(Math.max(Math.round(zone / 50) * 50, 150), 1000) / 2 / 111320;
   const attendu = [Number(depart.get('lat') ?? 43.9116) + demi / 2, Number(depart.get('lon') ?? 5.2003)]
     .map(v => String(Number(v.toFixed(4))));
   const caps = () => page.$$eval('#decalage .pointe', ps => ps.map(p => p.style.transform).join(' '));

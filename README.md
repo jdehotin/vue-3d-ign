@@ -34,14 +34,15 @@ village de Gordes. Un autre lieu se cherche dans le panneau — adresse, lieu
 nommé (« château de Chambord ») ou coordonnées collées, avec suggestions dès
 la frappe — ou se donne dans l'URL (`?lat=…&lon=…`). Les flèches N, E, S et O,
 au bord de la vue, décalent la scène d'un quart de zone dans leur direction.
-La zone chargée mesure par défaut environ 356 m du nord au
-sud ; le sélecteur **Zone** du panneau, ou `&zone=…` dans l'URL, la porte de
+La zone chargée mesure par défaut 1 000 m du nord au
+sud ; le sélecteur **Zone** du panneau, ou `&zone=…` dans l'URL, la règle de
 150 à 1 000 m (arrondie à 50 m). Le temps de construction suit la surface et
 la densité du bâti : à 1 000 m, 4 s à Gordes et 6 s à Strasbourg sur un Mac
-M4 hors conteneur, 4 et 4,5 s dans le conteneur.
+M4 hors conteneur, 4 et 4,5 s dans le conteneur. Sans `zone=`, l'API garde
+une emprise d'environ 356 m, que la page ne demande plus.
 
 La **première** ouverture d'un lieu construit sa scène en quelques secondes
-(1 s pour l'emprise par défaut), le temps de
+(1 s en zone de 350 m), le temps de
 télécharger une grille de hauteurs à 0,5 m, d'y mesurer les toits et d'y
 segmenter les arbres.
 Les ouvertures suivantes sont instantanées, la scène étant gardée sur disque
@@ -142,7 +143,7 @@ docker compose down -v && VUE3D_VEHICULES=rtmdet docker compose up -d --build
 | `yolo` | YOLO11s-OBB (Ultralytics, **AGPL-3.0**) | 146, dont 48 des 61 | 140 | 8 et 8 | 5 à 30 s |
 | `tous` | l'union des deux | 169, dont 49 des 61 | 188 | 14 et 9 | 6 à 36 s |
 
-Temps de calcul sur l'emprise par défaut, mesurés sur un Mac à dix cœurs, hors
+Temps de calcul sur l'emprise de 356 m, mesurés sur un Mac à dix cœurs, hors
 conteneur (CoreML) puis dans le conteneur ; quatre fois plus en zone de
 1 000 m.
 La scène n'attend pas ces calculs, et chaque résultat s'affiche dès qu'il est
@@ -163,7 +164,7 @@ Aucun des deux réseaux ne suffit partout : `rtmdet` lit mal un parking serré,
   entraînés sur [DOTA](https://captain-whu.github.io/DOTA/dataset.html), dont
   les images sont réservées à un usage académique.
 - **La mémoire.** Avec `tous`, le service occupe dans le conteneur jusqu'à
-  1,2 Go sur l'emprise par défaut et 2 Go en zone de 1 000 m, contre 0,4 et
+  1,2 Go sur l'emprise de 356 m et 2 Go en zone de 1 000 m, contre 0,4 et
   0,9 Go sans détecteur : plusieurs tuiles passent à la fois dans chaque
   réseau.
 - **Changer d'option recalcule la couche des véhicules** de chaque lieu, et
@@ -282,7 +283,7 @@ l'ADEME ni à DVF tant qu'on ne clique pas, et rien n'est à installer.
 
 Les deux sont datés (« lus le … ») et gardés en cache avec la scène ;
 « Reconstruire la scène » les relit. Une seconde ou deux à la première
-lecture, en zone par défaut. Les conditions de réutilisation de DVF
+lecture, en zone de 356 m. Les conditions de réutilisation de DVF
 interdisent de réidentifier les personnes et de laisser les moteurs de
 recherche indexer ces données : la page ne les publie nulle part.
 
@@ -294,7 +295,7 @@ sursol. Le navigateur écrit le fichier lui-même, en une à quelques secondes.
 
 - **IFC 4**, pour un logiciel de conception — Revit, ArchiCAD, Vectorworks,
   Allplan, Bonsai : des maillages, autour d'une origine au point visé. 5 à
-  9 Mo dans l'emprise par défaut, environ 25 Mo en zone de 1 000 m, 35 avec
+  9 Mo dans l'emprise de 356 m, environ 25 Mo en zone de 1 000 m, 35 avec
   les masses.
 - **CityGML 2.0**, pour les SIG et les maquettes urbaines — FME, 3DCityDB,
   FZKViewer : bâtiments en LOD2, une surface de toit, de mur ou de sol par
@@ -604,7 +605,7 @@ principales :
 - **Couverture LiDAR HD en cours.** Environ 77 % des bâtiments tirés au hasard
   sont couverts ; ailleurs, le repli photogrammétrique lisse les cimes et les
   faîtages, et le panneau le signale.
-- **Une scène couvre environ 356 m de côté** autour du point. Au-delà, l'anneau
+- **Une scène couvre au plus 1 000 m de côté** autour du point. Au-delà, l'anneau
   ne porte que le relief (maille de 16 m) et le fond en basse résolution, sans
   bâtiment ni arbre : un bâtiment qui sort de la scène est coupé à son bord,
   et son morceau est mesuré seul — trop petit, il retombe sur les hauteurs BD

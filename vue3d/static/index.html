@@ -179,13 +179,13 @@
                 </div>
                 <button type="submit">Voir</button>
             </form>
-            <label class="zone" title="Côté nord-sud de la zone chargée. Une zone plus grande se construit plus longtemps : jusqu'à huit fois à 1 000 m.">
+            <label class="zone" title="Côté nord-sud de la zone chargée. Une zone plus petite se construit plus vite : jusqu'à huit fois à 350 m.">
                 Zone
                 <select id="in-zone">
-                    <option value="">356 m (par défaut)</option>
+                    <option value="350">350 m</option>
                     <option value="500">500 m</option>
                     <option value="700">700 m</option>
-                    <option value="1000">1 000 m</option>
+                    <option value="1000">1 000 m (par défaut)</option>
                 </select>
             </label>
             <button type="button" id="btn-reconstruire" class="reconstruire"
@@ -382,9 +382,10 @@
 window.DEMANDE_SCENE = (() => {
     const params = new URLSearchParams(location.search);
     const lire = n => { const v = Number(String(params.get(n) || '').replace(',', '.')); return Number.isFinite(v) && params.get(n) !== null ? v : null; };
-    const zone = lire('zone');
+    // Sans zone=, 1 000 m : ZONE_DEFAUT_M, plus bas.
+    const zone = lire('zone') ?? 1000;
     const url = `api/scene?lat=${lire('lat') ?? 43.9116}&lon=${lire('lon') ?? 5.2003}`
-        + (zone === null ? '' : `&zone=${Math.min(Math.max(Math.round(zone / 50) * 50, 150), 1000)}`);
+        + `&zone=${Math.min(Math.max(Math.round(zone / 50) * 50, 150), 1000)}`;
     const reponse = fetch(url);
     reponse.catch(() => {});      // l'erreur est traitée par le module
     return { url, reponse };
@@ -416,19 +417,25 @@ const lireCoord = n => { const v = Number(String(PARAMS.get(n) || '').replace(',
 const LAT0 = lireCoord('lat') ?? POINT_DEFAUT.lat;
 const LON0 = lireCoord('lon') ?? POINT_DEFAUT.lon;
 const CENTER = [LON0, LAT0];
-// Côté nord-sud de la zone, en mètres (?zone=…) ; absent, l'emprise par
-// défaut du serveur (scene.SCENE_DELTA, ~356 m). Mêmes arrondi et bornes que
-// scene.zone_normalisee, pour que la page attende l'emprise que le serveur
-// construit.
-const ZONE_DEFAUT_M = 2 * 0.0016 * 111320;
+// Côté nord-sud de la zone, en mètres (?zone=…) ; absent, 1 000 m, la plus
+// grande que construise le serveur : 4 s à Gordes, 6 s à Strasbourg sur un
+// Mac M4 (README), assez vite pour l'ouvrir d'emblée. Mêmes arrondi et bornes
+// que scene.zone_normalisee, pour que la page attende l'emprise que le
+// serveur construit.
+const ZONE_DEFAUT_M = 1000;
+// L'emprise du serveur sans zone= (scene.SCENE_DELTA, ~356 m), que la page ne
+// demande plus : les distances de vue, le brouillard et les ombres ont été
+// réglés pour elle, et la suivent quand la zone grandit.
+const EMPRISE_REFERENCE_M = 2 * 0.0016 * 111320;
 const ZONE = (() => {
-    const v = lireCoord('zone');
-    return v === null ? null : Math.min(Math.max(Math.round(v / 50) * 50, 150), 1000);
+    const v = lireCoord('zone') ?? ZONE_DEFAUT_M;
+    return Math.min(Math.max(Math.round(v / 50) * 50, 150), 1000);
 })();
-// Rapport à l'emprise par défaut : les distances de vue, le brouillard et les
-// ombres, réglés pour elle, la suivent quand la zone grandit.
-const ECHELLE_ZONE = Math.max(1, (ZONE ?? ZONE_DEFAUT_M) / ZONE_DEFAUT_M);
-const PARAM_ZONE = ZONE === null ? '' : `&zone=${ZONE}`;
+const ECHELLE_ZONE = Math.max(1, ZONE / EMPRISE_REFERENCE_M);
+const PARAM_ZONE = `&zone=${ZONE}`;
+// Dans les liens vers un autre point, la zone par défaut ne s'écrit pas : ils
+// restent courts, comme ceux du sélecteur de zone.
+const PARAM_ZONE_LIEN = ZONE === ZONE_DEFAUT_M ? '' : PARAM_ZONE;
 // Page rechargée par « Ma position » pour se recentrer (moi=1) : le suivi
 // reprend de lui-même, sans nouveau recentrage automatique — pas de boucle si
 // un relevé tombe encore hors de la scène. Le drapeau est retiré de l'URL :
@@ -595,7 +602,7 @@ function allerAuLieu(l) {
         if (l.coordonnees) sessionStorage.removeItem(CLE_LIEU);
         else sessionStorage.setItem(CLE_LIEU, JSON.stringify({ lat: l.lat, lon: l.lon, nom: l.nom }));
     } catch (e) { /* stockage refusé : le nom viendra de la commune */ }
-    location.search = `?lat=${l.lat}&lon=${l.lon}${PARAM_ZONE}`;
+    location.search = `?lat=${l.lat}&lon=${l.lon}${PARAM_ZONE_LIEN}`;
 }
 
 /** Suggestions pour `texte` ; null si une frappe plus récente l'a annulée. */
@@ -689,13 +696,14 @@ document.getElementById('form-point').addEventListener('submit', async e => {
 })();
 const selectZone = document.getElementById('in-zone');
 // Une zone hors des choix proposés (?zone=850) s'ajoute à la liste.
-if (ZONE !== null && ![...selectZone.options].some(o => o.value === String(ZONE))) {
+if (![...selectZone.options].some(o => o.value === String(ZONE))) {
     selectZone.add(new Option(`${ZONE.toLocaleString('fr-FR')} m`, String(ZONE)));
 }
-selectZone.value = ZONE === null ? '' : String(ZONE);
+selectZone.value = String(ZONE);
 selectZone.addEventListener('change', () => {
     const u = new URL(location.href);
-    if (selectZone.value) u.searchParams.set('zone', selectZone.value);
+    // La zone par défaut ne s'écrit pas : le lien reste court.
+    if (selectZone.value !== String(ZONE_DEFAUT_M)) u.searchParams.set('zone', selectZone.value);
     else u.searchParams.delete('zone');
     location.assign(u.pathname + u.search + u.hash);
 });
@@ -859,7 +867,7 @@ const chargementArtefact = obtenirScene()
 // constructions, trois natives et trois dans le conteneur, charge de 56 à 72) :
 // lectures 3,1 s, toitures 0,7 s, houppiers et envoi 1,1 s à Gordes
 // (63 / 14 / 23 %) ; 2,7, 2,8 et 1,3 s à Strasbourg (40 / 41 / 19 %). En
-// moyenne 52 / 27 / 21 %, arrondi. L'emprise par défaut donne 68 et 70 % aux
+// moyenne 52 / 27 / 21 %, arrondi. L'emprise de 356 m donne 68 et 70 % aux
 // lectures (1,2 et 1,8 s en tout) : la barre y passe vite de toute façon.
 const PART_LECTURES = 0.5, PART_TOITURES = 0.3;
 /**
@@ -1029,7 +1037,7 @@ scene.add(ambiance);
 const DISTANCE_SOLEIL = 900 * ECHELLE_ZONE;
 const soleil = new THREE.DirectionalLight(0xfff2dd, 2.0);
 soleil.castShadow = true;
-// Doublée au-delà d'une fois et demie l'emprise par défaut : le frustum
+// Doublée au-delà d'une fois et demie l'emprise de référence : le frustum
 // grandit avec la zone, et l'ombre d'un arbre y deviendrait une tache.
 const TAILLE_OMBRE = ECHELLE_ZONE > 1.5 ? 4096 : 2048;
 soleil.shadow.mapSize.set(TAILLE_OMBRE, TAILLE_OMBRE);
@@ -1913,7 +1921,7 @@ function lienStreetView(anneau) {
 function lienRecentrer(anneau) {
     if (!anneau || anneau.length < 3) return '';
     const [lon, lat] = centreAnneau(anneau);
-    return ' <a class="lien-ext lien-recentrer" href="?lat=' + lat.toFixed(6) + '&amp;lon=' + lon.toFixed(6) + PARAM_ZONE.replace('&', '&amp;') + '">'
+    return ' <a class="lien-ext lien-recentrer" href="?lat=' + lat.toFixed(6) + '&amp;lon=' + lon.toFixed(6) + PARAM_ZONE_LIEN.replace('&', '&amp;') + '">'
         + 'Recentrer la scène sur ce bâtiment</a>';
 }
 
@@ -2584,12 +2592,12 @@ chargerScene()
     });
 
 // Emprise chargée autour du point : celle de la scène une fois arrivée, sinon
-// la règle du serveur (scene.SCENE_DELTA, en degrés dans les deux sens :
-// ±178 m nord-sud, ±115 à 130 m est-ouest selon la latitude). Hors d'elle,
+// la règle du serveur pour la zone (la moitié du côté, en degrés de latitude,
+// dans les deux sens : plus étroite d'est en ouest). Hors d'elle,
 // ni bâtiments, ni orthophoto, ni végétation. « Ma position » proposait de
 // recentrer au-delà de 500 m seulement : entre 130 et 500 m du point, le
 // repère flottait sur le relief nu sans que rien ne le dise.
-const DEMI_EMPRISE_DEG = ZONE === null ? 0.0016 : ZONE / 2 / 111320;
+const DEMI_EMPRISE_DEG = ZONE / 2 / 111320;
 
 /** Distance en mètres d'un point à l'emprise chargée ; 0 à l'intérieur. */
 function distanceAEmprise(lon, lat) {
@@ -7971,14 +7979,13 @@ function modeleExport(options) {
         + (rgeAlti ? ', RGE ALTI' : '') + '), Licence Ouverte 2.0'];
     if (!rgeAlti && sourceRelief) credits.push(`relief : ${sourceRelief} (Mapzen Terrain Tiles, EU-DEM © Copernicus)`);
     if (compte.osm) credits.push('parties de monuments © contributeurs OpenStreetMap, ODbL');
-    const zone = ZONE ?? Math.round(ZONE_DEFAUT_M);
     return {
-        base: `vue3d-${LAT0}-${LON0}${ZONE === null ? '' : `-z${ZONE}`}`,
+        base: `vue3d-${LAT0}-${LON0}-z${ZONE}`,
         horodatage: new Date().toISOString().slice(0, 19),
         cle: `${LAT0}|${LON0}|${ZONE}`,
         nom: `Vue 3D IGN ${LAT0.toFixed(5)}, ${LON0.toFixed(5)}`,
         description: 'Maquette de contexte, pas un relevé. ' + credits.join(' ; ') + '.',
-        site: `Emprise de ${zone} m`, lon: CENTER[0], lat: CENTER[1], origine,
+        site: `Emprise de ${ZONE} m`, lon: CENTER[0], lat: CENTER[1], origine,
         nordVrai: [(nx - lx) / nord, (ny - ly) / nord],
         crs: { nom: 'EPSG:2154', description: 'RGF93 v1 / Lambert-93' + (datumVertical ? `, altitudes ${datumVertical}` : ''),
                datum: 'RGF93 v1', datumVertical, epsgVertical, projection: 'Lambert conique conforme' },
@@ -8894,7 +8901,7 @@ function cameraDeplacee() {
 // sur un Mac M1, avant que l'ombre ne soit figée :
 //
 //                                          végétation   sans
-//   Gordes, zone par défaut (2 160 arbres)    16,7 ms   16,7 ms
+//   Gordes, 356 m (2 160 arbres)              16,7 ms   16,7 ms
 //   Notre-Dame, 1 000 m (3 684 arbres)        33,4 ms   16,7 ms
 //   Gordes, 1 000 m (19 312 arbres)           50,0 ms   16,7 ms
 //

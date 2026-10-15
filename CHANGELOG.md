@@ -277,6 +277,14 @@ messages de commit et dans les commentaires des modules.
 
 ### Modifié
 
+- **La page s'ouvre en zone de 1 000 m.** Sans `zone=` dans l'URL, elle
+  demande la plus grande zone plutôt que l'emprise de 356 m du serveur : la
+  première construction y prend 4 s à Gordes et 6 s à Strasbourg sur un Mac
+  M4. Les liens déjà partagés sans zone s'ouvrent donc en 1 000 m. Le
+  sélecteur propose 350, 500, 700 et 1 000 m ; l'API, sans `zone=`, garde son
+  emprise de 356 m et ses scènes en cache. Les fichiers exportés portent
+  toujours leur zone dans leur nom (`-z1000`).
+
 - **L'essai dans le navigateur fait voler le drone.**
   `outils/essai-navigateur.mjs` le fait décoller, avancer deux secondes, lit
   sa vitesse, puis vérifie qu'Échap rend la main à la souris.
