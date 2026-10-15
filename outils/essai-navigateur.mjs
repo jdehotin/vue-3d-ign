@@ -1,7 +1,7 @@
 // Essai de la page dans un vrai navigateur : charge un point, attend la scène,
 // survole et clique le bâtiment visé, bascule au 21 décembre, télécharge
 // les exports IFC et CityGML (à côté de la capture), pilote le drone quelques
-// mètres, décale la scène vers le nord, cherche un lieu (« place du chateau
+// mètres, ouvre et ferme la prise en main, décale la scène vers le nord, cherche un lieu (« place du chateau
 // gordes ») et s'y rend, et relève toute erreur JavaScript ou requête en
 // échec. C'est le seul moyen de vérifier les chemins d'exécution du rendu,
 // que les tests Python ne voient pas.
@@ -181,6 +181,25 @@ try {
   if (!(await page.$eval('#hud-drone', e => e.hidden))) erreurs.push('drone : télémétrie restée affichée');
 } catch (e) {
   erreurs.push('drone : ' + e.message);
+}
+// Prise en main : jamais ouverte d'elle-même sous un navigateur piloté, où
+// elle masquerait la scène ; « ? » l'ouvre, la bascule passe les gestes de
+// la souris au doigt, « C'est parti » la ferme.
+try {
+  if (await page.$eval('#tuto', d => d.open)) erreurs.push('prise en main : ouverte sous un navigateur piloté');
+  await page.click('#btn-aide');
+  const ouverte = await page.$eval('#tuto', d => d.open);
+  const souris = await page.$eval('#tuto [data-doigt]', s => s.textContent);
+  await page.click('#tuto [data-mode="doigt"]');
+  const doigt = await page.$eval('#tuto [data-doigt]', s => s.textContent);
+  console.log('prise en main :', ouverte ? 'ouverte' : 'fermée', '·', souris.slice(0, 36), '→', doigt.slice(0, 36));
+  if (!ouverte) erreurs.push('prise en main : « ? » ne l\'ouvre pas');
+  else if (souris === doigt) erreurs.push('prise en main : la bascule ne change pas les gestes');
+  await page.click('#tuto .tuto-ok');
+  await new Promise(r => setTimeout(r, 200));
+  if (await page.$eval('#tuto', d => d.open)) erreurs.push('prise en main : « C\'est parti » ne la ferme pas');
+} catch (e) {
+  erreurs.push('prise en main : ' + e.message);
 }
 // Flèche du nord : un quart de zone plus au nord, au pas de la clé du cache ;
 // la caméra garde son cap (les pointes des flèches n'ont pas tourné) et

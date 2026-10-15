@@ -184,6 +184,39 @@
                           stroke-linecap:round; stroke-linejoin:round; }
         #nav-vue { position:absolute; top:88px; right:26px; z-index:3; display:flex;
                    flex-direction:column; gap:8px; }
+        /* Prise en main : ouverte à la première visite, puis par « ? ». */
+        #tuto { width:min(520px, calc(100vw - 24px)); max-height:min(86vh, 760px); padding:0;
+                border:1px solid var(--line); border-radius:12px; background:var(--panel); color:var(--text);
+                box-shadow:0 12px 40px rgba(0,0,0,.55); }
+        #tuto::backdrop { background:rgba(0,0,0,.45); }
+        #tuto form { display:flex; flex-direction:column; max-height:inherit; }
+        /* Seule la liste défile : le reste garde sa hauteur (la bascule
+           s'écrasait sur un iPhone). */
+        #tuto form > * { flex:none; }
+        #tuto form > .tuto-etapes { flex:1 1 auto; min-height:0; }
+        #tuto header { display:flex; align-items:center; justify-content:space-between; padding:16px 18px 4px; }
+        #tuto h2 { margin:0; font-size:18px; }
+        #tuto .fermer { width:36px; height:36px; margin:-6px -8px 0 0; border:0; background:none; color:var(--muted);
+                        font-size:26px; line-height:1; cursor:pointer; }
+        #tuto .tuto-intro { margin:4px 18px 12px; color:var(--muted); font-size:13px; line-height:1.45; }
+        .tuto-mode { display:flex; margin:0 18px 6px; border:1px solid var(--line); border-radius:8px; overflow:hidden;
+                     align-self:flex-start; }
+        .tuto-mode button { padding:6px 14px; border:0; background:none; color:var(--muted); font:inherit;
+                            font-size:13px; cursor:pointer; }
+        .tuto-mode button[aria-checked="true"] { background:var(--accent); color:#fff; }
+        .tuto-etapes { list-style:none; margin:0; padding:4px 18px 8px; overflow-y:auto; }
+        .tuto-etapes li { display:grid; grid-template-columns:28px 1fr; gap:12px; padding:9px 0;
+                          border-bottom:1px solid var(--line); font-size:13.5px; line-height:1.45; }
+        .tuto-etapes li:last-child { border-bottom:0; }
+        .tuto-etapes svg { width:24px; height:24px; margin-top:1px; fill:none; stroke:var(--accent); stroke-width:1.8;
+                           stroke-linecap:round; stroke-linejoin:round; }
+        .tuto-etapes b { display:block; font-size:14px; }
+        .tuto-etapes span { color:var(--muted); }
+        #tuto footer { display:flex; align-items:center; justify-content:space-between; gap:12px;
+                       padding:12px 18px 16px; border-top:1px solid var(--line); font-size:12px; color:var(--muted); }
+        #tuto .tuto-ok { flex:none; padding:9px 18px; border:0; border-radius:8px; background:var(--accent); color:#fff;
+                         font:inherit; font-size:14px; font-weight:600; cursor:pointer; }
+        #tuto .tuto-ok:focus-visible, .tuto-mode button:focus-visible { outline:2px solid var(--text); outline-offset:2px; }
         #btn-plein-ecran .sortir, html.plein-ecran #btn-plein-ecran .entrer { display:none; }
         html.plein-ecran #btn-plein-ecran .sortir { display:inline; }
         /* Le drone au doigt : deux croix de touches, au-dessus des crédits. */
@@ -478,7 +511,59 @@
                     <rect x="10" y="10" width="4" height="4" rx="1"/>
                 </svg>
             </button>
+            <button type="button" id="btn-aide" class="bouton-vue" aria-label="Prise en main"
+                    aria-haspopup="dialog" aria-controls="tuto" title="Prise en main : les gestes, et ce que montre la vue">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <circle cx="12" cy="12" r="9"/>
+                    <path d="M9.4 9.3a2.7 2.7 0 0 1 5.2 1c0 1.9-2.6 2.3-2.6 4"/><path d="M12 17.6v.1"/>
+                </svg>
+            </button>
         </div>
+        <!-- Prise en main. Chaque geste a son texte au doigt et à la souris
+             (data-doigt, data-souris) ; la bascule choisit, l'appareil propose. -->
+        <dialog id="tuto" aria-labelledby="tuto-titre">
+            <form method="dialog">
+                <header>
+                    <h2 id="tuto-titre">Prise en main</h2>
+                    <button class="fermer" value="fermer" aria-label="Fermer">×</button>
+                </header>
+                <p class="tuto-intro">Le lieu en 3D, reconstruit à partir des données ouvertes de l'IGN :
+                    bâtiments et toits, arbres, relief, photo aérienne, jusqu'à l'horizon.</p>
+                <div class="tuto-mode" role="radiogroup" aria-label="Gestes">
+                    <button type="button" role="radio" data-mode="doigt">Au doigt</button>
+                    <button type="button" role="radio" data-mode="souris">À la souris</button>
+                </div>
+                <ul class="tuto-etapes">
+                    <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v4h-4"/></svg>
+                        <div><b>Tourner autour</b><span data-doigt="Glisser un doigt sur la vue. Elle tourne seule à l'ouverture : le premier geste l'arrête."
+                            data-souris="Glisser avec le bouton gauche. La vue tourne seule à l'ouverture : le premier geste l'arrête."></span></div></li>
+                    <li><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.4-4.4M11 8.5v5M8.5 11h5"/></svg>
+                        <div><b>Zoomer</b><span data-doigt="Pincer ou écarter deux doigts."
+                            data-souris="Molette, ou deux doigts sur le pavé tactile."></span></div></li>
+                    <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M3 12h18M9.5 5.5L12 3l2.5 2.5M9.5 18.5L12 21l2.5-2.5M5.5 9.5L3 12l2.5 2.5M18.5 9.5L21 12l-2.5 2.5"/></svg>
+                        <div><b>Se déplacer</b><span data-doigt="Glisser à deux doigts."
+                            data-souris="Glisser avec le bouton droit, ou Maj + glisser."></span></div></li>
+                    <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 21V8l7-4 7 4v13M9 21v-5h6v5M9 11h.01M15 11h.01"/></svg>
+                        <div><b>Un bâtiment</b><span data-doigt="Le toucher : sa fiche s'ouvre — usage, hauteur, étages, année, matériaux."
+                            data-souris="Le survoler pour mesurer ; cliquer pour sa fiche — usage, hauteur, étages, année, matériaux."></span></div></li>
+                    <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>
+                        <div><b>Changer de lieu</b><span>Chercher une adresse dans le panneau (☰ en haut à gauche sur petit écran).
+                            Les flèches N, E, S, O au bord de la vue décalent la scène dans leur direction.</span></div></li>
+                    <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/></svg>
+                        <div><b>Choisir ce qui s'affiche</b><span>Dans le panneau : toits, végétation, eau, plan IGN ou photo,
+                            heure et saison pour les ombres, DPE et ventes immobilières (DVF) des bâtiments.</span></div></li>
+                    <li><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5.5" cy="5.5" r="3"/><circle cx="18.5" cy="5.5" r="3"/><circle cx="5.5" cy="18.5" r="3"/><circle cx="18.5" cy="18.5" r="3"/><path d="M7.6 7.6l2.4 2.4M16.4 7.6L14 10M7.6 16.4l2.4-2.4M16.4 16.4L14 14"/><rect x="10" y="10" width="4" height="4" rx="1"/></svg>
+                        <div><b>Survoler en drone</b><span data-doigt="Le bouton drone, à droite : les flèches à l'écran pour avancer, tourner, monter, descendre ; le même bouton pour sortir."
+                            data-souris="Le bouton drone, à droite : ↑ ↓ avancer, ← → tourner, Q D glisser, espace monter, Maj descendre ; Échap pour sortir."></span></div></li>
+                    <li><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="6.5"/><circle cx="12" cy="12" r="2"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3"/></svg>
+                        <div><b>Ma position</b><span>Le bouton cible, à droite : vous dans la scène, suivi en continu.</span></div></li>
+                </ul>
+                <footer>
+                    <span>Ce guide se rouvre par le bouton <b>?</b> à droite de la vue.</span>
+                    <button class="tuto-ok" value="ok">C'est parti</button>
+                </footer>
+            </form>
+        </dialog>
         <!-- Les touches du drone, au doigt : chacune tient enfoncée la touche
              du clavier qu'elle porte (touchesDrone). -->
         <div id="pad-drone" hidden>
@@ -9339,6 +9424,41 @@ function majDrone(dt, maintenant) {
             + `${Math.round(vitesseH)} km/h · cap ${Math.round(cap)}° ${POINTS_CARDINAUX[Math.round(cap / 45) % 8]}`;
     }
 }
+
+// --- Prise en main ---------------------------------------------------------------
+// Ouverte d'elle-même à la première visite, pendant que la scène se construit
+// (de 1 à 30 s pour un lieu neuf) ; ensuite par « ? ». Les gestes suivent
+// l'appareil : au doigt si l'écran est tactile — une Tesla annonce un pointeur
+// fin, mais des points de contact —, avec une bascule pour l'écran tactile
+// tenu à la souris. Un navigateur piloté (essais, démos filmées) ne la voit
+// pas s'ouvrir seule : elle masquerait la scène qu'il éprouve.
+const tuto = document.getElementById('tuto');
+const CLE_TUTO = 'vue3d.tuto-vu';
+function modeTuto(mode) {
+    for (const b of tuto.querySelectorAll('.tuto-mode button')) {
+        b.setAttribute('aria-checked', String(b.dataset.mode === mode));
+    }
+    for (const s of tuto.querySelectorAll('[data-doigt]')) {
+        s.textContent = mode === 'doigt' ? s.dataset.doigt : s.dataset.souris;
+    }
+}
+function ouvrirTuto() {
+    if (tuto.open) return;
+    // Les flèches et l'espace du drone ne doivent pas courir sous le guide.
+    if (droneActif) sortirDrone();
+    if (document.documentElement.classList.contains('tiroir-ouvert')) fermerTiroir();
+    tuto.showModal();
+    tuto.querySelector('.tuto-ok').focus();
+}
+modeTuto(TACTILE ? 'doigt' : 'souris');
+for (const b of tuto.querySelectorAll('.tuto-mode button')) b.addEventListener('click', () => modeTuto(b.dataset.mode));
+document.getElementById('btn-aide').addEventListener('click', ouvrirTuto);
+// Un toucher sur le voile, hors du cadre, le ferme aussi.
+tuto.addEventListener('click', e => { if (e.target === tuto) tuto.close(); });
+tuto.addEventListener('close', () => { try { localStorage.setItem(CLE_TUTO, '1'); } catch (e) { /* navigation privée */ } });
+let tutoVu = false;
+try { tutoVu = localStorage.getItem(CLE_TUTO) === '1'; } catch (e) { /* navigation privée : il s'ouvrira à chaque visite */ }
+if (!tutoVu && !navigator.webdriver) ouvrirTuto();
 
 // --- Zoom : repris à OrbitControls -------------------------------------
 // `handleMouseWheel` de three r160 ignore l'amplitude de l'événement : chaque

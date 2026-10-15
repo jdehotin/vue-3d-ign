@@ -15,6 +15,16 @@ messages de commit et dans les commentaires des modules.
 
 ### Ajouté
 
+- **Un guide de prise en main.** Il s'ouvre de lui-même à la première
+  visite, pendant que la scène se construit, puis par le bouton « ? » sous
+  les commandes de la vue : tourner, zoomer, se déplacer, la fiche d'un
+  bâtiment, changer de lieu, ce qui s'affiche, le drone, ma position. Les
+  gestes suivent l'appareil — au doigt dès que l'écran est tactile, comme
+  celui d'une Tesla qui annonce pourtant un pointeur fin —, avec une
+  bascule vers la souris. Un navigateur piloté (essais, démos filmées) ne
+  le voit pas s'ouvrir seul ; `essai-navigateur.mjs` l'ouvre, bascule les
+  gestes et le referme.
+
 - **Le nuage LiDAR HD se lit en deux temps.** En zone de 800 m et plus, la
   page demande d'abord un carré de 400 m autour du point (`/api/nuage?…&proche=1`),
   l'affiche dès qu'il est lu, puis la zone entière, qui le remplace. Le carré
