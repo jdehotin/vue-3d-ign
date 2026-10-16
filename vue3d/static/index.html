@@ -300,14 +300,16 @@
                 </div>
                 <button type="submit">Voir</button>
             </form>
-            <label class="zone" title="Côté nord-sud de la zone chargée. Une zone plus petite se construit plus vite : jusqu'à huit fois à 350 m. À 2 000 m, quatre fois la surface : deux fois plus d'attente, une vue plus lourde, et le nuage LiDAR sur le kilomètre central seulement.">
+            <!-- 2 000 m n'est pas proposé : la vue y rame (81 875 houppiers à
+                 Gordes, quatre fois ceux de 1 000 m). `&zone=2000` dans l'URL
+                 reste servi, et le sélecteur l'affiche alors. -->
+            <label class="zone" title="Côté nord-sud de la zone chargée. Une zone plus petite se construit plus vite : jusqu'à huit fois à 350 m.">
                 Zone
                 <select id="in-zone">
                     <option value="350">350 m</option>
                     <option value="500">500 m</option>
                     <option value="700">700 m</option>
                     <option value="1000">1 000 m (par défaut)</option>
-                    <option value="2000">2 000 m</option>
                 </select>
             </label>
             <button type="button" id="btn-reconstruire" class="reconstruire"

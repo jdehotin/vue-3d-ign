@@ -15,7 +15,7 @@ messages de commit et dans les commentaires des modules.
 
 ### Ajouté
 
-- **Une zone de 2 000 m**, au sélecteur **Zone** ou par `&zone=2000` ; la
+- **Une zone de 2 000 m**, par `&zone=2000` dans l'URL ; la
   zone par défaut reste de 1 000 m, et ses scènes sont les mêmes à l'octet
   (Gordes et 700 m, vérifié contre la version d'avant). Quatre fois la
   surface, à la même finesse :
@@ -37,7 +37,9 @@ messages de commit et dans les commentaires des modules.
   central (`nuage.NUAGE_COTE_MAX_M`) : sur la zone entière, la Géoplateforme
   répondait 429 en 7 s, et quatre fois les 2,7 Go de mémoire mesurés à
   1 000 m n'auraient pas tenu. Les exports pèsent 250 Mo en IFC et 1,1 Go
-  en CityGML.
+  en CityGML. Le sélecteur **Zone** ne la propose pas : en ligne, la vue
+  y rame (81 875 houppiers à Gordes, quatre fois ceux de 1 000 m) ; il
+  l'affiche quand l'URL la demande.
 - **Une visionneuse IFC de contrôle**, `outils/visionneuse-ifc.html` : un
   fichier exporté (⬇ IFC 4), glissé sur la page, relu par web-ifc (That Open
   Company, MPL-2.0) comme un autre logiciel le lirait — chaque volume tel que

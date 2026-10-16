@@ -42,8 +42,9 @@ commerce (« pharmacie bouc bel air ») ou coordonnées collées, avec
 suggestions dès la frappe — ou se donne dans l'URL (`?lat=…&lon=…`). Les flèches N, E, S et O,
 au bord de la vue, décalent la scène d'un quart de zone dans leur direction.
 La zone chargée mesure par défaut 1 000 m du nord au
-sud ; le sélecteur **Zone** du panneau, ou `&zone=…` dans l'URL, la règle de
-150 à 2 000 m (arrondie à 50 m). Le temps de construction suit la surface et
+sud ; le sélecteur **Zone** du panneau la règle de 350 à 1 000 m, et
+`&zone=…` dans l'URL de 150 à 2 000 m (arrondie à 50 m) — 2 000 m n'est pas
+proposé au sélecteur, la vue y rame. Le temps de construction suit la surface et
 la densité du bâti : à 1 000 m, 4 s à Gordes et 6 s à Strasbourg sur un Mac
 M4 hors conteneur, 4 et 4,5 s dans le conteneur ; à 2 000 m, 9,5 s à Gordes,
 et le service ne construit qu'une zone de plus de 1 000 m à la fois (3,2 Go
