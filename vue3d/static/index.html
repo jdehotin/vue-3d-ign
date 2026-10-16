@@ -614,16 +614,92 @@
 // de plus sur l'attente d'une scène à construire. Même adresse que celle du
 // module (REQUETE, plus bas), qui ne reprend cette demande que si les deux
 // concordent.
-window.DEMANDE_SCENE = (() => {
+//
+// Sans point dans l'URL, la page propose d'abord de se géolocaliser, et le
+// module attend la réponse (DEPART). Position autorisée, déjà ou à la
+// demande : elle s'écrit dans l'URL, avec moi=1 pour que le repère de « Ma
+// position » la suive. Refusée, sans réponse, indisponible ou hors de France
+// métropolitaine : l'accueil, la tour Eiffel (ACCUEIL, dans le module), dont
+// la raison est rendue pour le dire.
+(() => {
+    const lire = (params, n) => { const v = Number(String(params.get(n) || '').replace(',', '.')); return Number.isFinite(v) && params.get(n) !== null ? v : null; };
+    // POINT_DEFAUT, plus bas.
+    const ACCUEIL = { lat: 48.8583, lon: 2.2942 };
+    // scene.EMPRISE_SERVIE : au-delà, le serveur refuse le point.
+    const dansEmprise = (lat, lon) => lat >= 41.0 && lat <= 51.6 && lon >= -5.8 && lon <= 10.0;
+    // Sans réponse au bout de ce temps, l'accueil : un refus n'est pas
+    // toujours dit. La demande de Firefox se ferme d'un clic à côté sans
+    // répondre, et Chrome, après quelques refus, ne la montre plus qu'en
+    // icône dans la barre d'adresse. Une autorisation donnée ensuite emmène
+    // quand même là où l'on est.
+    const ATTENTE_POSITION_S = 10;
+
+    function demanderScene() {
+        const params = new URLSearchParams(location.search);
+        const lat = lire(params, 'lat'), lon = lire(params, 'lon');
+        const point = lat !== null && lon !== null ? { lat, lon } : ACCUEIL;
+        // Sans zone=, 1 000 m : ZONE_DEFAUT_M, plus bas.
+        const zone = lire(params, 'zone') ?? 1000;
+        const url = `api/scene?lat=${point.lat}&lon=${point.lon}`
+            + `&zone=${Math.min(Math.max(Math.round(zone / 50) * 50, 150), 2000)}`;
+        const reponse = fetch(url);
+        reponse.catch(() => {});      // l'erreur est traitée par le module
+        window.DEMANDE_SCENE = { url, reponse };
+    }
+
+    /** {} une fois la position écrite dans l'URL, sinon { raison } de l'accueil. */
+    async function positionDeDepart() {
+        // Hors https, l'API existe mais échoue sans que rien n'ait été refusé.
+        if (!navigator.geolocation || !window.isSecureContext) return { raison: 'indisponible' };
+        let etat = null;
+        try { etat = (await navigator.permissions.query({ name: 'geolocation' })).state; }
+        catch (e) { /* sans l'API des permissions, la demande dira */ }
+        if (etat === 'denied') return { raison: 'refusee' };
+        const attente = document.getElementById('attente');
+        attente.hidden = false;
+        attente.innerHTML = etat === 'granted' ? 'Localisation…'
+            : 'Votre position ?<br><small>Autorisez la géolocalisation pour arriver là où vous êtes ; '
+              + 'sinon, la tour Eiffel</small>';
+        return new Promise(fini => {
+            let tardive = false;
+            const minuterie = setTimeout(() => { tardive = true; fini({ raison: 'sans-reponse' }); },
+                                         ATTENTE_POSITION_S * 1000);
+            navigator.geolocation.getCurrentPosition(pos => {
+                const { latitude: lat, longitude: lon } = pos.coords;
+                if (!dansEmprise(lat, lon)) {
+                    if (!tardive) { clearTimeout(minuterie); fini({ raison: 'hors-emprise' }); }
+                    return;
+                }
+                // Arrondie comme la clé du cache (scene.SCENE_ARRONDI), comme
+                // les flèches de décalage. Écrite dans l'URL : un rechargement
+                // ne relance pas une construction à quelques mètres de là.
+                const u = new URL(location.href);
+                u.searchParams.set('lat', Number(lat.toFixed(4)));
+                u.searchParams.set('lon', Number(lon.toFixed(4)));
+                u.searchParams.set('moi', '1');
+                const adresse = u.pathname + u.search + u.hash;
+                if (tardive) { location.assign(adresse); return; }
+                clearTimeout(minuterie);
+                history.replaceState(null, '', adresse);
+                fini({});
+            }, err => {
+                if (tardive) return;
+                clearTimeout(minuterie);
+                fini({ raison: err.code === err.PERMISSION_DENIED ? 'refusee' : 'indisponible' });
+            // Le centre d'une scène n'a pas besoin du GPS, dont un premier
+            // point se fait attendre : le réseau suffit. Le repère, lui, suit
+            // ensuite en haute précision (watchPosition, dans le module).
+            }, { enableHighAccuracy: false, maximumAge: 60000, timeout: ATTENTE_POSITION_S * 1000 });
+        });
+    }
+
     const params = new URLSearchParams(location.search);
-    const lire = n => { const v = Number(String(params.get(n) || '').replace(',', '.')); return Number.isFinite(v) && params.get(n) !== null ? v : null; };
-    // Sans zone=, 1 000 m : ZONE_DEFAUT_M, plus bas.
-    const zone = lire('zone') ?? 1000;
-    const url = `api/scene?lat=${lire('lat') ?? 43.9116}&lon=${lire('lon') ?? 5.2003}`
-        + `&zone=${Math.min(Math.max(Math.round(zone / 50) * 50, 150), 2000)}`;
-    const reponse = fetch(url);
-    reponse.catch(() => {});      // l'erreur est traitée par le module
-    return { url, reponse };
+    if (lire(params, 'lat') !== null && lire(params, 'lon') !== null) {
+        demanderScene();
+        window.DEPART = Promise.resolve({});
+    } else {
+        window.DEPART = positionDeDepart().then(depart => { demanderScene(); return depart; });
+    }
 })();
 </script>
 <script type="importmap">
@@ -643,14 +719,21 @@ import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 
 // --- Point visé ----------------------------------------------------------
-// Donné dans l'URL (?lat=…&lon=…). Sans point, on en propose un par défaut : le
-// village de Gordes, lieu public couvert par le LiDAR HD, qui montre d'emblée
-// ce que la vue sait faire — 247 bâtiments sur 84 m de relief, 2 160 houppiers.
+// Donné dans l'URL (?lat=…&lon=…). Sans point, la page a d'abord proposé de se
+// géolocaliser (DEPART, en tête de page) : la position autorisée est alors
+// dans l'URL. Sinon, l'accueil : la tour Eiffel, lieu public couvert par le
+// LiDAR HD, nuage allumé — la BD TOPO l'extrude en cubes, le nuage la montre
+// des arches à l'antenne. Même point que les films de démo, dont la scène est
+// en cache. La caméra prend leur plan d'ouverture (outils/demo-video.mjs) :
+// la tour entière, du Champ-de-Mars, à 620 m.
+const DEPART = await window.DEPART;
 const PARAMS = new URLSearchParams(location.search);
-const POINT_DEFAUT = { lat: 43.9116, lon: 5.2003 };
+const POINT_DEFAUT = { lat: 48.8583, lon: 2.2942, nom: 'Tour Eiffel',
+                       vue: { lat: 48.85837, lon: 2.29448, hauteur: 120, distance: 620, azimut: 150, elevation: 18 } };
 const lireCoord = n => { const v = Number(String(PARAMS.get(n) || '').replace(',', '.')); return Number.isFinite(v) && PARAMS.get(n) !== null ? v : null; };
-const LAT0 = lireCoord('lat') ?? POINT_DEFAUT.lat;
-const LON0 = lireCoord('lon') ?? POINT_DEFAUT.lon;
+const ACCUEIL = lireCoord('lat') === null || lireCoord('lon') === null;
+const LAT0 = ACCUEIL ? POINT_DEFAUT.lat : lireCoord('lat');
+const LON0 = ACCUEIL ? POINT_DEFAUT.lon : lireCoord('lon');
 const CENTER = [LON0, LAT0];
 // Côté nord-sud de la zone, en mètres (?zone=…) ; absent, 1 000 m : 4 s à
 // Gordes, 6 s à Strasbourg sur un Mac M4 (README), assez vite pour l'ouvrir
@@ -677,7 +760,8 @@ const PARAM_ZONE = `&zone=${ZONE}`;
 // Dans les liens vers un autre point, la zone par défaut ne s'écrit pas : ils
 // restent courts, comme ceux du sélecteur de zone.
 const PARAM_ZONE_LIEN = ZONE === ZONE_DEFAUT_M ? '' : PARAM_ZONE;
-// Page rechargée par « Ma position » pour se recentrer (moi=1) : le suivi
+// Page rechargée par « Ma position » pour se recentrer, ou ouverte sur la
+// position autorisée au départ (moi=1, DEPART) : le suivi
 // reprend de lui-même, sans nouveau recentrage automatique — pas de boucle si
 // un relevé tombe encore hors de la scène. Le drapeau est retiré de l'URL :
 // un lien partagé ne doit pas géolocaliser celui qui l'ouvre.
@@ -1089,7 +1173,7 @@ document.getElementById('form-point').addEventListener('submit', async e => {
 // Sans adresse, en forêt ou sur l'eau, l'onglet prend le nom du panneau.
 (async () => {
     const nomPoint = document.getElementById('nom-point');
-    let nom = null, adresse = null;
+    let nom = ACCUEIL ? POINT_DEFAUT.nom : null, adresse = null;
     try {
         const l = JSON.parse(sessionStorage.getItem(CLE_LIEU) || 'null');
         if (l && Math.abs(l.lat - LAT0) < 1e-7 && Math.abs(l.lon - LON0) < 1e-7) nom = l.nom;
@@ -1118,6 +1202,9 @@ if (![...selectZone.options].some(o => o.value === String(ZONE))) {
 selectZone.value = String(ZONE);
 selectZone.addEventListener('change', () => {
     const u = new URL(location.href);
+    // Le point s'écrit toujours : sans lui, l'accueil redemanderait la position.
+    u.searchParams.set('lat', LAT0);
+    u.searchParams.set('lon', LON0);
     // La zone par défaut ne s'écrit pas : le lien reste court.
     if (selectZone.value !== String(ZONE_DEFAUT_M)) u.searchParams.set('zone', selectZone.value);
     else u.searchParams.delete('zone');
@@ -3066,6 +3153,18 @@ function cadrer() {
         const [x, h, z] = POSE_HERITEE.cible;
         controls.target.set(x, ySol(...toLonLat(x, -z)) + h, z);
         camera.position.copy(controls.target).add(new THREE.Vector3(...POSE_HERITEE.ecart));
+        controls.update();
+        return;
+    }
+    // L'accueil : la tour entière, vue d'un azimut (0 = du nord) et d'une
+    // élévation, comme poserCadre de outils/demo-video.mjs.
+    if (ACCUEIL) {
+        const v = POINT_DEFAUT.vue, r = Math.PI / 180, cosE = Math.cos(v.elevation * r);
+        const [x, y] = toLocal(v.lon, v.lat);
+        controls.target.set(x, ySol(v.lon, v.lat) + v.hauteur, -y);
+        camera.position.set(x + v.distance * Math.sin(v.azimut * r) * cosE,
+                            controls.target.y + v.distance * Math.sin(v.elevation * r),
+                            -y - v.distance * Math.cos(v.azimut * r) * cosE);
         controls.update();
         return;
     }
@@ -5699,6 +5798,8 @@ async function chargerNuage(essai = 1, proche = true) {
 
 // Le même interrupteur au panneau et sur la vue, au-dessus du drone.
 const boutonsNuage = [document.getElementById('t-nuage'), document.getElementById('v-nuage')];
+// L'accueil s'ouvre nuage allumé : autour de la tour, tout le bâti en points.
+if (ACCUEIL) for (const b of boutonsNuage) b.classList.add('on');
 for (const b of boutonsNuage) b.addEventListener('click', () => {
     const on = !b.classList.contains('on');
     for (const c of boutonsNuage) c.classList.toggle('on', on);
@@ -7362,6 +7463,19 @@ function demarrerSuivi(recentrer = true) {
 // Page rechargée par un recentrage : le suivi reprend une fois la scène
 // arrivée — son cadrage tombe alors sur la position, centre de la page.
 if (RELANCE_MOI) chargementArtefact.then(() => demarrerSuivi(false));
+
+// Arrivée à l'accueil faute de position (DEPART, en tête de page) : on dit
+// pourquoi la tour Eiffel plutôt que là où l'on est.
+const ANNONCES_ACCUEIL = {
+    refusee: "Géolocalisation non autorisée : voici la tour Eiffel, en points du nuage LiDAR HD.",
+    'sans-reponse': "Pas de réponse à la demande de position : voici la tour Eiffel. "
+        + "Autorisée, elle vous emmène là où vous êtes.",
+    indisponible: "Position indisponible : voici la tour Eiffel, en points du nuage LiDAR HD.",
+    'hors-emprise': "Vous êtes hors de France métropolitaine, seule couverte : voici la tour Eiffel.",
+};
+if (ACCUEIL && ANNONCES_ACCUEIL[DEPART.raison]) {
+    chargementArtefact.then(a => { if (a) annoncerMoi(ANNONCES_ACCUEIL[DEPART.raison]); });
+}
 
 // --- Textures procédurales ------------------------------------------------
 // Générées en DataTexture et non sur un canvas : le tableau de pixels se

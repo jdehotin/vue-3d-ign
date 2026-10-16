@@ -35,8 +35,10 @@ Sur un Mac, sans Docker :
 ./run_macOS_CoreML.sh
 ```
 
-Puis ouvrir <http://localhost:8080/> : sans paramètre, la page s'ouvre sur le
-village de Gordes. Un autre lieu se cherche dans le panneau — adresse, lieu
+Puis ouvrir <http://localhost:8080/> : sans paramètre, la page propose de se
+géolocaliser et s'ouvre là où l'on est ; sans position (refusée, sans
+réponse au bout de 10 s, hors de France métropolitaine, ou hors https), sur
+la tour Eiffel, en points du nuage LiDAR HD. Un autre lieu se cherche dans le panneau — adresse, lieu
 nommé (« château de Chambord », « mairie bouc bel air »), entreprise ou
 commerce (« pharmacie bouc bel air ») ou coordonnées collées, avec
 suggestions dès la frappe — ou se donne dans l'URL (`?lat=…&lon=…`). Les flèches N, E, S et O,
@@ -377,7 +379,7 @@ des scènes construites en septembre 2026 ; ils suivent les mises à jour de l'I
 
 | Lieu | Ce qu'il montre |
 |---|---|
-| [Gordes, village](http://localhost:8080/?lat=43.9116&lon=5.2003) | Le lieu par défaut. Village perché : 84 m de relief sur l'emprise, 242 m dans l'anneau, 2 160 houppiers |
+| [Gordes, village](http://localhost:8080/?lat=43.9116&lon=5.2003) | Village perché : 84 m de relief sur l'emprise, 242 m dans l'anneau, 2 160 houppiers |
 | [Château de Versailles, cour](http://localhost:8080/?lat=48.8049&lon=2.1204) | Un monument plus grand que la scène : coupé à son bord, le château garde la surface mesurée de ses toits et ses cours ouvertes ; 146 arbres des jardins |
 | [Rocamadour, basilique](http://localhost:8080/?lat=44.7994&lon=1.6177) | Sanctuaire accroché à la falaise : 130 m de dénivelé sous les bâtiments |
 | [Chamonix, église](http://localhost:8080/?lat=45.9232&lon=6.8733) | Fond de vallée : l'anneau monte de 624 m sur les pentes alentour |

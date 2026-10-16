@@ -17,7 +17,7 @@
 // la construction des maillages, que le rendu logiciel allonge beaucoup.
 import puppeteer from 'puppeteer-core';
 
-const url = process.argv[2] || 'http://localhost:8080/';
+const url = process.argv[2] || 'http://localhost:8080/?lat=43.9116&lon=5.2003';   // Gordes : sans point, la page demande la position
 const tours = Number(process.argv[3] || 1);
 const froid = process.argv[4] === 'froid';
 const navigateur = await puppeteer.launch({

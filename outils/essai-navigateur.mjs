@@ -13,7 +13,7 @@
 import puppeteer from 'puppeteer-core';
 import fs from 'fs';
 import path from 'path';
-const url = process.argv[2] || 'http://localhost:8080/';
+const url = process.argv[2] || 'http://localhost:8080/?lat=43.9116&lon=5.2003';   // Gordes : sans point, la page demande la position
 const sortie = process.argv[3] || 'capture.png';
 const navigateur = await puppeteer.launch({
   executablePath: process.env.CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',

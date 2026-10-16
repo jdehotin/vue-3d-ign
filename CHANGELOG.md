@@ -180,6 +180,14 @@ messages de commit et dans les commentaires des modules.
 
 ### Modifié
 
+- **La page s'ouvre là où l'on est.** Sans point dans l'URL, elle propose
+  de se géolocaliser : position déjà autorisée, ou autorisée à la demande,
+  la scène se construit autour d'elle, repère de « Ma position » suivi.
+  Sinon — refus, demande restée sans réponse 10 s, position hors de France
+  métropolitaine ou indisponible —, elle s'ouvre sur la tour Eiffel, nuage
+  LiDAR allumé, la tour entière dans le cadre ; une autorisation donnée
+  après coup y emmène quand même. Le village de Gordes n'est plus le lieu
+  par défaut. Un lien avec `?lat=…&lon=…` ne demande jamais la position.
 - **Le bouton du nuage LiDAR aussi sur la vue**, au-dessus du drone, accordé
   à celui du panneau.
 - **« Ma position » est une icône sur la vue**, sous le bouton plein écran,
