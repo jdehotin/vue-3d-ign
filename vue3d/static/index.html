@@ -82,7 +82,14 @@
            indicateur par couche chargée après la scène. */
         .etat-couche { display:flex; align-items:center; gap:8px; }
         .etat-couche[hidden] { display:none; }
-        #hud-drone { font-variant-numeric:tabular-nums; }
+        #hud-drone, #hud-jeu { font-variant-numeric:tabular-nums; }
+        /* La traque : la flèche tourne vers lui, l'avant du drone en haut. */
+        #hud-jeu .fleche { display:inline-block; color:#ff6b5a; font-weight:700; }
+        #jeu-message { position:absolute; left:16px; right:16px; top:24%; z-index:4; pointer-events:none;
+                       text-align:center; color:#fff; font:700 clamp(19px, 5vw, 26px)/1.3 system-ui, sans-serif;
+                       text-shadow:0 2px 6px #000, 0 0 2px #000; }
+        #jeu-message small { display:block; font-size:14px; font-weight:500; }
+        #jeu-message[hidden] { display:none; }
         /* Le seul à se cliquer : #haut-gauche laisse passer la souris. */
         .conseil { pointer-events:auto; flex-wrap:wrap; }
         .conseil button { background:none; border:0; padding:0; font:inherit; cursor:pointer; }
@@ -232,6 +239,13 @@
                       -webkit-touch-callout:none; padding:0; border-radius:12px; font-size:20px;
                       background:rgba(31,35,40,.8); border:1px solid var(--line); color:var(--text); }
         .pad button.appui { background:var(--accent); border-color:var(--accent); color:#fff; }
+        /* Le tir, pendant la traque seulement : dans la case libre de la
+           croix de droite, sous le pouce que l'avance laisse libre. Entre les
+           deux croix, il n'avait que 25 px sur un téléphone de 390 px. */
+        .pad button.tir { border-radius:50%; font:700 12px/1 system-ui, sans-serif; color:#fff;
+                          background:rgba(200,40,30,.85); border:2px solid #ff8a7a; }
+        .pad button.tir.appui { background:#ff4a3a; border-color:#ff4a3a; }
+        .pad button.tir[hidden] { display:none; }
         #tip .voir-fiche { margin-top:6px; padding:6px 10px; border-radius:5px; border:0; cursor:pointer;
                            background:var(--accent); color:#fff; font:inherit; font-weight:600; }
         /* Le tiroir : la vue prend tout l'écran, le panneau glisse par-dessus
@@ -480,6 +494,7 @@
         <div id="haut-gauche">
             <div id="hint">Glisser pour pivoter · molette pour zoomer · survol pour mesurer · clic sur un bâtiment pour sa fiche</div>
             <div id="hud-drone" class="etat-couche" role="status" hidden></div>
+            <div id="hud-jeu" class="etat-couche" hidden></div>
             <div id="etat-monuments" class="etat-couche" role="status" hidden><i class="roue"></i><span></span></div>
             <div id="etat-ouvrages" class="etat-couche" role="status" hidden><i class="roue"></i><span></span></div>
             <div id="etat-nuage" class="etat-couche" role="status" hidden><i class="roue"></i><span></span></div>
@@ -493,6 +508,7 @@
             </div>
         </div>
         <div id="attente" hidden></div>
+        <div id="jeu-message" role="status" hidden></div>
         <div id="boussole" title="Orientation">
             <div class="rose" id="rose">
                 <div class="aiguille"></div>
@@ -526,6 +542,8 @@
                     <rect x="10" y="10" width="4" height="4" rx="1"/>
                 </svg>
             </button>
+            <button type="button" id="t-jeu" class="bouton-vue texte" hidden aria-label="Jeu"
+                    title="Jeu : retrouver Vladimir Poutine, qui court sur les routes entre les véhicules, et le toucher depuis le drone">Jeu</button>
             <button type="button" id="btn-aide" class="bouton-vue" aria-label="Prise en main"
                     aria-haspopup="dialog" aria-controls="tuto" title="Prise en main : les gestes, et ce que montre la vue">
                 <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -590,6 +608,7 @@
             </div>
             <div class="pad" aria-label="Monter, descendre et glisser">
                 <button type="button" data-touche="Space" style="grid-area:1/2" aria-label="Monter">▲</button>
+                <button type="button" class="tir" id="pad-tir" data-touche="KeyF" style="grid-area:1/3" hidden aria-label="Tirer">TIR</button>
                 <button type="button" data-touche="KeyA" style="grid-area:2/1" aria-label="Glisser à gauche">◀</button>
                 <button type="button" data-touche="ShiftLeft" style="grid-area:2/2" aria-label="Descendre">▼</button>
                 <button type="button" data-touche="KeyD" style="grid-area:2/3" aria-label="Glisser à droite">▶</button>
@@ -3098,7 +3117,8 @@ async function chargerScene() {
     return [ARTEFACT.batiments, ARTEFACT.toits];
 }
 
-chargerScene()
+// Attendue par le jeu lancé de l'URL (?jeu=1), avec le relief (reliefCharge).
+const sceneConstruite = chargerScene()
     .then(([json, toits]) => {
         if (toits && toits.toits) { TOITS = toits.toits; TOITS_SOURCE = toits.source; TOITS_GRILLE = toits.grille || null; }
         features = json.features || [];
@@ -4080,7 +4100,7 @@ async function chargerRelief() {
     appliquerRelief();
     cadrer();
 }
-chargerRelief();
+const reliefCharge = chargerRelief();
 
 // --- Anneau de relief ------------------------------------------------------
 // Autour de l'emprise, un relief grossier (maille de 16 m, sur 2 km de côté)
@@ -9500,7 +9520,8 @@ function objetSous(touche) {
 }
 
 renderer.domElement.addEventListener('pointermove', e => {
-    if (tipEpingle) return;
+    // Pendant la traque, pas d'infobulle sous le viseur (activerJeu la ferme).
+    if (tipEpingle || jeu.actif) return;
     const r = renderer.domElement.getBoundingClientRect();
     souris.x = ((e.clientX - r.left) / r.width) * 2 - 1;
     souris.y = -((e.clientY - r.top) / r.height) * 2 + 1;
@@ -9773,8 +9794,10 @@ const AIDE_DRONE = AU_DOIGT
       + 'son bouton pour sortir'
     : 'Drone : ↑ ↓ avancer, reculer · ← → tourner · Q D glisser · espace monter · '
       + 'Maj descendre · molette pour le recul · Échap pour sortir';
+// F tire pendant la traque (majJeu), tenue comme les autres. Pas Entrée :
+// retenue ici, elle n'activerait plus le bouton qui a le focus.
 const TOUCHES_DRONE = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
-                               'KeyW', 'KeyA', 'KeyS', 'KeyD', 'Space', 'ShiftLeft', 'ShiftRight']);
+                               'KeyW', 'KeyA', 'KeyS', 'KeyD', 'Space', 'ShiftLeft', 'ShiftRight', 'KeyF']);
 
 var droneActif = false;
 const drone = { position: new THREE.Vector3(), vitesse: new THREE.Vector3(), cap: 0, lacet: 0,
@@ -9892,9 +9915,12 @@ function entrerDrone() {
     hudDrone.hidden = false;
     padDrone.hidden = !TACTILE;
     decalage.hidden = true;
+    btnJeu.hidden = false;
 }
 
 function sortirDrone() {
+    arreterJeu();
+    btnJeu.hidden = true;
     droneActif = false;
     btnDrone.classList.remove('on');
     controls.enabled = true;
@@ -9994,6 +10020,725 @@ function majDrone(dt, maintenant) {
     }
 }
 
+// --- Jeu : la traque -------------------------------------------------------------
+// Depuis le drone, retrouver un petit bonhomme — Vladimir Poutine en
+// figurine : costume sombre, cravate, front dégarni — qui court sur les
+// routes, entre les véhicules, et le toucher. Le bouton « Jeu » apparaît en
+// vol ; ?jeu=1 ouvre la page dans la traque, drone décollé, une fois la scène
+// construite. Rien dans la scène ni dans le cache : le jeu ne lit que ce que
+// la page a déjà, routes BD TOPO et véhicules vus sur l'orthophoto.
+//
+// Il court sur le graphe des tronçons au niveau du sol — ceux que
+// construireRoutes dessine —, coupé au bord de l'emprise, où il fait
+// demi-tour : au-delà, pas de terrain fin sous ses pieds. De véhicule en
+// véhicule : il en choisit un à quelques centaines de mètres, y va par le
+// plus court chemin, s'y cache quelques secondes, puis repart. Au hasard des
+// carrefours, il ne s'en approchait pas : à Gordes, 130 m au plus près en
+// 40 s de course, pour 258 véhicules. Il détale quand le drone approche, par
+// la branche qui l'en éloigne. Sans la couche des véhicules (VUE3D_VEHICULES),
+// il court au hasard des routes.
+//
+// Le tir part du drone : F, ou le bouton TIR au doigt, vise le sol devant
+// lui, sous le réticule rouge ; un clic, ou un toucher, vise ce qu'il
+// désigne. Les valeurs ci-dessous sont des réglages de jeu, pas des mesures.
+const JEU_DEMANDE = PARAMS.has('jeu') && PARAMS.get('jeu') !== '0';
+const JEU_ECHELLE = 1.5;                    // 2,6 m : plus grand que nature, pour se voir du ciel
+const JEU_VITESSE = 3.2;                    // m/s, au petit trot
+const JEU_VITESSE_FUITE = 6.5;              // m/s, le drone à moins de JEU_ALERTE
+const JEU_ALERTE = 45;                      // m du drone
+const JEU_ACCES_M = 25;                     // au plus, d'un véhicule à la route qui y mène
+const JEU_BUT_M = [30, 150];                // m par la route jusqu'au véhicule suivant : 45 s au trot au plus
+const JEU_PAUSE_S = [3, 8];                 // caché contre un véhicule, au hasard entre les deux
+const JEU_DEPART = [180, 450];              // m du drone au début d'une manche
+// Plus raide que le regard de la caméra (31° au recul le plus court), pour
+// que le réticule tombe sous le drone à l'écran, et non derrière lui.
+const JEU_VISEE = 40 * Math.PI / 180;
+// À 400 m/s, il fait 1 m pendant le vol d'une balle tirée à 120 m : touché
+// sans viser devant lui au trot, pas en fuite.
+const JEU_TIR_VITESSE = 400;
+const JEU_PORTEE = 1500;                    // m
+const JEU_CADENCE_S = 0.25;
+const JEU_RAYON_TOUCHE = 1.6;               // m de la trajectoire à son buste
+const JEU_RAYON_SOUFFLE = 3;                // m du point d'impact
+const JEU_ENTRE_MANCHES_S = 5;
+const CLE_RECORD_JEU = 'vue3d.jeu-record';
+const AIDE_JEU = AU_DOIGT
+    ? 'Traque : la flèche rouge, en haut à gauche, pointe vers lui · TIR, ou toucher la vue, pour tirer · '
+      + 'le bouton Jeu pour arrêter'
+    : 'Traque : la flèche rouge, en haut à gauche, pointe vers lui · F tire sous le réticule, '
+      + 'un clic là où il désigne · flèches, Q D, espace, Maj pour voler · Échap pour sortir';
+
+const btnJeu = document.getElementById('t-jeu');
+const hudJeu = document.getElementById('hud-jeu');
+const messageJeu = document.getElementById('jeu-message');
+const padTir = document.getElementById('pad-tir');
+const jeu = { actif: false, graphe: null, coureur: null, tirs: [], effets: [],
+              manche: 0, touches: 0, tirsManche: 0, debut: 0, dernierTir: -Infinity, relance: null,
+              hud: 0, vise: null };
+const groupeJeu = new THREE.Group();
+groupeJeu.visible = false;
+scene.add(groupeJeu);
+
+// Une figurine d'1,75 m, l'avant vers −Z comme le drone, grandie de
+// JEU_ECHELLE. Jambes et bras pivotent à la hanche et à l'épaule pour la
+// course, la tête tourne quand il guette. Pas d'ombre portée, comme le drone :
+// une tache au sol.
+const figurine = (() => {
+    const costume = new THREE.MeshStandardMaterial({ color: 0x232a37, roughness: 0.7 });
+    const peau = new THREE.MeshStandardMaterial({ color: 0xe3b48f, roughness: 0.8 });
+    const chemise = new THREE.MeshStandardMaterial({ color: 0xf2f2ee, roughness: 0.8 });
+    const cravate = new THREE.MeshStandardMaterial({ color: 0x8c1c2c, roughness: 0.6 });
+    const cheveux = new THREE.MeshStandardMaterial({ color: 0xb9a27e, roughness: 0.9, side: THREE.DoubleSide });
+    const noir = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.5 });
+    const boite = (l, h, p, mat, x, y, z) => {
+        const m = new THREE.Mesh(new THREE.BoxGeometry(l, h, p), mat);
+        m.position.set(x, y, z);
+        return m;
+    };
+    const groupe = new THREE.Group(), corps = new THREE.Group(), tete = new THREE.Group();
+    const jambes = [-1, 1].map(s => {
+        const hanche = new THREE.Group();
+        hanche.position.set(s * 0.1, 0.9, 0);
+        hanche.add(boite(0.16, 0.86, 0.18, costume, 0, -0.43, 0), boite(0.17, 0.08, 0.28, noir, 0, -0.86, -0.05));
+        groupe.add(hanche);
+        return hanche;
+    });
+    corps.add(boite(0.44, 0.62, 0.24, costume, 0, 1.2, 0),            // veste
+              boite(0.14, 0.22, 0.02, chemise, 0, 1.39, -0.125),      // plastron
+              boite(0.05, 0.3, 0.02, cravate, 0, 1.33, -0.135),
+              boite(0.1, 0.1, 0.1, peau, 0, 1.55, 0));                // cou
+    const bras = [-1, 1].map(s => {
+        const epaule = new THREE.Group();
+        epaule.position.set(s * 0.28, 1.47, 0);
+        const main = new THREE.Mesh(new THREE.SphereGeometry(0.06, 10, 8), peau);
+        main.position.y = -0.62;
+        epaule.add(boite(0.11, 0.58, 0.13, costume, 0, -0.29, 0), main);
+        corps.add(epaule);
+        return epaule;
+    });
+    const crane = new THREE.Mesh(new THREE.SphereGeometry(0.12, 18, 14), peau);
+    crane.scale.set(0.95, 1.1, 1);
+    // Couronne dégarnie : les cheveux sur les côtés et l'arrière, de 50° à 99°
+    // du sommet ; le front (−Z, φ = 1,5 π dans SphereGeometry) reste nu sur 100°.
+    const couronne = new THREE.Mesh(new THREE.SphereGeometry(0.127, 18, 8, 1.78 * Math.PI, 1.44 * Math.PI,
+                                                             0.28 * Math.PI, 0.27 * Math.PI), cheveux);
+    couronne.scale.copy(crane.scale);
+    tete.position.y = 1.7;
+    tete.add(crane, couronne, boite(0.03, 0.06, 0.04, peau, -0.115, -0.01, 0.01),
+             boite(0.03, 0.06, 0.04, peau, 0.115, -0.01, 0.01));
+    corps.add(tete);
+    groupe.add(corps);
+    groupe.scale.setScalar(JEU_ECHELLE);
+    // Pas celui du drone, qui pâlit avec sa hauteur.
+    const ombre = new THREE.Mesh(new THREE.CircleGeometry(0.45 * JEU_ECHELLE, 20), ombreDrone.material.clone());
+    ombre.material.opacity = 0.35;
+    ombre.rotation.x = -Math.PI / 2;
+    groupeJeu.add(groupe, ombre);
+    return { groupe, corps, tete, jambes, bras, ombre };
+})();
+
+// Le réticule : un anneau rouge à plat sur ce que vise F, vu à travers tout.
+const reticule = new THREE.Mesh(new THREE.RingGeometry(1.1, 1.5, 32), new THREE.MeshBasicMaterial({
+    color: 0xff3b2f, transparent: true, opacity: 0.9, depthTest: false, depthWrite: false }));
+reticule.add(new THREE.Mesh(new THREE.CircleGeometry(0.25, 12), reticule.material));
+reticule.rotation.x = -Math.PI / 2;
+reticule.renderOrder = 10;
+reticule.children[0].renderOrder = 10;
+groupeJeu.add(reticule);
+const GEO_BALLE = new THREE.SphereGeometry(0.3, 10, 8);
+const MAT_BALLE = new THREE.MeshBasicMaterial({ color: 0xffd23f });
+const GEO_SOUFFLE = new THREE.SphereGeometry(1, 16, 12);
+
+/**
+ * Graphe des routes au niveau du sol, en mètres locaux, réduit à sa plus
+ * grande composante : un bout de chemin isolé l'enfermerait sur quelques
+ * mètres. Les nœuds sont les extrémités des tronçons, à 0,5 m près.
+ */
+function grapheJeu() {
+    const [ox, oy] = toLocal(BORNES.o, BORNES.s), [ex, ey] = toLocal(BORNES.e, BORNES.n);
+    const dedans = ([x, y]) => x > ox + 2 && x < ex - 2 && y > oy + 2 && y < ey - 2;
+    const noeuds = new Map(), aretes = [];
+    const noeud = ([x, y]) => {
+        const cle = `${Math.round(x * 2)},${Math.round(y * 2)}`;
+        if (!noeuds.has(cle)) noeuds.set(cle, { x, y, aretes: [] });
+        return noeuds.get(cle);
+    };
+    const ajouter = pts => {
+        const cum = [0];
+        for (let i = 1; i < pts.length; i++) {
+            cum.push(cum[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
+        }
+        if (cum.at(-1) < 1) return;
+        const arete = { pts, cum, longueur: cum.at(-1), a: noeud(pts[0]), b: noeud(pts.at(-1)), attrait: null };
+        arete.a.aretes.push(arete);
+        if (arete.b !== arete.a) arete.b.aretes.push(arete);
+        aretes.push(arete);
+    };
+    for (const f of (ARTEFACT && ARTEFACT.routes && ARTEFACT.routes.features) || []) {
+        const p = f.properties || {};
+        if (p.fictif || String(p.position_par_rapport_au_sol ?? '0') !== '0') continue;
+        const g = f.geometry || {};
+        const lignes = g.type === 'LineString' ? [g.coordinates]
+                     : g.type === 'MultiLineString' ? g.coordinates : [];
+        for (const ligne of lignes) {
+            // Coupée au bord : chaque morceau dans l'emprise est une arête.
+            let morceau = [];
+            for (const [lo, la] of ligne) {
+                const q = toLocal(lo, la);
+                if (dedans(q)) { morceau.push(q); continue; }
+                if (morceau.length > 1) ajouter(morceau);
+                morceau = [];
+            }
+            if (morceau.length > 1) ajouter(morceau);
+        }
+    }
+    const vues = new Set();
+    let principale = [], longueurMax = 0;
+    for (const depart of aretes) {
+        if (vues.has(depart)) continue;
+        const composante = [], pile = [depart];
+        let longueur = 0;
+        vues.add(depart);
+        while (pile.length) {
+            const a = pile.pop();
+            composante.push(a);
+            longueur += a.longueur;
+            for (const n of [a.a, a.b]) {
+                for (const b of n.aretes) if (!vues.has(b)) { vues.add(b); pile.push(b); }
+            }
+        }
+        if (longueur > longueurMax) { longueurMax = longueur; principale = composante; }
+    }
+    const cumul = [];
+    let total = 0;
+    for (const a of principale) cumul.push(total += a.longueur);
+    return { aretes: principale, cumul, longueur: total };
+}
+
+/** Une arête au hasard, au prorata de sa longueur. */
+function areteAuHasard(g) {
+    const r = Math.random() * g.longueur;
+    let bas = 0, haut = g.cumul.length - 1;
+    while (bas < haut) {
+        const m = (bas + haut) >> 1;
+        if (g.cumul[m] < r) bas = m + 1; else haut = m;
+    }
+    return g.aretes[bas];
+}
+
+/** [x, y, dx, dy] à `s` m du début de l'arête : le point, et la direction du segment. */
+function pointArete(a, s) {
+    let i = 1;
+    while (i < a.cum.length - 1 && a.cum[i] < s) i++;
+    const p = a.pts[i - 1], q = a.pts[i];
+    const t = Math.min(Math.max((s - a.cum[i - 1]) / ((a.cum[i] - a.cum[i - 1]) || 1), 0), 1);
+    return [p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t, q[0] - p[0], q[1] - p[1]];
+}
+
+// Les véhicules, chacun relié au point de route le plus proche, à
+// JEU_ACCES_M au plus : une voiture au fond d'une cour sans route n'est pas
+// un but. Refait quand un détecteur en apporte d'autres (ajouterVehicules) :
+// la traque peut commencer avant eux.
+const MAILLE_JEU = 25;
+function accesVehicules() {
+    const g = jeu.graphe, liste = VEHICULES.vehicules;
+    if (g.acces && g.acces.n === liste.length) return g.acces.points;
+    if (!g.segments) {
+        g.segments = new Map();
+        for (const arete of g.aretes) {
+            for (let i = 1; i < arete.pts.length; i++) {
+                const [x0, y0] = arete.pts[i - 1], [x1, y1] = arete.pts[i];
+                for (let gx = Math.floor(Math.min(x0, x1) / MAILLE_JEU); gx <= Math.floor(Math.max(x0, x1) / MAILLE_JEU); gx++) {
+                    for (let gy = Math.floor(Math.min(y0, y1) / MAILLE_JEU); gy <= Math.floor(Math.max(y0, y1) / MAILLE_JEU); gy++) {
+                        const cle = `${gx},${gy}`;
+                        if (!g.segments.has(cle)) g.segments.set(cle, []);
+                        g.segments.get(cle).push([arete, i]);
+                    }
+                }
+            }
+        }
+    }
+    const points = [];
+    for (const v of liste) {
+        const [x, y] = toLocal(v[0], v[1]);
+        const gx = Math.floor(x / MAILLE_JEU), gy = Math.floor(y / MAILLE_JEU);
+        let meilleur = null;
+        for (let i = gx - 1; i <= gx + 1; i++) {
+            for (let j = gy - 1; j <= gy + 1; j++) {
+                for (const [arete, k] of g.segments.get(`${i},${j}`) || []) {
+                    const [x0, y0] = arete.pts[k - 1], [x1, y1] = arete.pts[k];
+                    const dx = x1 - x0, dy = y1 - y0, l2 = dx * dx + dy * dy || 1;
+                    const t = Math.min(Math.max(((x - x0) * dx + (y - y0) * dy) / l2, 0), 1);
+                    const d = Math.hypot(x0 + dx * t - x, y0 + dy * t - y);
+                    if (!meilleur || d < meilleur.d) {
+                        meilleur = { d, arete, s: arete.cum[k - 1] + t * (arete.cum[k] - arete.cum[k - 1]), x, y };
+                    }
+                }
+            }
+        }
+        if (meilleur && meilleur.d < JEU_ACCES_M) points.push(meilleur);
+    }
+    g.acces = { n: liste.length, points };
+    return points;
+}
+
+/**
+ * Distance par la route du coureur à chaque nœud, et l'arête par laquelle on
+ * y arrive (Dijkstra) : demi-tour permis, il part vers l'un ou l'autre bout.
+ */
+function distancesRoute(c) {
+    const dist = new Map(), tas = [];
+    const pousser = (n, d, arete, prec) => {
+        const connu = dist.get(n);
+        if (connu && connu.d <= d) return;
+        dist.set(n, { d, arete, prec });
+        tas.push([d, n]);
+        for (let i = tas.length - 1; i > 0;) {
+            const p = (i - 1) >> 1;
+            if (tas[p][0] <= tas[i][0]) break;
+            [tas[p], tas[i]] = [tas[i], tas[p]];
+            i = p;
+        }
+    };
+    const extraire = () => {
+        const haut = tas[0], dernier = tas.pop();
+        if (tas.length) {
+            tas[0] = dernier;
+            for (let i = 0; ;) {
+                const g = 2 * i + 1, d = g + 1;
+                let m = i;
+                if (g < tas.length && tas[g][0] < tas[m][0]) m = g;
+                if (d < tas.length && tas[d][0] < tas[m][0]) m = d;
+                if (m === i) break;
+                [tas[m], tas[i]] = [tas[i], tas[m]];
+                i = m;
+            }
+        }
+        return haut;
+    };
+    pousser(c.arete.a, c.s, c.arete, null);
+    pousser(c.arete.b, c.arete.longueur - c.s, c.arete, null);
+    while (tas.length) {
+        const [d, n] = extraire();
+        if (d > dist.get(n).d) continue;
+        for (const a of n.aretes) pousser(a.a === n ? a.b : a.a, d + a.longueur, a, n);
+    }
+    return dist;
+}
+
+/**
+ * Le prochain véhicule où se cacher : à JEU_BUT_M par la route, au hasard,
+ * sinon le plus proche au-delà. Le chemin est la suite des arêtes à prendre
+ * aux nœuds ; false si aucun véhicule n'est à portée.
+ */
+function choisirBut(c) {
+    const acces = accesVehicules();
+    if (!acces.length) return false;
+    const dist = distancesRoute(c), candidats = [];
+    for (const p of acces) {
+        const da = dist.get(p.arete.a), db = dist.get(p.arete.b);
+        const parA = da ? da.d + p.s : Infinity, parB = db ? db.d + p.arete.longueur - p.s : Infinity;
+        const cout = p.arete === c.arete ? Math.abs(p.s - c.s) : Math.min(parA, parB);
+        if (Number.isFinite(cout) && cout >= JEU_BUT_M[0]) candidats.push({ p, cout, fin: parA <= parB ? p.arete.a : p.arete.b });
+    }
+    if (!candidats.length) return false;
+    const aPortee = candidats.filter(k => k.cout <= JEU_BUT_M[1]);
+    const choix = aPortee.length ? aPortee[Math.floor(Math.random() * aPortee.length)]
+                                 : candidats.reduce((u, v) => (v.cout < u.cout ? v : u));
+    c.but = choix.p;
+    c.chemin = [];
+    if (choix.p.arete === c.arete) { c.sens = choix.p.s >= c.s ? 1 : -1; return true; }
+    // Du nœud d'arrivée, en remontant jusqu'au premier, atteint par l'arête où il court.
+    let n = choix.fin;
+    c.chemin.push(choix.p.arete);
+    while (dist.get(n).prec) {
+        c.chemin.unshift(dist.get(n).arete);
+        n = dist.get(n).prec;
+    }
+    c.sens = n === c.arete.b ? 1 : -1;
+    return true;
+}
+
+/** La branche prise au nœud `n` sans but : au hasard, ou loin du drone s'il fuit. */
+function brancheSuivante(n, venue, fuite) {
+    let options = n.aretes.filter(a => a !== venue);
+    if (!options.length) options = n.aretes;        // impasse ou bord de l'emprise : demi-tour
+    if (!fuite) return options[Math.floor(Math.random() * options.length)];
+    const poids = options.map(a => {
+        const autre = a.a === n ? a.b : a.a;
+        return Math.hypot(autre.x - drone.position.x, -autre.y - drone.position.z) ** 4;
+    });
+    let r = Math.random() * poids.reduce((s, p) => s + p, 0);
+    for (let i = 0; i < options.length; i++) if ((r -= poids[i]) <= 0) return options[i];
+    return options.at(-1);
+}
+
+/** Arrivé contre un véhicule : il s'y cache, tourné vers lui. */
+function seCacher(c, but) {
+    c.pause = JEU_PAUSE_S[0] + Math.random() * (JEU_PAUSE_S[1] - JEU_PAUSE_S[0]);
+    c.abri = [but.x, but.y];
+    c.but = null;
+    c.chemin = [];
+}
+
+function avancerCoureur(c, distance) {
+    let reste = distance;
+    while (reste > 0) {
+        if (c.but && c.arete === c.but.arete && !c.chemin.length) {
+            const ecart = (c.but.s - c.s) * c.sens;
+            if (ecart >= 0 && ecart <= reste) { c.s = c.but.s; seCacher(c, c.but); return; }
+        }
+        const fin = c.sens > 0 ? c.arete.longueur - c.s : c.s;
+        if (reste < fin) { c.s += c.sens * reste; return; }
+        reste -= fin;
+        const n = c.sens > 0 ? c.arete.b : c.arete.a;
+        let suivante = c.chemin.length ? c.chemin.shift() : null;
+        if (!suivante || (suivante.a !== n && suivante.b !== n)) {
+            c.but = null;
+            c.chemin = [];
+            suivante = brancheSuivante(n, c.arete, c.fuite);
+        }
+        c.sens = suivante.a === n ? 1 : -1;
+        c.s = c.sens > 0 ? 0 : suivante.longueur;
+        c.arete = suivante;
+    }
+}
+
+/** Le buste du coureur, en coordonnées de la scène. */
+function poitrine(c, cible = new THREE.Vector3()) {
+    return cible.set(c.xy[0], c.y + 1.2 * JEU_ECHELLE * Math.cos(c.chute), -c.xy[1]);
+}
+
+function majCoureur(c, dt, maintenant) {
+    let [x, y, dx, dy] = pointArete(c.arete, c.s);
+    if (!c.touche) {
+        const fuyait = c.fuite;
+        c.fuite = Math.hypot(x - drone.position.x, c.y + 1.2 - drone.position.y, -y - drone.position.z) < JEU_ALERTE;
+        // Il détale : plus de cachette ni de but, la première branche qui l'éloigne.
+        if (c.fuite && !fuyait) { c.pause = 0; c.but = null; c.chemin = []; }
+        // Le drone devant lui : demi-tour, sans attendre le carrefour, où il
+        // ne choisit que la branche. Une fois par seconde au plus, sinon il
+        // piétinerait sous un drone qui le survole.
+        if (c.fuite && maintenant > c.prochainDemiTour
+            && (drone.position.x - x) * dx * c.sens + (-drone.position.z - y) * dy * c.sens > 0) {
+            c.sens = -c.sens;
+            c.prochainDemiTour = maintenant + 1000;
+        }
+        if (c.pause > 0) c.pause -= dt;
+        else {
+            // Au plus un calcul de chemin par seconde, si aucun véhicule n'est à portée.
+            if (!c.fuite && !c.but && maintenant > c.prochainBut) {
+                c.prochainBut = maintenant + 1000;
+                choisirBut(c);
+            }
+            c.vitesse = c.fuite ? JEU_VITESSE_FUITE : JEU_VITESSE;
+            avancerCoureur(c, c.vitesse * dt);
+            [x, y, dx, dy] = pointArete(c.arete, c.s);
+        }
+    } else c.chute = Math.min(c.chute + dt * 4, Math.PI / 2);
+    c.xy = [x, y];
+    c.y = ySol(...toLonLat(x, y));
+
+    // Tourné vers où il court, sans à-coup aux carrefours ; caché, vers le véhicule.
+    const court = c.pause <= 0 && !c.touche;
+    const voulu = court ? Math.atan2(dx * c.sens, dy * c.sens)
+                : c.abri && !c.touche ? Math.atan2(c.abri[0] - x, c.abri[1] - y) : c.cap;
+    c.cap += Math.atan2(Math.sin(voulu - c.cap), Math.cos(voulu - c.cap)) * (1 - Math.exp(-dt / 0.1));
+    c.foulee += court ? c.vitesse * dt * 2.4 / JEU_ECHELLE : 0;
+    const amplitude = court ? (c.fuite ? 0.95 : 0.6) : 0;
+    const balancement = Math.sin(c.foulee) * amplitude;
+    figurine.jambes[0].rotation.x = balancement;
+    figurine.jambes[1].rotation.x = -balancement;
+    figurine.bras[0].rotation.x = -balancement * 0.8;
+    figurine.bras[1].rotation.x = balancement * 0.8;
+    figurine.corps.position.y = court ? Math.abs(Math.sin(c.foulee)) * 0.05 : 0;
+    // Caché, il guette par-dessus le capot.
+    figurine.tete.rotation.y = c.pause > 0 && !c.touche ? Math.sin(maintenant / 450) * 0.9 : 0;
+    figurine.groupe.position.set(x, c.y, -y);
+    // Touché, il tombe à la renverse, pivotant sur ses talons.
+    figurine.groupe.rotation.set(c.chute, -c.cap, 0, 'YXZ');
+    figurine.ombre.position.set(x, c.y + 0.05, -y);
+}
+
+const rayonJeu = new THREE.Raycaster(), pointJeu = new THREE.Vector3();
+/**
+ * Premier point du sol, de l'anneau, de l'horizon ou d'un toit sur le rayon,
+ * à JEU_PORTEE au plus ; null au-delà. Le sol est cherché pas à pas, de plus
+ * en plus longs avec la distance, puis par dichotomie : solSous le lit sur sa
+ * grille sans lancer de rayon sur le maillage du terrain.
+ */
+function pointVise(origine, direction) {
+    const au = (t, cible) => cible.copy(origine).addScaledVector(direction, t);
+    const dessous = t => {
+        au(t, pointJeu);
+        const sol = solSous(pointJeu.x, pointJeu.z, false);
+        return sol !== null && pointJeu.y <= sol;
+    };
+    let avant = 0, sol = null;
+    for (let t = 0; t < JEU_PORTEE;) {
+        t = Math.min(t + 1 + 0.02 * t, JEU_PORTEE);
+        if (dessous(t)) {
+            let a = avant, b = t;
+            for (let k = 0; k < 8; k++) {
+                const m = (a + b) / 2;
+                if (dessous(m)) b = m; else a = m;
+            }
+            sol = b;
+            break;
+        }
+        avant = t;
+    }
+    rayonJeu.set(origine, direction);
+    rayonJeu.far = sol ?? JEU_PORTEE;
+    const bati = rayonJeu.intersectObjects(groupeBatiments.children, true)[0];
+    if (bati) return bati.point.clone();
+    return sol === null ? null : au(sol, new THREE.Vector3());
+}
+
+/** Une balle du drone dans la `direction` (unitaire), jusqu'à ce qu'elle rencontre. */
+function tirer(direction) {
+    const maintenant = performance.now();
+    if (maintenant - jeu.dernierTir < JEU_CADENCE_S * 1000 || !jeu.coureur) return;
+    jeu.dernierTir = maintenant;
+    const depart = drone.position.clone();
+    depart.y -= 0.3;
+    const impact = pointVise(depart, direction) || depart.clone().addScaledVector(direction, JEU_PORTEE);
+    const balle = new THREE.Mesh(GEO_BALLE, MAT_BALLE);
+    balle.position.copy(depart);
+    balle.lookAt(impact);
+    balle.scale.set(1, 1, 6);
+    groupeJeu.add(balle);
+    jeu.tirs.push({ balle, direction: direction.clone(), restant: depart.distanceTo(impact) });
+    jeu.tirsManche++;
+    son('tir');
+}
+
+const directionTir = new THREE.Vector3();
+/** F, ou TIR : devant le drone, JEU_VISEE sous l'horizon, là où est le réticule. */
+function tirerDevant() {
+    const v = JEU_VISEE;
+    tirer(directionTir.set(Math.sin(drone.cap) * Math.cos(v), -Math.sin(v), -Math.cos(drone.cap) * Math.cos(v)));
+}
+
+/** Un clic : la balle part du drone vers ce que désigne le rayon de la caméra. */
+function tirerSelonRayon(rayon) {
+    const c = jeu.coureur;
+    if (!c) return;
+    // Lui d'abord, à quelques pixels près : à 200 m, 1,6 m tient en 10 px.
+    const buste = poitrine(c);
+    let cible = null;
+    if (!c.touche && rayon.distanceToPoint(buste) < JEU_RAYON_TOUCHE
+        && buste.clone().sub(rayon.origin).dot(rayon.direction) > 0) cible = buste;
+    else cible = pointVise(rayon.origin, rayon.direction);
+    if (!cible) cible = rayon.origin.clone().addScaledVector(rayon.direction, JEU_PORTEE);
+    const direction = cible.sub(drone.position);
+    if (direction.lengthSq() < 0.25) return;
+    tirer(direction.normalize());
+}
+
+function souffle(point, touche) {
+    const m = new THREE.Mesh(GEO_SOUFFLE, new THREE.MeshBasicMaterial({
+        color: touche ? 0xffe14a : 0xff8a30, transparent: true, opacity: 0.85, depthWrite: false }));
+    m.position.copy(point);
+    groupeJeu.add(m);
+    jeu.effets.push({ m, age: 0, duree: touche ? 0.9 : 0.45, taille: touche ? 6 : JEU_RAYON_SOUFFLE });
+    son(touche ? 'touche' : 'impact');
+}
+
+// Des sons de synthèse, faute de fichiers : un piou au tir, un souffle à
+// l'impact. Créés au premier tir, qui suit un geste : le navigateur l'exige.
+let audioJeu = null;
+function son(quoi) {
+    try {
+        audioJeu = audioJeu || new AudioContext();
+        const t = audioJeu.currentTime, volume = audioJeu.createGain();
+        volume.connect(audioJeu.destination);
+        if (quoi === 'tir') {
+            const o = audioJeu.createOscillator();
+            o.type = 'square';
+            o.frequency.setValueAtTime(900, t);
+            o.frequency.exponentialRampToValueAtTime(220, t + 0.12);
+            volume.gain.setValueAtTime(0.05, t);
+            volume.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+            o.connect(volume);
+            o.start(t);
+            o.stop(t + 0.13);
+            return;
+        }
+        const n = Math.round(audioJeu.sampleRate * (quoi === 'touche' ? 0.7 : 0.35));
+        const tampon = audioJeu.createBuffer(1, n, audioJeu.sampleRate), d = tampon.getChannelData(0);
+        for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n) ** 3;
+        const bruit = audioJeu.createBufferSource();
+        bruit.buffer = tampon;
+        volume.gain.value = quoi === 'touche' ? 0.3 : 0.12;
+        bruit.connect(volume);
+        bruit.start(t);
+    } catch (e) { /* sans son */ }
+}
+
+const enClair = s => s < 60 ? `${Math.round(s)} s` : `${Math.floor(s / 60)} min ${String(Math.round(s % 60)).padStart(2, '0')} s`;
+let finAnnonce = null;
+function annoncer(html, duree) {
+    messageJeu.innerHTML = html;
+    messageJeu.hidden = false;
+    clearTimeout(finAnnonce);
+    finAnnonce = setTimeout(() => { messageJeu.hidden = true; }, duree * 1000);
+}
+
+function toucher(point) {
+    const c = jeu.coureur;
+    c.touche = true;
+    jeu.touches++;
+    souffle(point, true);
+    const duree = (performance.now() - jeu.debut) / 1000;
+    let record = null;
+    try {
+        record = Number(localStorage.getItem(CLE_RECORD_JEU)) || null;
+        if (!record || duree < record) localStorage.setItem(CLE_RECORD_JEU, duree.toFixed(1));
+    } catch (e) { /* navigation privée : pas de record */ }
+    const bilan = `en ${enClair(duree)}, ${jeu.tirsManche} tir${jeu.tirsManche > 1 ? 's' : ''}`
+        + (record === null || duree < record ? ' · record' : ` · record : ${enClair(record)}`);
+    annoncer(`Touché !<small>${bilan}<br>nouvelle traque dans ${JEU_ENTRE_MANCHES_S} s</small>`, JEU_ENTRE_MANCHES_S);
+    jeu.relance = performance.now() + JEU_ENTRE_MANCHES_S * 1000;
+}
+
+/**
+ * Une manche : il repart loin du drone (JEU_DEPART), caché contre un
+ * véhicule s'il y en a, sinon n'importe où sur les routes. Plutôt parmi
+ * d'autres véhicules : contre une voiture isolée, la suivante était à 438 m
+ * par la route à Gordes, deux minutes de course sans se cacher.
+ */
+function nouvelleManche() {
+    const g = jeu.graphe, acces = accesVehicules();
+    let meilleur = null;
+    for (let k = 0; k < 80; k++) {
+        const p = acces.length ? acces[Math.floor(Math.random() * acces.length)] : null;
+        const a = p ? p.arete : areteAuHasard(g), s = p ? p.s : Math.random() * a.longueur;
+        const [x, y] = pointArete(a, s);
+        const d = Math.hypot(x - drone.position.x, -y - drone.position.z);
+        // Chaque voisin à moins de 100 m vaut 15 m d'écart à JEU_DEPART, cinq au plus.
+        const voisins = p ? acces.filter(q => q !== p && Math.hypot(q.x - p.x, q.y - p.y) < 100).length : 0;
+        const ecart = Math.max(JEU_DEPART[0] - d, d - JEU_DEPART[1], 0) - 15 * Math.min(voisins, 5)
+                    + Math.random() * 20;
+        if (!meilleur || ecart < meilleur.ecart) meilleur = { a, s, p, ecart };
+    }
+    const c = jeu.coureur = { arete: meilleur.a, s: meilleur.s, sens: Math.random() < 0.5 ? 1 : -1,
+                              xy: [0, 0], y: 0, cap: 0, foulee: 0, vitesse: JEU_VITESSE, pause: 0,
+                              abri: null, but: null, chemin: [], prochainBut: 0, prochainDemiTour: 0, fuite: false,
+                              touche: false, chute: 0 };
+    const [, , dx, dy] = pointArete(meilleur.a, meilleur.s);
+    c.cap = Math.atan2(dx * c.sens, dy * c.sens);
+    if (meilleur.p) seCacher(c, meilleur.p);
+    jeu.manche++;
+    jeu.tirsManche = 0;
+    jeu.relance = null;
+    jeu.debut = performance.now();
+    annoncer(`Retrouvez Vladimir Poutine<small>il court sur les routes, entre les véhicules · `
+             + `la flèche rouge pointe vers lui</small>`, 4);
+}
+
+function activerJeu() {
+    // La scène se construit encore : ni routes, ni emprise.
+    if (!ARTEFACT || !reliefRegle) return;
+    if (!droneActif) entrerDrone();
+    jeu.graphe = jeu.graphe || grapheJeu();
+    if (!jeu.graphe.aretes.length) {
+        annoncer('Pas de traque ici<small>aucune route BD TOPO dans cette scène</small>', 4);
+        return;
+    }
+    jeu.actif = true;
+    btnJeu.classList.add('on');
+    groupeJeu.visible = true;
+    hudJeu.hidden = false;
+    padTir.hidden = !TACTILE;
+    aideVue.textContent = AIDE_JEU;
+    detacherTip();
+    tip.style.display = 'none';
+    jeu.manche = jeu.touches = 0;
+    nouvelleManche();
+}
+
+function arreterJeu() {
+    if (!jeu.actif) return;
+    jeu.actif = false;
+    btnJeu.classList.remove('on');
+    groupeJeu.visible = false;
+    for (const { balle } of jeu.tirs) groupeJeu.remove(balle);
+    for (const { m } of jeu.effets) { groupeJeu.remove(m); m.material.dispose(); }
+    jeu.tirs = [];
+    jeu.effets = [];
+    jeu.coureur = null;
+    hudJeu.hidden = messageJeu.hidden = padTir.hidden = true;
+    if (droneActif) aideVue.textContent = AIDE_DRONE;
+}
+
+btnJeu.addEventListener('click', () => {
+    if (jeu.actif) arreterJeu(); else activerJeu();
+    // Comme le drone : l'espace, qui fait monter, presserait encore le bouton.
+    btnJeu.blur();
+});
+if (JEU_DEMANDE) Promise.allSettled([sceneConstruite, reliefCharge]).then(activerJeu);
+
+const busteJeu = new THREE.Vector3(), trajet = new THREE.Line3(), surTrajet = new THREE.Vector3();
+function majJeu(dt, maintenant) {
+    if (!jeu.coureur) return;
+    if (jeu.relance && maintenant > jeu.relance) nouvelleManche();
+    const c = jeu.coureur;
+    majCoureur(c, dt, maintenant);
+    if (touchesDrone.has('KeyF')) tirerDevant();
+
+    const v = JEU_VISEE;
+    directionTir.set(Math.sin(drone.cap) * Math.cos(v), -Math.sin(v), -Math.cos(drone.cap) * Math.cos(v));
+    jeu.vise = pointVise(drone.position, directionTir);
+    reticule.visible = jeu.vise !== null;
+    if (jeu.vise) {
+        reticule.position.copy(jeu.vise).y += 0.15;
+        reticule.scale.setScalar(Math.max(1, camera.position.distanceTo(jeu.vise) / 50));
+    }
+
+    // Les balles : touché si l'une passe à JEU_RAYON_TOUCHE de son buste
+    // pendant l'image, ou éclate à JEU_RAYON_SOUFFLE de lui.
+    poitrine(c, busteJeu);
+    jeu.tirs = jeu.tirs.filter(t => {
+        const pas = Math.min(JEU_TIR_VITESSE * dt, t.restant);
+        trajet.start.copy(t.balle.position);
+        t.balle.position.addScaledVector(t.direction, pas);
+        t.restant -= pas;
+        trajet.end.copy(t.balle.position);
+        trajet.closestPointToPoint(busteJeu, true, surTrajet);
+        const fini = t.restant <= 1e-6;
+        const touche = !c.touche && (surTrajet.distanceTo(busteJeu) < JEU_RAYON_TOUCHE
+                                               || (fini && t.balle.position.distanceTo(busteJeu) < JEU_RAYON_SOUFFLE));
+        if (touche) toucher(surTrajet);
+        else if (fini) souffle(t.balle.position, false);
+        if (touche || fini) groupeJeu.remove(t.balle);
+        return !(touche || fini);
+    });
+    jeu.effets = jeu.effets.filter(e => {
+        e.age += dt;
+        const k = Math.min(e.age / e.duree, 1);
+        e.m.scale.setScalar(0.3 + k * e.taille);
+        e.m.material.opacity = 0.85 * (1 - k);
+        if (k < 1) return true;
+        groupeJeu.remove(e.m);
+        e.m.material.dispose();
+        return false;
+    });
+
+    if (maintenant - jeu.hud > 150) {
+        jeu.hud = maintenant;
+        const dx = c.xy[0] - drone.position.x, dz = -c.xy[1] - drone.position.z;
+        const relatif = (Math.atan2(dx, -dz) - drone.cap) * 180 / Math.PI;
+        const chrono = Math.floor((maintenant - jeu.debut) / 1000);
+        hudJeu.innerHTML = c.touche
+            ? `Touché ! · ${jeu.touches} sur ${jeu.manche} manche${jeu.manche > 1 ? 's' : ''}`
+            : `<span class="fleche" style="transform:rotate(${relatif.toFixed(0)}deg)">↑</span>`
+              + `Poutine à ${Math.round(Math.hypot(dx, dz))} m${c.fuite ? ', il détale' : c.pause > 0 ? ', il se cache' : ''} · `
+              + `${Math.floor(chrono / 60)}:${String(chrono % 60).padStart(2, '0')} · `
+              + `${jeu.tirsManche} tir${jeu.tirsManche > 1 ? 's' : ''} · touché ${jeu.touches} fois`;
+    }
+}
+
 // --- Prise en main ---------------------------------------------------------------
 // Ouverte d'elle-même à la première visite, pendant que la scène se construit
 // (de 1 à 30 s pour un lieu neuf) ; ensuite par « ? ». Les gestes suivent
@@ -10027,7 +10772,8 @@ tuto.addEventListener('click', e => { if (e.target === tuto) tuto.close(); });
 tuto.addEventListener('close', () => { try { localStorage.setItem(CLE_TUTO, '1'); } catch (e) { /* navigation privée */ } });
 let tutoVu = false;
 try { tutoVu = localStorage.getItem(CLE_TUTO) === '1'; } catch (e) { /* navigation privée : il s'ouvrira à chaque visite */ }
-if (!tutoVu && !navigator.webdriver) ouvrirTuto();
+// Lancé dans le jeu (?jeu=1), on vient jouer : le guide fermerait le drone.
+if (!tutoVu && !navigator.webdriver && !JEU_DEMANDE) ouvrirTuto();
 
 // --- Zoom : repris à OrbitControls -------------------------------------
 // `handleMouseWheel` de three r160 ignore l'amplitude de l'événement : chaque
@@ -10086,6 +10832,8 @@ renderer.domElement.addEventListener('pointerup', e => {
     souris.x = ((e.clientX - r.left) / r.width) * 2 - 1;
     souris.y = -((e.clientY - r.top) / r.height) * 2 + 1;
     raycaster.setFromCamera(souris, camera);
+    // Pendant la traque, un clic tire là où il désigne.
+    if (jeu.actif) { tirerSelonRayon(raycaster.ray); return; }
     const hit = raycaster.intersectObjects(ciblesSurvol, false)[0];
     if (!hit) return;
     // Un arbre, un véhicule, un bateau, une piscine : pas de fiche, mais son
@@ -10572,6 +11320,7 @@ function boucle(maintenant) {
     }
     if (droneActif) majDrone(dt, maintenant);
     else controls.update();
+    if (jeu.actif) majJeu(dt, maintenant);
     majHorizon(maintenant);
     if (horizonActif) {
         ciel.position.copy(camera.position);
