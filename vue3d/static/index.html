@@ -300,13 +300,14 @@
                 </div>
                 <button type="submit">Voir</button>
             </form>
-            <label class="zone" title="Côté nord-sud de la zone chargée. Une zone plus petite se construit plus vite : jusqu'à huit fois à 350 m.">
+            <label class="zone" title="Côté nord-sud de la zone chargée. Une zone plus petite se construit plus vite : jusqu'à huit fois à 350 m. À 2 000 m, quatre fois la surface : deux fois plus d'attente, une vue plus lourde, et le nuage LiDAR sur le kilomètre central seulement.">
                 Zone
                 <select id="in-zone">
                     <option value="350">350 m</option>
                     <option value="500">500 m</option>
                     <option value="700">700 m</option>
                     <option value="1000">1 000 m (par défaut)</option>
+                    <option value="2000">2 000 m</option>
                 </select>
             </label>
             <button type="button" id="btn-reconstruire" class="reconstruire"
@@ -613,7 +614,7 @@ window.DEMANDE_SCENE = (() => {
     // Sans zone=, 1 000 m : ZONE_DEFAUT_M, plus bas.
     const zone = lire('zone') ?? 1000;
     const url = `api/scene?lat=${lire('lat') ?? 43.9116}&lon=${lire('lon') ?? 5.2003}`
-        + `&zone=${Math.min(Math.max(Math.round(zone / 50) * 50, 150), 1000)}`;
+        + `&zone=${Math.min(Math.max(Math.round(zone / 50) * 50, 150), 2000)}`;
     const reponse = fetch(url);
     reponse.catch(() => {});      // l'erreur est traitée par le module
     return { url, reponse };
@@ -645,21 +646,27 @@ const lireCoord = n => { const v = Number(String(PARAMS.get(n) || '').replace(',
 const LAT0 = lireCoord('lat') ?? POINT_DEFAUT.lat;
 const LON0 = lireCoord('lon') ?? POINT_DEFAUT.lon;
 const CENTER = [LON0, LAT0];
-// Côté nord-sud de la zone, en mètres (?zone=…) ; absent, 1 000 m, la plus
-// grande que construise le serveur : 4 s à Gordes, 6 s à Strasbourg sur un
-// Mac M4 (README), assez vite pour l'ouvrir d'emblée. Mêmes arrondi et bornes
-// que scene.zone_normalisee, pour que la page attende l'emprise que le
-// serveur construit.
+// Côté nord-sud de la zone, en mètres (?zone=…) ; absent, 1 000 m : 4 s à
+// Gordes, 6 s à Strasbourg sur un Mac M4 (README), assez vite pour l'ouvrir
+// d'emblée. Le serveur construit jusqu'à 2 000 m, quatre fois la surface, à
+// la demande seulement. Mêmes arrondi et bornes que scene.zone_normalisee,
+// pour que la page attende l'emprise que le serveur construit.
 const ZONE_DEFAUT_M = 1000;
+const ZONE_MAX_M = 2000;
 // L'emprise du serveur sans zone= (scene.SCENE_DELTA, ~356 m), que la page ne
 // demande plus : les distances de vue, le brouillard et les ombres ont été
 // réglés pour elle, et la suivent quand la zone grandit.
 const EMPRISE_REFERENCE_M = 2 * 0.0016 * 111320;
 const ZONE = (() => {
     const v = lireCoord('zone') ?? ZONE_DEFAUT_M;
-    return Math.min(Math.max(Math.round(v / 50) * 50, 150), 1000);
+    return Math.min(Math.max(Math.round(v / 50) * 50, 150), ZONE_MAX_M);
 })();
 const ECHELLE_ZONE = Math.max(1, ZONE / EMPRISE_REFERENCE_M);
+// Au-delà de 1 000 m, les fonds en tuiles WMTS descendent d'un zoom : quatre
+// fois la surface en autant de tuiles qu'à 1 000 m. Au même zoom, l'anneau
+// d'une zone de 2 000 m (11 km de côté) en demandait environ 700, sur une
+// toile de 6 900 px que Safari sur iOS refuse (16,7 Mpx au plus).
+const ZOOM_EN_MOINS = ZONE > 1000 ? 1 : 0;
 const PARAM_ZONE = `&zone=${ZONE}`;
 // Dans les liens vers un autre point, la zone par défaut ne s'écrit pas : ils
 // restent courts, comme ceux du sélecteur de zone.
@@ -1461,7 +1468,7 @@ sol.rotation.x = -Math.PI / 2;
 sol.receiveShadow = true;
 scene.add(sol);
 // Repère visuel utile seulement quand aucun fond cartographique n'est posé.
-const grille = new THREE.GridHelper(1000, 100, 0x39414a, 0x2b3138);
+const grille = new THREE.GridHelper(Math.max(1000, ZONE), Math.max(100, ZONE / 10), 0x39414a, 0x2b3138);
 grille.visible = false;
 scene.add(grille);
 
@@ -3281,7 +3288,7 @@ async function poserFond(nom) {
     // Seule l'orthophoto a un sens pour lire la couleur du sol : un plan est
     // vert là où le cartographe l'a décidé, pas là où il y a des feuilles.
     ({ texture: fondTexture, bornes: fondBornes } = await composerTuiles(
-        FONDS[nom], TUILE_ZOOM,
+        FONDS[nom], TUILE_ZOOM - ZOOM_EN_MOINS,
         BORNES));
 
     poserPlanDeFond();
@@ -3904,8 +3911,10 @@ async function chargerRelief() {
     const [bx, by] = toLocal(BORNES.e, BORNES.s);
     const largeur = Math.abs(bx - ax), profondeur = Math.abs(by - ay);
     // Un vertex tous les ~2 m, plafonné à 256 subdivisions — 512 pour une
-    // zone élargie, dont le relief serveur a jusqu'à 512 points de côté.
-    const segMax = ECHELLE_ZONE > 1 ? 512 : 256;
+    // zone élargie, dont le relief serveur a jusqu'à 512 points de côté, et
+    // 1 024 au-delà de 1 000 m, où il en a 512 par kilomètre
+    // (scene.RELIEF_POINTS_PAR_KM).
+    const segMax = ECHELLE_ZONE > 1 ? (ZONE > 1000 ? 1024 : 512) : 256;
     const segX = Math.min(segMax, Math.max(16, Math.round(largeur / 2)));
     const segZ = Math.min(segMax, Math.max(16, Math.round(profondeur / 2)));
 
@@ -4084,7 +4093,8 @@ async function poserFondAnneau() {
     const { mesh, bornes } = anneauRelief;
     if (!fondActif) { mesh.material = MAT_TERRAIN; return; }
     const lonLat = [toLonLat(bornes.minX, -bornes.minZ), toLonLat(bornes.maxX, -bornes.maxZ)];
-    const { texture, bornes: tb } = await composerTuiles(FONDS[fondActif], horizonActif ? ANNEAU_ZOOM_HORIZON : ANNEAU_ZOOM,
+    const { texture, bornes: tb } = await composerTuiles(FONDS[fondActif],
+        (horizonActif ? ANNEAU_ZOOM_HORIZON : ANNEAU_ZOOM) - ZOOM_EN_MOINS,
         { o: lonLat[0][0], n: lonLat[0][1], e: lonLat[1][0], s: lonLat[1][1] });
     // Un autre fond a été choisi pendant le chargement : il gagne.
     if (generation !== generationAnneau) { texture.dispose(); return; }
@@ -5839,8 +5849,10 @@ function verifierToits() {
     bilanEcarts = null;
     if (!pointsNuage) { majLegendeEcarts(); return; }
     const debutMs = performance.now();
-    const boite = NUAGE.proche || null;
-    const phase = boite ? 'carré proche' : 'zone entière';
+    // Au-delà d'une zone de 1 000 m, le nuage n'est lu que sur le kilomètre
+    // central (nuage.NUAGE_COTE_MAX_M) : `boite`, comme le carré proche.
+    const boite = NUAGE.proche || NUAGE.boite || null;
+    const phase = NUAGE.proche ? 'carré proche' : NUAGE.boite ? 'kilomètre central' : 'zone entière';
     // Les toits, un par emprise ; leurs triangles en altitudes réelles.
     const toits = [], parAnneau = new Map(), tri = [], toitDe = [];
     for (const m of meshesToits) {

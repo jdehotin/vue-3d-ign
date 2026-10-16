@@ -1251,7 +1251,8 @@ def test_une_base_illisible_ne_met_rien_en_cache(tmp_path):
 
 
 @pytest.mark.parametrize("brute,attendue", [(None, None), ("", None), ("500", 500),
-                                            (512, 500), (90, 150), (5000, 1000)])
+                                            (512, 500), (90, 150), ("1000", 1000),
+                                            (1980, 2000), (5000, 2000)])
 def test_la_zone_est_arrondie_et_bornee(brute, attendue):
     assert scene.zone_normalisee(brute) == attendue
 
@@ -1273,6 +1274,26 @@ def test_la_zone_fixe_le_cote_nord_sud_et_agrandit_l_anneau():
     assert scene.emprise_anneau(lat, lon, zone=200) == scene.emprise_anneau(lat, lon)
 
 
+@pytest.mark.parametrize("zone,taille", [(None, 256), (700, 503), (1000, 512),
+                                         (1500, 768), (2000, 1024)])
+def test_le_relief_garde_sa_maille_quand_la_zone_grandit(monkeypatch, zone, taille):
+    """~1,4 m jusqu'à 512 points, la taille d'avant jusqu'à 1 000 m (le cache
+    ne périme pas) ; au-delà, ~2 m, la maille de la zone de 1 000 m."""
+    tailles = []
+    _fausses_sources(monkeypatch, fetch_relief=lambda *a, **k: tailles.append(k["taille"]))
+    scene.construire(48.8049, 2.1204, zone=zone)
+    assert tailles == [taille]
+
+
+def test_la_grille_d_une_zone_de_2000_m_garde_sa_resolution():
+    """3 971 pixels du nord au sud : 0,5 m, lus en tuiles (vue3d/mnh.py)."""
+    from vue3d import mnh
+    largeur, hauteur = mnh.dimensions_grille(*emprise(48.8049, 2.1204, 2000),
+                                             scene.TOITS_RESOLUTION_M, scene.GRILLE_PIXELS_MAX)
+    assert hauteur == 3971 and largeur == pytest.approx(hauteur * math.cos(math.radians(48.8)), abs=40)
+    assert scene.zone_normalisee(10 ** 6) == scene.ZONE_MAX_M == 2000
+
+
 def test_chaque_zone_a_sa_scene(tmp_path):
     """La scène par défaut garde son dossier d'avant les zones ; une zone en a
     un autre, construite avec elle."""
@@ -1291,6 +1312,37 @@ def test_chaque_zone_a_sa_scene(tmp_path):
     assert os.path.basename(large) == "48.8049_2.1204_z700"
     assert cache.avancement(48.8049, 2.1204, "700") == {"etat": "prete"}
     assert cache.avancement(48.8049, 2.1204, "500") == {"etat": "attente"}
+
+
+def test_les_grandes_zones_se_construisent_une_a_une(tmp_path):
+    """Deux zones de 2 000 m de points différents ne se construisent pas
+    ensemble (3,2 Go de mémoire chacune) ; une zone de 1 000 m n'attend pas."""
+    import concurrent.futures
+    en_cours, pic, verrou = [0], [0], threading.Lock()
+    commencee = {zone: threading.Event() for zone in (1000, 2000)}
+    lacher = threading.Event()
+
+    def construire(lat, lon, avancer=None, zone=None):
+        with verrou:
+            en_cours[0] += zone > 1000
+            pic[0] = max(pic[0], en_cours[0])
+        commencee[zone].set()
+        lacher.wait(5)
+        with verrou:
+            en_cours[0] -= zone > 1000
+        return b"scene", b"jpeg"
+
+    cache = Cache(str(tmp_path))
+    with concurrent.futures.ThreadPoolExecutor(3) as bassin:
+        grandes = [bassin.submit(cache.obtenir, 48.8049 + k / 100, 2.1204, construire, 2000)
+                   for k in range(2)]
+        assert commencee[2000].wait(5)
+        moyenne = bassin.submit(cache.obtenir, 48.9, 2.2, construire, 1000)
+        assert commencee[1000].wait(5)          # pendant une grande, sans attendre
+        lacher.set()
+        for f in grandes + [moyenne]:
+            f.result(timeout=5)
+    assert pic[0] == 1
 
 
 # --- Reconstruire une scène (bouton de la page) ---------------------------------

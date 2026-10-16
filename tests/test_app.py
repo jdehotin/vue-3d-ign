@@ -36,9 +36,9 @@ def client(tmp_path):
 
     lectures_nuage = []
 
-    def lire_nuage(west, south, east, north, proche_m=None):
+    def lire_nuage(west, south, east, north, proche_m=None, cote_max_m=None):
         # Au sud de 46° : une dalle LiDAR HD illisible ; ailleurs, hors couverture.
-        lectures_nuage.append(proche_m)
+        lectures_nuage.append(proche_m or cote_max_m and ("central", cote_max_m))
         if south < 46:
             raise ConnectionError("plage refusée")
         return None
@@ -221,6 +221,18 @@ def test_le_nuage_se_lit_d_abord_autour_du_point(client):
     r = client.get(url + "&proche=1")
     assert r.headers["ETag"] == entiere.headers["ETag"] and len(client.lectures_nuage) == 2
     assert client.get("/api/nuage?lat=48.8049&lon=2.1204&proche=1").status_code == 200
+    assert client.lectures_nuage[-1] is None
+
+
+def test_une_zone_de_2000_m_ne_lit_que_le_kilometre_central_du_nuage(client):
+    """Le carré proche d'abord, puis le carré central de 1 000 m au lieu
+    de la zone entière : la Géoplateforme refuse la lecture (429), et sa
+    mémoire en demanderait une dizaine de Go. Jusqu'à 1 000 m, rien ne change."""
+    url = "/api/nuage?lat=48.8049&lon=2.1204&zone=2000"
+    assert client.get(url + "&proche=1").status_code == 200
+    assert client.get(url).status_code == 200
+    assert client.lectures_nuage == [NUAGE_PROCHE_COTE_M, ("central", 1000)]
+    assert client.get("/api/nuage?lat=48.8049&lon=2.1204&zone=1000").status_code == 200
     assert client.lectures_nuage[-1] is None
 
 

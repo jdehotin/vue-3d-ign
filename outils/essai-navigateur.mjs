@@ -157,11 +157,24 @@ for (const [format, bouton, debutFichier, finFichier] of [
     const noteExport = await page.$eval('#note-export', e => e.textContent);
     console.log(`export ${format} (${((Date.now() - debut) / 1000).toFixed(1)} s) :`, noteExport);
     for (let i = 0; i < 50 && !fs.existsSync(fichier); i++) await new Promise(r => setTimeout(r, 200));
-    const texte = fs.existsSync(fichier) ? fs.readFileSync(fichier, 'utf8') : '';
-    if (!texte.startsWith(debutFichier) || !texte.endsWith(finFichier)) {
-      erreurs.push(`export ${format} : ${fichier} ${texte ? 'incomplet' : 'absent'} — ${noteExport}`);
+    // Le début et la fin seulement : le CityGML d'une zone de 2 000 m pèse
+    // 1,1 Go, au-delà de la plus longue chaîne que Node sache tenir.
+    const bouts = fs.existsSync(fichier) ? (() => {
+      const fd = fs.openSync(fichier, 'r');
+      const taille = fs.fstatSync(fd).size;
+      const lire = (position, n) => {
+        const tampon = Buffer.alloc(Math.min(n, taille));
+        fs.readSync(fd, tampon, 0, tampon.length, position);
+        return tampon.toString('utf8');
+      };
+      const r = { taille, debut: lire(0, 256), fin: lire(Math.max(taille - 256, 0), 256) };
+      fs.closeSync(fd);
+      return r;
+    })() : null;
+    if (!bouts || !bouts.debut.startsWith(debutFichier) || !bouts.fin.endsWith(finFichier)) {
+      erreurs.push(`export ${format} : ${fichier} ${bouts ? 'incomplet' : 'absent'} — ${noteExport}`);
     } else {
-      console.log('fichier :', fichier, `(${(texte.length / 1e6).toFixed(1)} Mo)`);
+      console.log('fichier :', fichier, `(${(bouts.taille / 1e6).toFixed(1)} Mo)`);
     }
   } catch (e) {
     erreurs.push(`export ${format} : ` + e.message);
@@ -210,7 +223,7 @@ try {
   const depart = new URL(page.url()).searchParams;
   // Sans zone= dans l'URL, la page prend 1 000 m.
   const zone = Number(depart.get('zone')) || 1000;
-  const demi = Math.min(Math.max(Math.round(zone / 50) * 50, 150), 1000) / 2 / 111320;
+  const demi = Math.min(Math.max(Math.round(zone / 50) * 50, 150), 2000) / 2 / 111320;
   const attendu = [Number(depart.get('lat') ?? 43.9116) + demi / 2, Number(depart.get('lon') ?? 5.2003)]
     .map(v => String(Number(v.toFixed(4))));
   const caps = () => page.$$eval('#decalage .pointe', ps => ps.map(p => p.style.transform).join(' '));

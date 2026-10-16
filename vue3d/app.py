@@ -21,7 +21,7 @@
                                    `?relire=1` après un refus, lue et gardée ici
     GET /api/sante                 contrôle de vie, pour Docker
 
-Chaque route d'API accepte `zone=` (150 à 1 000 m, arrondie à 50 m) : sans
+Chaque route d'API accepte `zone=` (150 à 2 000 m, arrondie à 50 m) : sans
 elle, l'emprise par défaut d'environ 356 m.
 
 La première demande d'un point construit sa scène : une vingtaine à une

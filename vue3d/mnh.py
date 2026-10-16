@@ -49,9 +49,12 @@ MNT_LIDAR_LAYER = "IGNF_LIDAR-HD_MNT_ELEVATION.ELEVATIONGRIDCOVERAGE.WGS84G"
 # l'écran (les volumes sont déjà rendus en pavés), et la réponse JSON dépasse
 # le demi-mégaoctet.
 MNH_RESOLUTION_M = 2.0
-# Garde-fou : le service refuse au-delà de 2048, et une grille plus fine ne
-# passerait de toute façon pas confortablement dans la page.
+# Garde-fou : une grille plus fine ne passerait pas confortablement dans la
+# page.
 MNH_MAX_PIXELS = 512
+# Côté maximal d'une image du WMS : le service refuse au-delà. Une grille plus
+# grande se lit en tuiles (`_grille_wms`).
+WMS_PIXELS_MAX = 2048
 # En deçà, c'est du sol, du mobilier urbain ou du bruit de mesure : inutile de
 # le transporter jusqu'au navigateur.
 MNH_SEUIL_M = 2.0
@@ -78,12 +81,66 @@ def _grille_depuis_bil(contenu, largeur, hauteur):
     return np.where(hors, 0.0, np.rint(brut * 10.0) / 10.0).tolist()
 
 
+def tuiles_wms(largeur, hauteur, cote_max):
+    """(x0, y0, largeur, hauteur) des tuiles d'au plus `cote_max` pixels de
+    côté qui pavent une image, lignes depuis le nord-ouest."""
+    return [(x0, y0, min(cote_max, largeur - x0), min(cote_max, hauteur - y0))
+            for y0 in range(0, hauteur, cote_max) for x0 in range(0, largeur, cote_max)]
+
+
+def bbox_tuile(west, south, east, north, largeur, hauteur, tuile):
+    """Emprise (ouest, sud, est, nord) d'une tuile de `tuiles_wms`. En
+    EPSG:4326, pixels et degrés sont proportionnels : la tuile est la portion
+    exacte de l'emprise qui correspond à ses pixels."""
+    x0, y0, l, h = tuile
+    dlon, dlat = (east - west) / largeur, (north - south) / hauteur
+    return west + x0 * dlon, north - (y0 + h) * dlat, west + (x0 + l) * dlon, north - y0 * dlat
+
+
 def _grille_wms(layer, west, south, east, north, largeur, hauteur, brut=False):
     """GetMap BIL32 sur une couche altimétrique, décodé en liste de floats.
 
     brut=True conserve les valeurs telles quelles (altitudes, nodata négatif) :
     c'est l'appelant qui soustrait MNS et MNT avant de nettoyer.
+
+    Au-delà de WMS_PIXELS_MAX de côté, la grille est lue en tuiles, ensemble,
+    et réassemblée ; en deçà, c'est la requête unique d'avant, à l'octet près.
     """
+    if largeur > WMS_PIXELS_MAX or hauteur > WMS_PIXELS_MAX:
+        return _grille_wms_en_tuiles(layer, west, south, east, north, largeur, hauteur, brut)
+    contenu = _bil_wms(layer, west, south, east, north, largeur, hauteur)
+    if brut:
+        attendu = largeur * hauteur * 4
+        if len(contenu) < attendu:
+            raise requests.RequestException(f"BIL tronqué sur {layer}")
+        return list(struct.unpack(f"<{largeur * hauteur}f", contenu[:attendu]))
+    return _grille_depuis_bil(contenu, largeur, hauteur)
+
+
+def _grille_wms_en_tuiles(layer, west, south, east, north, largeur, hauteur, brut):
+    """`_grille_wms` d'une grille trop grande pour une requête : chaque
+    cellule a la valeur qu'une requête unique lui donnerait (le nettoyage de
+    `_grille_depuis_bil` et la conversion de struct se font cellule par
+    cellule), seul le découpage des requêtes change."""
+    tuiles = tuiles_wms(largeur, hauteur, WMS_PIXELS_MAX)
+    # Les tuiles forment un groupe (en_parallele) : une illisible rend la
+    # grille fausse, et les autres ne partent plus.
+    contenus = en_parallele(*(
+        lambda t=t: _bil_wms(layer, *bbox_tuile(west, south, east, north, largeur, hauteur, t),
+                             t[2], t[3])
+        for t in tuiles))
+    f4 = np.empty((hauteur, largeur), dtype="<f4")
+    for (x0, y0, l, h), contenu in zip(tuiles, contenus):
+        if len(contenu) < l * h * 4:
+            raise requests.RequestException(f"BIL tronqué sur {layer}")
+        f4[y0:y0 + h, x0:x0 + l] = np.frombuffer(contenu, dtype="<f4", count=l * h).reshape(h, l)
+    if brut:
+        return f4.astype(np.float64).ravel().tolist()
+    return _grille_depuis_bil(f4.tobytes(), largeur, hauteur)
+
+
+def _bil_wms(layer, west, south, east, north, largeur, hauteur):
+    """Octets BIL32 d'un GetMap, d'au plus WMS_PIXELS_MAX de côté."""
     # WMS 1.3.0 + EPSG:4326 => BBOX en lat,lon.
     url = (
         "https://data.geopf.fr/wms-r/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap"
@@ -100,12 +157,7 @@ def _grille_wms(layer, west, south, east, north, largeur, hauteur, brut=False):
         raise requests.RequestException(
             f"Réponse {layer} inattendue ({reponse.headers.get('Content-Type')}): "
             f"{reponse.text[:200]}")
-    if brut:
-        attendu = largeur * hauteur * 4
-        if len(reponse.content) < attendu:
-            raise requests.RequestException(f"BIL tronqué sur {layer}")
-        return list(struct.unpack(f"<{largeur * hauteur}f", reponse.content[:attendu]))
-    return _grille_depuis_bil(reponse.content, largeur, hauteur)
+    return reponse.content
 
 
 journal = logging.getLogger(__name__)
@@ -141,7 +193,8 @@ def dimensions_grille(west, south, east, north, resolution_m=MNH_RESOLUTION_M,
     lat_moy = (south + north) / 2
     m_par_deg_lon = 111320 * math.cos(math.radians(lat_moy))
     # max_pixels : 512 pour la végétation (payload navigateur) ; les toits
-    # demandent 0,5 m et restent côté serveur, donc jusqu'à 2048 (plafond WMS).
+    # demandent 0,5 m et restent côté serveur, donc jusqu'à
+    # scene.GRILLE_PIXELS_MAX, lue en tuiles au-delà du plafond du WMS.
     largeur = int(min(max((east - west) * m_par_deg_lon / resolution_m, 8), max_pixels))
     hauteur = int(min(max((north - south) * 110540 / resolution_m, 8), max_pixels))
     return largeur, hauteur

@@ -114,3 +114,62 @@ def test_un_repli_en_echec_n_abandonne_pas_la_scene(monkeypatch):
                                   43.9002).result(timeout=5)
     assert not grille["couvert"] and grille["source"] is None
     assert not groupe.abandonne()
+
+
+def _service_bil(demandes, emprise, largeur, hauteur):
+    """Doublure du WMS : chaque cellule vaut une fonction de sa place dans la
+    grille entière, retrouvée de son centre — quelle que soit la requête qui
+    la couvre. Du nodata, du bruit négatif et NaN en quelques places, pour
+    que le nettoyage soit éprouvé à travers les tuiles."""
+    o0, s0, e0, n0 = emprise
+
+    def bil_wms(layer, o, s, e, n, l, h):
+        demandes.append((o, s, e, n, l, h))
+        x = o + (np.arange(l) + 0.5) * (e - o) / l
+        y = n - (np.arange(h) + 0.5) * (n - s) / h
+        i = np.floor((x - o0) / (e0 - o0) * largeur).astype(int)
+        j = np.floor((n0 - y) / (n0 - s0) * hauteur).astype(int)
+        jj, ii = np.meshgrid(j, i, indexing="ij")
+        v = ((ii * 7 + jj * 13) % 2003 / 10.0 - 0.04).astype("<f4")
+        v[(ii + jj) % 17 == 0] = -99999.0
+        v[(ii * jj) % 23 == 5] = np.nan
+        return v.tobytes()
+    return bil_wms
+
+
+@pytest.mark.parametrize("brut", [False, True])
+def test_une_grille_trop_grande_est_lue_en_tuiles_a_l_identique(monkeypatch, brut):
+    """Au-delà du plafond du WMS (une zone de plus de 1 024 m à 0,5 m), la
+    grille se lit en tuiles qui pavent l'emprise sans trou ni recouvrement,
+    et chaque cellule y a la valeur qu'une requête unique lui donnerait."""
+    emprise, largeur, hauteur = (5.19, 43.90, 5.2147, 43.918), 40, 37
+    seule, tuiles = [], []
+    monkeypatch.setattr(mnh, "_bil_wms", _service_bil(seule, emprise, largeur, hauteur))
+    attendue = mnh._grille_wms(mnh.MNH_LAYER, *emprise, largeur, hauteur, brut=brut)
+    assert len(seule) == 1
+    monkeypatch.setattr(mnh, "WMS_PIXELS_MAX", 16)
+    monkeypatch.setattr(mnh, "_bil_wms", _service_bil(tuiles, emprise, largeur, hauteur))
+    obtenue = mnh._grille_wms(mnh.MNH_LAYER, *emprise, largeur, hauteur, brut=brut)
+    assert len(tuiles) == 3 * 3 and max(max(t[4], t[5]) for t in tuiles) <= 16
+    assert sum(t[4] * t[5] for t in tuiles) == largeur * hauteur
+    assert type(obtenue) is list and all(type(v) is float for v in obtenue)
+    assert [repr(v) for v in obtenue] == [repr(v) for v in attendue]
+    # Le nodata et NaN ont traversé les tuiles : gardés bruts, nettoyés sinon.
+    assert (-99999.0 in obtenue and any(v != v for v in obtenue)) if brut else 0.0 in obtenue
+
+
+def test_une_tuile_illisible_fait_echouer_toute_la_grille(monkeypatch):
+    """Une tuile perdue ne laisse pas de trou à zéro dans la grille : la
+    lecture lève, et la scène est incomplète."""
+    emprise, largeur, hauteur = (5.19, 43.90, 5.2147, 43.918), 40, 37
+    service = _service_bil([], emprise, largeur, hauteur)
+
+    def en_panne(layer, o, s, e, n, l, h):
+        if h < 16:                          # la rangée du sud
+            raise requests.RequestException("HTTP 400")
+        return service(layer, o, s, e, n, l, h)
+
+    monkeypatch.setattr(mnh, "WMS_PIXELS_MAX", 16)
+    monkeypatch.setattr(mnh, "_bil_wms", en_panne)
+    with pytest.raises(requests.RequestException):
+        mnh._grille_wms(mnh.MNH_LAYER, *emprise, largeur, hauteur)

@@ -150,3 +150,61 @@ def test_une_tuile_en_echec_retient_celles_qui_attendent_leur_place(monkeypatch)
     with pytest.raises(requests.RequestException, match="sud-est"):
         ortho.fetch_ortho_rgb(o, s, e, n, 0.2, fils=6)
     assert [apres for _, apres in parties] == [False]
+
+
+def test_la_verdure_d_une_grande_grille_est_lue_en_tuiles_a_l_identique(monkeypatch):
+    """Grille ExG de la taille de la grille MNH d'une zone de plus de
+    1 024 m : lue en tuiles qui pavent l'emprise, chaque cellule à la valeur
+    d'une requête unique (une image sans perte, dont chaque pixel dit sa
+    place dans l'image entière)."""
+    from vue3d import ortho
+    emprise, largeur, hauteur = (4.79, 45.69, 4.8121, 45.7083), 40, 37
+    o0, s0, e0, n0 = emprise
+
+    def service(demandes):
+        def image(o, s, e, n, l, h):
+            demandes.append((o, s, e, n, l, h))
+            x = o + (np.arange(l) + 0.5) * (e - o) / l
+            y = n - (np.arange(h) + 0.5) * (n - s) / h
+            i = np.floor((x - o0) / (e0 - o0) * largeur).astype(int)
+            j = np.floor((n0 - y) / (n0 - s0) * hauteur).astype(int)
+            jj, ii = np.meshgrid(j, i, indexing="ij")
+            rgb = np.stack([(ii * 5) % 256, (jj * 11 + ii) % 256, (ii * jj) % 256], axis=-1)
+            return _jpeg(rgb)
+        return image
+
+    seule, tuiles = [], []
+    monkeypatch.setattr(ortho, "_image_wms", service(seule))
+    attendue = ortho.fetch_exg_grid(*emprise, largeur, hauteur)
+    monkeypatch.setattr(ortho, "WMS_PIXELS_MAX", 16)
+    monkeypatch.setattr(ortho, "_image_wms", service(tuiles))
+    obtenue = ortho.fetch_exg_grid(*emprise, largeur, hauteur)
+    assert len(seule) == 1 and len(tuiles) == 3 * 3
+    assert max(max(t[4], t[5]) for t in tuiles) <= 16
+    assert obtenue.dtype == np.int8 and obtenue.shape == (hauteur, largeur)
+    assert np.array_equal(obtenue, attendue) and len(np.unique(obtenue)) > 50
+
+
+def test_la_mosaique_d_une_grande_zone_est_lue_en_tuiles(monkeypatch):
+    """Au-delà de 2 048 px (zone de 2 000 m, 4 096 px), la mosaïque se lit
+    en tuiles, réassemblées à leur place dans un seul JPEG ; en deçà, l'image
+    du WMS telle quelle."""
+    import math
+    from vue3d import ortho
+    lat, delta = 45.7, 2000 / 2 / 111320
+    o, s, e, n = 4.8 - delta, lat - delta, 4.8 + delta, lat + delta
+    demandes = []
+    monkeypatch.setattr(ortho, "_image_wms", _tuile_de_sa_place(demandes))
+    contenu, largeur, hauteur = ortho.fetch_ortho_jpeg(o, s, e, n, max_pixels=4096)
+    assert hauteur == 4096 and largeur / hauteur == pytest.approx(math.cos(math.radians(lat)), rel=0.01)
+    assert len(demandes) == 2 * 2 and max(max(d[4], d[5]) for d in demandes) <= 2048
+    image = np.asarray(Image.open(io.BytesIO(contenu)).convert("RGB")).astype(int)
+    assert image.shape == (hauteur, largeur, 3)
+    # Chaque tuile à sa place : le centre de chacune a sa couleur, au JPEG près.
+    for o_, s_, e_, n_, l, h in demandes:
+        x0 = round((o_ - o) / (e - o) * largeur)
+        y0 = round((n - n_) / (n - s) * hauteur)
+        attendu = (round(o_ * 1e5) * 7 + round(n_ * 1e5) * 13) % 251
+        assert abs(image[y0 + h // 2, x0 + l // 2, 0] - attendu) <= 3
+    monkeypatch.setattr(ortho, "_image_wms", lambda *a: b"jpeg")
+    assert ortho.fetch_ortho_jpeg(o, s, e, n)[0] == b"jpeg"

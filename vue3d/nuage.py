@@ -31,7 +31,8 @@ de laspy, la Géoplateforme répond 429.
 
 **En deux temps.** Sur une grande zone, la page demande d'abord un carré
 autour du point (NUAGE_PROCHE_COTE_M), sa propre couche, puis la zone entière,
-qui le remplace et reste la couche d'avant, au bit près.
+qui le remplace et reste la couche d'avant, au bit près. Au-delà d'une zone de
+NUAGE_COTE_MAX_M, la seconde lecture n'en couvre que le carré central.
 """
 
 import base64
@@ -137,6 +138,12 @@ POINTS_HORS_AJOURES = 250_000
 # octets de la zone entière, que la seconde lecture relit.
 NUAGE_PROCHE_COTE_M = 400
 NUAGE_PROCHE_ZONE_MIN_M = 800
+# Au-delà d'une zone de NUAGE_COTE_MAX_M, la seconde lecture ne couvre que le
+# carré central de ce côté. Mesuré le 2026-10-16 à Gordes : en zone de
+# 1 000 m, 4 dalles, 159 Mo lus en 68 s et 2,7 Go de mémoire au pic ; en
+# zone de 2 000 m, la Géoplateforme répond 429 en 7 s, à deux reprises, et
+# quatre fois les points en demanderaient une dizaine de Go.
+NUAGE_COTE_MAX_M = 1000
 
 # Lambert-93 (RGF93, ellipsoïde GRS80), constantes de l'IGN (ALG0019) :
 # excentricité, exposant, constante et pôle de la projection, méridien 3° E.
@@ -286,26 +293,29 @@ def interieur_degres(x0, y0, x1, y1):
             float(min(lon[1], lon[2])), float(min(lat[2], lat[3]))]
 
 
-def fetch_nuage(west, south, east, north, lire=lire_plage, proche_m=None):
+def fetch_nuage(west, south, east, north, lire=lire_plage, proche_m=None, cote_max_m=None):
     """Points du bâti et sol vu du LiDAR HD sur l'emprise, ou None si aucune
     dalle ne la couvre — un fait, mis en cache comme tel.
 
     Args:
         proche_m: lire seulement le carré de ce côté au centre de l'emprise
             (boite_proche), la première des deux lectures de la page.
+        cote_max_m: de même, pour la seconde lecture d'une zone de plus de
+            NUAGE_COTE_MAX_M.
 
     Returns:
         dict(x, y, z, classe) des points du bâti, en Lambert-93, et grilles :
         dict(x0, y0, pas, sol, bati) — vrai là où une cellule a un point de
-        sol, de bâti. Avec proche_m, proche : la boîte lue, (x0, y0, x1, y1).
+        sol, de bâti. Avec proche_m, proche : la boîte lue, (x0, y0, x1, y1) ;
+        avec cote_max_m, boite.
 
     Raises:
         requests.RequestException si une dalle ou leur liste n'a pu être lue.
     """
     xs, ys = vers_lambert93([west, east, east, west], [south, south, north, north])
     x0, x1, y0, y1 = float(min(xs)), float(max(xs)), float(min(ys)), float(max(ys))
-    if proche_m:
-        x0, y0, x1, y1 = boite_proche(x0, y0, x1, y1, proche_m)
+    if proche_m or cote_max_m:
+        x0, y0, x1, y1 = boite_proche(x0, y0, x1, y1, proche_m or cote_max_m)
         lon, lat = depuis_lambert93([x0, x1, x1, x0], [y0, y0, y1, y1])
         west, south, east, north = float(lon.min()), float(lat.min()), float(lon.max()), float(lat.max())
     dalles = {}
@@ -338,6 +348,8 @@ def fetch_nuage(west, south, east, north, lire=lire_plage, proche_m=None):
                         "sol": vu(classe == CLASSE_SOL), "bati": vu(bati)}}
     if proche_m:
         brut["proche"] = (x0, y0, x1, y1)
+    elif cote_max_m:
+        brut["boite"] = (x0, y0, x1, y1)
     return brut
 
 
@@ -495,11 +507,15 @@ def nuage_pour_emprise(west, south, east, north, brut, relief, batiments=None, m
           bâtiment à cheval n'y a qu'une partie de ses mailles, la zone
           entière le jugera. Ses ouvrages ajourés sont donc aussi ceux de la
           zone entière.
+        - boite, pour la seconde lecture d'une zone de plus de
+          NUAGE_COTE_MAX_M : le carré central lu, de même ; la page n'a rien
+          de plus à demander.
     """
     if brut is None or not relief or not relief.get("altitudes"):
         return None
-    if brut.get("proche"):
-        bx0, by0, bx1, by1 = brut["proche"]
+    boite = brut.get("proche") or brut.get("boite")
+    if boite:
+        bx0, by0, bx1, by1 = boite
 
         def contenu(f):
             try:
@@ -544,7 +560,7 @@ def nuage_pour_emprise(west, south, east, north, brut, relief, batiments=None, m
     journal.info("Nuage%s : %d points du bâti, %d d'ouvrages ajourés (%d bâtiments), "
                  "%d masses et %d houppiers expliqués", " proche" if brut.get("proche") else "",
                  len(lon), int(dans.sum()), len(cles), len(expliquees), len(houppiers_expliques))
-    proche = {"proche": interieur_degres(*brut["proche"])} if brut.get("proche") else {}
+    proche = {cle: interieur_degres(*brut[cle]) for cle in ("proche", "boite") if brut.get(cle)}
     return {
         "version": NUAGE_VERSION,
         "origine": [west, south],

@@ -325,3 +325,30 @@ def test_la_couche_proche_ne_juge_que_les_batiments_qu_elle_contient():
     cx, cy = nuage.vers_lambert93([o, e, e, o], [s, s, n, n])
     assert (cx >= boite[0] - 1e-6).all() and (cx <= boite[2] + 1e-6).all()
     assert (cy >= boite[1] - 1e-6).all() and (cy <= boite[3] + 1e-6).all()
+
+    # Le kilomètre central d'une grande zone : jugé de même, mais rendu sous
+    # `boite`, sans `proche` — la page n'a rien de plus à demander.
+    central = nuage.nuage_pour_emprise(west, south, east, north, {**brut, "boite": boite}, relief, batiments)
+    assert central["ajoures"] == ["TOUR"] and "proche" not in central
+    assert central["boite"] == proche["proche"]
+
+
+def test_une_grande_zone_ne_lit_que_son_carre_central(monkeypatch):
+    """cote_max_m : le carré lu comme le carré proche, la boîte rendue sous
+    `boite` et non `proche`."""
+    lues = []
+    monkeypatch.setattr(nuage, "lire_couche", lambda nom, *bbox: {"features": [
+        {"properties": {"url_npl": "https://data.geopf.fr/x/dalle.copc.laz"}}]})
+
+    def lire_points(u, bx0, by0, bx1, by1, lire=None):
+        lues.append((bx0, by0, bx1, by1))
+        return (np.array([bx0 + 1.5]), np.array([by0 + 2.5]), np.array([50.0]),
+                np.array([6], dtype=np.uint8)), None
+
+    monkeypatch.setattr(nuage, "lire_points", lire_points)
+    delta = 2000 / 2 / 111320
+    brut = nuage.fetch_nuage(2.29 - delta, 48.855 - delta, 2.29 + delta, 48.855 + delta,
+                             cote_max_m=nuage.NUAGE_COTE_MAX_M)
+    (bx0, by0, bx1, by1), = lues
+    assert brut["boite"] == (bx0, by0, bx1, by1) and "proche" not in brut
+    assert bx1 - bx0 == pytest.approx(1000) and by1 - by0 == pytest.approx(1000)

@@ -50,6 +50,7 @@ demande suivante réessaie.
 """
 
 import concurrent.futures
+import contextlib
 import copy
 import functools
 import gzip
@@ -80,14 +81,14 @@ from .houppiers import houppiers_pour_emprise
 from .mnh import dimensions_grille, fetch_mnh_grid, fetch_sol_grid
 from .monuments import fetch_monuments, monuments_pour_emprise
 from .ortho import fetch_exg_grid, fetch_ortho_jpeg
-from .nuage import (NUAGE_PROCHE_COTE_M, NUAGE_PROCHE_ZONE_MIN_M, NUAGE_VERSION, fetch_nuage,
+from .nuage import (NUAGE_COTE_MAX_M, NUAGE_PROCHE_COTE_M, NUAGE_PROCHE_ZONE_MIN_M, NUAGE_VERSION, fetch_nuage,
                     nuage_pour_emprise)
 from .ouvrages import OUVRAGES_VERSION, fetch_ouvrages, ouvrages_pour_emprise
 from .panneaux import PANNEAUX_VERSION, panneaux_pour_emprise
 from .releves import (MARGE_NAVIRES_PX, MARGE_PISCINES_PX, MARGE_VEHICULES_PX, Releves,
                       emprise_image)
 from .releves import rectangle as rectangle_releve
-from .relief import RELIEF_TAILLE, fetch_relief, fetch_relief_anneau
+from .relief import ANNEAU_TAILLE, RELIEF_TAILLE, fetch_relief, fetch_relief_anneau
 from .toits import TOITS_RESOLUTION_M, toits_pour_emprise
 from .vehicules import (NAVIRES_VERSION, PISCINES_VERSION, VEHICULES_VERSION, fetch_mer,
                         navires_pour_emprise, piscines_pour_emprise, vehicules_pour_emprise)
@@ -130,12 +131,13 @@ SCENE_ARRONDI = 4
 # partagent leur scène comme le point arrondi.
 #
 # Plafond : la grille MNH à 0,5 m tient en une requête jusqu'à 2 048 pixels
-# de côté, soit 1 024 m ; au-delà, toits et houppiers perdraient leur
-# résolution. Le temps de construction et le poids de la scène croissent
-# comme la surface : ×8 à 1 000 m.
+# de côté, soit 1 024 m ; au-delà, elle se lit en tuiles (mnh._grille_wms),
+# pour que toits et houppiers gardent leur résolution. Le temps de
+# construction et le poids de la scène croissent comme la surface : ×8 à
+# 1 000 m, ×32 à 2 000 m.
 ZONE_PAS_M = 50
 ZONE_MIN_M = 150
-ZONE_MAX_M = 1000
+ZONE_MAX_M = 2000
 # Côté nord-sud de l'emprise par défaut, en mètres.
 SCENE_COTE_M = 2 * SCENE_DELTA * 111320
 # Étapes d'une construction, que la page affiche pendant l'attente : les
@@ -150,8 +152,14 @@ ETAPES_SCENE = 18
 # annoncées : la page pondère sa barre d'attente d'après elles
 # (partConstruite), et outils/verifier-geometrie.mjs le contrôle.
 ETAPES_DE_CALCUL = ("toitures", "houppiers")
-# Côté maximal de la grille MNH à 0,5 m : le plafond du WMS (ZONE_MAX_M).
-GRILLE_PIXELS_MAX = 2048
+# Côté maximal de la grille MNH à 0,5 m : 3 971 pixels du nord au sud pour
+# une zone de 2 000 m (ZONE_MAX_M), lus en tuiles de 2 048 au plus. Jusqu'à
+# 1 000 m (1 985 pixels), une requête comme avant.
+GRILLE_PIXELS_MAX = 4096
+# Points du relief par kilomètre de côté au-delà de 1 000 m : la maille
+# d'environ 2 m de la zone de 1 000 m (512 points), plutôt que 3,9 m si le
+# plafond de 512 restait — 1 024 points à 2 000 m, une requête au WMS.
+RELIEF_POINTS_PAR_KM = 512
 # Source du MNH qu'on suppose pour lire le terrain en même temps que lui : le
 # LiDAR HD couvrait 77 % d'un échantillon de 60 bâtiments tirés au hasard en
 # France (vue3d/mnh.py), et davantage à mesure que le programme avance.
@@ -439,8 +447,17 @@ def construire(lat, lon, avancer=None, zone=None):
     bbox = (west, south, east, north)
     anneau_bbox = emprise_anneau(lat, lon, zone=zone)
     # Le relief garde sa maille d'environ 1,4 m quand la zone grandit, jusqu'à
-    # 512 points de côté.
-    taille_relief = min(512, round(RELIEF_TAILLE * max(1.0, facteur_zone(zone))))
+    # 512 points de côté ; au-delà de 1 000 m, une maille d'environ 2 m.
+    taille_relief = min(max(512, round(RELIEF_POINTS_PAR_KM * (zone or 0) / 1000)),
+                        round(RELIEF_TAILLE * max(1.0, facteur_zone(zone))))
+    # L'anneau grandit avec la zone (emprise_anneau) : au-delà de 1 000 m, ses
+    # points aussi, pour garder la maille de 44 m de l'anneau d'une zone de
+    # 1 000 m — 256 points à 2 000 m, 88 m de maille sinon.
+    taille_anneau = round(ANNEAU_TAILLE * max(1.0, (zone or 0) / 1000))
+    # La mosaïque, plafonnée à 2 048 px (0,49 m par pixel à 1 000 m), en
+    # garde autant par kilomètre au-delà : à 2 000 m, 0,98 m sinon, flou sur
+    # le sol comme sur les toits qu'elle habille. Lue alors en tuiles.
+    mosaique = ({"max_pixels": round(2048 * zone / 1000)} if (zone or 0) > 1000 else {})
     # L'orthophoto et le terrain se lisent à la taille de la grille MNH, qui
     # ne dépend que de l'emprise : demandés avec elle, pas après elle.
     largeur, hauteur = dimensions_grille(*bbox, TOITS_RESOLUTION_M, GRILLE_PIXELS_MAX)
@@ -472,9 +489,9 @@ def construire(lat, lon, avancer=None, zone=None):
                                            max_pixels=GRILLE_PIXELS_MAX)),
         ("orthophoto", functools.partial(fetch_exg_grid, *bbox, largeur, hauteur)),
         (LECTURE_TERRAIN, functools.partial(terrain, SOURCE_PROBABLE)),
-        ("mosaïque d'orthophoto", functools.partial(fetch_ortho_jpeg, *bbox)),
+        ("mosaïque d'orthophoto", functools.partial(fetch_ortho_jpeg, *bbox, **mosaique)),
         ("relief", functools.partial(fetch_relief, *bbox, taille=taille_relief)),
-        ("relief de l'anneau", functools.partial(fetch_relief_anneau, *anneau_bbox)),
+        ("relief de l'anneau", functools.partial(fetch_relief_anneau, *anneau_bbox, taille=taille_anneau)),
     ] + [(nom, functools.partial(lire_couche, couche, *b)) for nom, couche, b in couches],
         avancer, terrain)
     lectures_s = time.monotonic() - t0
@@ -729,6 +746,15 @@ class Cache:
     # de détection) ; les suivantes sont lues à leur tour, dans l'ordre.
     IMAGES_TENUES = 2
 
+    # Constructions de plus de GRANDE_ZONE_M menées à la fois, les autres
+    # attendant leur tour. Pic de mémoire d'une construction à Gordes, mesuré
+    # le 2026-10-16 (ru_maxrss, bassin des toitures compris) : 0,87 Go en
+    # zone de 1 000 m, 3,2 Go à 2 000 m. Le service a huit fils : huit zones
+    # de 2 000 m ensemble dépasseraient les 24 Go du Mac qui le sert ; huit de
+    # 1 000 m en tiennent 7 Go.
+    GRANDE_ZONE_M = 1000
+    GRANDES_ZONES_ENSEMBLE = 1
+
     def __init__(self, dossier, lire_monuments=fetch_monuments, lire_ouvrages=fetch_ouvrages,
                  lire_vehicules=None, lire_panneaux=None, lire_nuage=fetch_nuage,
                  lire_dpe=fetch_dpe, lire_dvf=fetch_dvf, lire_mer=fetch_mer,
@@ -756,6 +782,7 @@ class Cache:
         # inférences attendent qu'il n'y en ait plus (attendre_les_scenes).
         self._constructions = 0
         self._sans_scene = threading.Condition()
+        self._grandes_zones = threading.BoundedSemaphore(self.GRANDES_ZONES_ENSEMBLE)
         # Lectures lancées en tâche de fond, par couche et par point (Future) ;
         # les lecteurs sont injectables pour les tests, qui n'appellent pas le
         # réseau. Un bassin de fils par source : Overpass peut tenir les siens
@@ -908,7 +935,9 @@ class Cache:
                 # Sans zone, l'appel d'avant les zones : les constructions
                 # injectées par les tests n'ont pas à la connaître.
                 options = {"zone": zone} if zone else {}
-                scene, mosaique = construire(lat, lon, avancer=avancer, **options)
+                with (self._grandes_zones if zone and zone > self.GRANDE_ZONE_M
+                      else contextlib.nullcontext()):
+                    scene, mosaique = construire(lat, lon, avancer=avancer, **options)
                 os.makedirs(dossier, exist_ok=True)
                 # L'orthophoto d'abord, la scène ensuite : `present` teste les
                 # deux, une interruption entre les deux laisse une scène
@@ -1110,8 +1139,12 @@ class Cache:
             NuageIndisponible si une dalle n'a pas pu être lue : rien n'est
             écrit, la demande suivante réessaie.
         """
+        # Une zone de plus de NUAGE_COTE_MAX_M n'en lit que le carré central.
+        lire = self.lire_nuage
+        if (zone_normalisee(zone) or 0) > NUAGE_COTE_MAX_M:
+            lire = functools.partial(self.lire_nuage, cote_max_m=NUAGE_COTE_MAX_M)
         return self._obtenir_couche(
-            NOM_NUAGE, lat, lon, construire, self.lire_nuage,
+            NOM_NUAGE, lat, lon, construire, lire,
             lambda message: NuageIndisponible(f"nuage LiDAR HD illisible : {message}"),
             lambda bbox, brut, scene: nuage_pour_emprise(
                 *bbox, brut, scene.get("relief"), scene.get("batiments"), scene.get("masses"),

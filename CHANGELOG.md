@@ -15,6 +15,29 @@ messages de commit et dans les commentaires des modules.
 
 ### Ajouté
 
+- **Une zone de 2 000 m**, au sélecteur **Zone** ou par `&zone=2000` ; la
+  zone par défaut reste de 1 000 m, et ses scènes sont les mêmes à l'octet
+  (Gordes et 700 m, vérifié contre la version d'avant). Quatre fois la
+  surface, à la même finesse :
+  - la grille de hauteurs à 0,5 m (3 971 px du nord au sud), le terrain sous
+    les toits et la verdure de l'orthophoto se lisent en tuiles de 2 048 px,
+    le plafond du WMS : au-delà, toits et houppiers auraient perdu leur
+    résolution ;
+  - la mosaïque d'orthophoto garde 0,49 m par pixel (4 096 px, en tuiles,
+    réencodée à la qualité du WMS), le relief sa maille de 2 m (1 024
+    points), l'anneau sa maille de 44 m (256 points) ;
+  - les fonds en tuiles WMTS de l'anneau et du Plan IGN descendent d'un
+    zoom : 582 tuiles au lieu de 1 624 à Gordes.
+
+  À Gordes, la scène se construit en 9,5 s au lieu de 4,4 (1 564 bâtiments,
+  81 875 houppiers, 3,8 Mo gzippés au lieu de 1,1) ; son calcul tient 3,2 Go
+  de mémoire au pic au lieu de 0,87 : le service n'en construit qu'une à la
+  fois au-delà de 1 000 m (`Cache.GRANDES_ZONES_ENSEMBLE`), les autres
+  attendent leur tour. Le nuage LiDAR HD n'y est lu que sur le kilomètre
+  central (`nuage.NUAGE_COTE_MAX_M`) : sur la zone entière, la Géoplateforme
+  répondait 429 en 7 s, et quatre fois les 2,7 Go de mémoire mesurés à
+  1 000 m n'auraient pas tenu. Les exports pèsent 250 Mo en IFC et 1,1 Go
+  en CityGML.
 - **Une visionneuse IFC de contrôle**, `outils/visionneuse-ifc.html` : un
   fichier exporté (⬇ IFC 4), glissé sur la page, relu par web-ifc (That Open
   Company, MPL-2.0) comme un autre logiciel le lirait — chaque volume tel que

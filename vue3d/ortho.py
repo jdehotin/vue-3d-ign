@@ -20,7 +20,8 @@ import io
 import numpy as np
 import requests
 
-from .geopf import Groupe, get_avec_reprise, place
+from .geopf import Groupe, en_parallele, get_avec_reprise, place
+from .mnh import WMS_PIXELS_MAX, bbox_tuile, tuiles_wms
 
 ORTHO_LAYER = "ORTHOIMAGERY.ORTHOPHOTOS"
 # Même seuil que le classement de la végétation côté rendu.
@@ -61,6 +62,11 @@ def _image_wms(west, south, east, north, largeur, hauteur):
 # la vue assemblait au zoom 18 valent 0,39 m par pixel à nos latitudes : on
 # reprend cet ordre de grandeur, pour une seule requête au lieu de seize.
 ORTHO_MOSAIQUE_RESOLUTION_M = 0.4
+# Qualité du JPEG d'une mosaïque lue en tuiles, réencodée : celle du WMS, dont
+# les tables de quantification sont celles de Pillow à 75 (vérifié le
+# 2026-10-16 sur la mosaïque de Gordes en zone de 1 000 m, 656 Ko réencodée
+# comme lue).
+ORTHO_JPEG_QUALITE = 75
 
 
 def fetch_ortho_jpeg(west, south, east, north, resolution_m=ORTHO_MOSAIQUE_RESOLUTION_M,
@@ -72,6 +78,10 @@ def fetch_ortho_jpeg(west, south, east, north, resolution_m=ORTHO_MOSAIQUE_RESOL
     hauteur doivent donc suivre l'étendue en MÈTRES, sans quoi elle sort
     étirée — à 49° de latitude, un degré de longitude vaut deux tiers d'un
     degré de latitude.
+
+    Au-delà du plafond du WMS (`max_pixels` de plus de 2 048, pour une zone de
+    plus de 1 000 m), lue en tuiles, réassemblée et réencodée ; en deçà,
+    l'image du WMS telle quelle.
     """
     import math
     west, south, east, north = map(float, (west, south, east, north))
@@ -84,7 +94,26 @@ def fetch_ortho_jpeg(west, south, east, north, resolution_m=ORTHO_MOSAIQUE_RESOL
     reduction = min(1.0, max_pixels / max(largeur_m / resolution_m, hauteur_m / resolution_m))
     largeur = int(max(largeur_m / resolution_m * reduction, 64))
     hauteur = int(max(hauteur_m / resolution_m * reduction, 64))
-    return _image_wms(west, south, east, north, largeur, hauteur), largeur, hauteur
+    if largeur <= WMS_PIXELS_MAX and hauteur <= WMS_PIXELS_MAX:
+        return _image_wms(west, south, east, north, largeur, hauteur), largeur, hauteur
+    from PIL import Image
+    tuiles = tuiles_wms(largeur, hauteur, WMS_PIXELS_MAX)
+    # Un groupe (en_parallele), dans celui de la scène : une tuile illisible
+    # rend l'image fausse, et les autres ne partent plus.
+    contenus = en_parallele(*(
+        lambda t=t: _image_wms(*bbox_tuile(west, south, east, north, largeur, hauteur, t), t[2], t[3])
+        for t in tuiles))
+    image = Image.new("RGB", (largeur, hauteur))
+    for (x0, y0, l, h), contenu in zip(tuiles, contenus):
+        morceau = Image.open(io.BytesIO(contenu)).convert("RGB")
+        if morceau.size != (l, h):
+            raise requests.RequestException(
+                f"tuile d'orthophoto de {morceau.size[0]} × {morceau.size[1]} px "
+                f"pour {l} × {h} demandés")
+        image.paste(morceau, (x0, y0))
+    sortie = io.BytesIO()
+    image.save(sortie, format="JPEG", quality=ORTHO_JPEG_QUALITE)
+    return sortie.getvalue(), largeur, hauteur
 
 
 # Tuiles de l'orthophoto des détections lues en même temps. Une zone de
@@ -167,9 +196,27 @@ def fetch_exg_grid(west, south, east, north, largeur, hauteur):
     """Grille ExG (numpy int8, hauteur × largeur) de l'orthophoto sur l'emprise.
 
     Ordonnée par lignes depuis le nord-ouest, comme la grille MNH : une cellule
-    de hauteur et une cellule de verdure se correspondent par index.
+    de hauteur et une cellule de verdure se correspondent par index. Trop
+    grande pour une requête — la grille d'une zone de plus de 1 024 m —, elle
+    est lue en tuiles comme elle.
     """
     west, south, east, north = map(float, (west, south, east, north))
+    if largeur <= WMS_PIXELS_MAX and hauteur <= WMS_PIXELS_MAX:
+        return _exg_wms(west, south, east, north, largeur, hauteur)
+    tuiles = tuiles_wms(largeur, hauteur, WMS_PIXELS_MAX)
+    # Un groupe (en_parallele), dans celui de la scène : une tuile illisible
+    # rend la grille fausse, et les autres ne partent plus.
+    morceaux = en_parallele(*(
+        lambda t=t: _exg_wms(*bbox_tuile(west, south, east, north, largeur, hauteur, t), t[2], t[3])
+        for t in tuiles))
+    exg = np.empty((hauteur, largeur), dtype=np.int8)
+    for (x0, y0, l, h), morceau in zip(tuiles, morceaux):
+        exg[y0:y0 + h, x0:x0 + l] = morceau
+    return exg
+
+
+def _exg_wms(west, south, east, north, largeur, hauteur):
+    """Grille ExG d'une seule image du WMS."""
     exg = exg_depuis_image(_image_wms(west, south, east, north, largeur, hauteur))
     if exg.shape != (hauteur, largeur):
         # Le service peut renvoyer une image d'une autre taille s'il bride la
