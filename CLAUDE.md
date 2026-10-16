@@ -22,6 +22,7 @@ node outils/verifier-export.mjs essai.ifc essai.gml   # exports IFC et CityGML, 
 node outils/mesure-ecarts-toits.mjs "http://localhost:8080/?lat=43.9116&lon=5.2003"   # toits contre le nuage LiDAR (puppeteer-core)
 python outils/valider_ifc.py essai.ifc           # validation par ifcopenshell (pip install ifcopenshell pytest, hors requirements)
 python outils/valider_citygml.py essai.gml       # géométrie du CityGML ; son schéma : citygml-tools validate essai.gml
+python3 -m http.server -d outils 8000            # visionneuse-ifc.html : un IFC exporté, relu par web-ifc, propriétés au clic
 npm install puppeteer-core && node outils/essai-navigateur.mjs "http://localhost:8080/?lat=43.9116&lon=5.2003"
 ```
 

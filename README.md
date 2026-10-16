@@ -43,10 +43,13 @@ suggestions dès la frappe — ou se donne dans l'URL (`?lat=…&lon=…`). Les 
 au bord de la vue, décalent la scène d'un quart de zone dans leur direction.
 La zone chargée mesure par défaut 1 000 m du nord au
 sud ; le sélecteur **Zone** du panneau, ou `&zone=…` dans l'URL, la règle de
-150 à 1 000 m (arrondie à 50 m). Le temps de construction suit la surface et
+150 à 2 000 m (arrondie à 50 m). Le temps de construction suit la surface et
 la densité du bâti : à 1 000 m, 4 s à Gordes et 6 s à Strasbourg sur un Mac
-M4 hors conteneur, 4 et 4,5 s dans le conteneur. Sans `zone=`, l'API garde
-une emprise d'environ 356 m, que la page ne demande plus.
+M4 hors conteneur, 4 et 4,5 s dans le conteneur ; à 2 000 m, 9,5 s à Gordes,
+et le service ne construit qu'une zone de plus de 1 000 m à la fois (3,2 Go
+de mémoire au pic). Le nuage LiDAR HD n'y couvre que le kilomètre central.
+Sans `zone=`, l'API garde une emprise d'environ 356 m, que la page ne
+demande plus.
 
 La **première** ouverture d'un lieu construit sa scène en quelques secondes
 (1 s en zone de 350 m), le temps de
@@ -670,7 +673,7 @@ principales :
 - **Couverture LiDAR HD en cours.** Environ 77 % des bâtiments tirés au hasard
   sont couverts ; ailleurs, le repli photogrammétrique lisse les cimes et les
   faîtages, et le panneau le signale.
-- **Une scène couvre au plus 1 000 m de côté** autour du point. Au-delà, l'anneau
+- **Une scène couvre au plus 2 000 m de côté** autour du point. Au-delà, l'anneau
   ne porte que le relief (maille de 16 m) et le fond en basse résolution, sans
   bâtiment ni arbre : un bâtiment qui sort de la scène est coupé à son bord,
   et son morceau est mesuré seul — trop petit, il retombe sur les hauteurs BD
@@ -734,7 +737,7 @@ principales :
 | `GET /api/ortho?lat=…&lon=…` | L'orthophoto de la scène, en JPEG |
 | `GET /api/monuments?lat=…&lon=…` | La couche des monuments OSM, en JSON gzippé (`null` sans partie), que la page demande une fois la scène affichée |
 | `GET /api/ouvrages?lat=…&lon=…` | La couche des murs, ponts, voies ferrées et terrains de sport, en JSON gzippé (`null` sans ouvrage), demandée elle aussi après la scène |
-| `GET /api/nuage?lat=…&lon=…` | Le bâti du nuage de points LiDAR HD, en JSON gzippé (`null` hors couverture), demandé après la scène : 10 à 90 s à la première demande. Avec `&proche=1`, d'abord un carré de 400 m autour du point, que la page affiche avant la zone entière (en zone de 800 m et plus) |
+| `GET /api/nuage?lat=…&lon=…` | Le bâti du nuage de points LiDAR HD, en JSON gzippé (`null` hors couverture), demandé après la scène : 10 à 90 s à la première demande. Avec `&proche=1`, d'abord un carré de 400 m autour du point, que la page affiche avant la zone entière (en zone de 800 m et plus) ; au-delà de 1 000 m, le kilomètre central seulement |
 | `GET /api/piscines?lat=…&lon=…` | Les piscines de l'orthophoto, en JSON gzippé, demandées après la scène ; `{"mode": "aucun", "piscines": []}` si le service n'a pas de détecteur |
 | `GET /api/navires?lat=…&lon=…` | Les bateaux de l'orthophoto, sur l'eau, en JSON gzippé, demandés après les piscines ; `{"mode": "aucun", "navires": []}` si le service n'a pas de détecteur, une liste vide loin de l'eau |
 | `GET /api/vehicules?lat=…&lon=…&detecteur=…` | Les véhicules vus d'un détecteur du service (`rtmdet` ou `yolo`), en JSON gzippé ; la page les demande dans l'ordre que donne `/api/sante`, du rapide au lent, et les réunit ; 400 sans le paramètre ou avec un détecteur que le service n'a pas |
@@ -778,12 +781,16 @@ node outils/verifier-export.mjs essai.ifc essai.gml   # les exports, sous Node (
 pip install ifcopenshell pytest && python outils/valider_ifc.py essai.ifc   # l'IFC, comme un logiciel le lirait
 python outils/valider_citygml.py essai.gml   # la géométrie du CityGML, sans dépendance
 citygml-tools validate essai.gml             # son schéma (github.com/citygml4j/citygml-tools)
+python3 -m http.server -d outils 8000        # puis localhost:8000/visionneuse-ifc.html, y glisser l'IFC
 ```
 
 L'essai du navigateur télécharge aussi les deux exports à côté de la
 capture : `outils/valider_ifc.py` valide l'IFC (schéma, règles EXPRESS,
 géométrie de chaque élément, géoréférencement), `outils/valider_citygml.py`
-et `citygml-tools` le CityGML.
+et `citygml-tools` le CityGML. `outils/visionneuse-ifc.html` montre l'IFC
+tel qu'un autre logiciel le relit : web-ifc (That Open Company, MPL-2.0) en
+tire chaque volume, et le clic sur un objet donne sa classe et ses
+propriétés.
 
 La démo filmée se tourne de la même façon, dans un Chrome sans écran, sur un
 serveur qui tourne avec la couche des véhicules : la caméra suit un scénario
@@ -802,7 +809,8 @@ MUSIQUE=chant.mp3 node outils/demo-video.mjs gadzarts   # docs/demo/demo-gadzart
 node outils/demo-video.mjs lidar carre        # docs/demo/demo-lidar-carre.mp4 — LiDAR HD, à Chambord
 node outils/demo-video.mjs recherche paysage  # docs/demo/demo-recherche-paysage.mp4 — recherche et recentrage, Versailles et Paris
 #   dpe-dvf (La Rochelle), drone (lac d’Annecy), bornes (Arc de Triomphe),
-#   vehicules (Saint-Tropez, détecteur requis), soleil (Chamonix)
+#   vehicules (Saint-Tropez, détecteur requis), soleil (Chamonix),
+#   export (Notre-Dame de Paris : IFC et CityGML, l'IFC rouvert dans outils/visionneuse-ifc.html)
 ```
 
 Le film `foncier` n'a besoin d'aucun détecteur, et ne montre des DPE et des

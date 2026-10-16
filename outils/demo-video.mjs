@@ -43,6 +43,8 @@ import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import http from 'node:http';
+import { fileURLToPath } from 'node:url';
 
 const FORMAT = process.argv[2] || 'youtube';
 const BASE = (process.env.VUE3D_URL || 'http://localhost:8080').replace(/\/$/, '');
@@ -85,15 +87,15 @@ const FORMATS = {
 //
 //   node outils/demo-video.mjs bornes carre      # docs/demo/demo-bornes-carre.mp4
 //   node outils/demo-video.mjs bornes paysage    # docs/demo/demo-bornes-paysage.mp4
-const SERIE = ['lidar', 'recherche', 'dpe-dvf', 'drone', 'bornes', 'vehicules', 'soleil'];
+const SERIE = ['lidar', 'recherche', 'dpe-dvf', 'drone', 'bornes', 'vehicules', 'soleil', 'export'];
 const DANS_SERIE = SERIE.includes(FORMAT);
 const ASPECT = DANS_SERIE ? (process.argv[3] || 'carre') : null;
 const ASPECTS = {
     carre: { largeur: 1080, hauteur: 1080, panneau: false, voix: false, texte: 'court', police: 38, sansVoixOff: true },
     paysage: { largeur: 1920, hauteur: 1080, panneau: true, voix: false, texte: 'court', police: 32, sansVoixOff: true },
 };
-// La recherche se tape dans le panneau : il reste visible au carré.
-const AVEC_PANNEAU = ['recherche'];
+// La recherche se tape dans le panneau, les exports s'y cliquent : il reste visible au carré.
+const AVEC_PANNEAU = ['recherche', 'export'];
 const fmt = DANS_SERIE
     ? ASPECTS[ASPECT] && { ...ASPECTS[ASPECT], serie: true, panneau: ASPECTS[ASPECT].panneau || AVEC_PANNEAU.includes(FORMAT) }
     : FORMATS[FORMAT];
@@ -175,6 +177,8 @@ const LA_ROCHELLE = { lat: 46.1585, lon: -1.1520, zone: 1000 };
 const ANNECY = { lat: 45.8992, lon: 6.1294, zone: 1000 };
 const SAINT_TROPEZ = { lat: 43.2722, lon: 6.6403, zone: 1000 };
 const CHAMONIX = { lat: 45.9237, lon: 6.8694, zone: 1000 };
+// Le point est sur la nef : la cathédrale est le bâtiment le plus proche de l'origine du fichier IFC.
+const NOTRE_DAME = { lat: 48.85296, lon: 2.34991, zone: 1000 };
 const SITE = 'vue-3d-ign.kysoe.com';
 const LINKEDIN = 'linkedin.com/in/ysimon';
 const urlDe = l => `${BASE}/?lat=${l.lat}&lon=${l.lon}${l.zone ? `&zone=${l.zone}` : ''}`;
@@ -970,7 +974,92 @@ const SEQUENCES_SERIE = [
     },
     finSerie('soleil', CHAMONIX, { ...CHAMONIX, hauteur: 300, distance: 1700, azimut: 0, elevation: 18 },
              'RGE ALTI, LiDAR HD et BD TOPO © IGN'),
+
+    // --- Export BIM : Notre-Dame de Paris ---------------------------------------------
+    // La page écrit la maquette (IFC 4, puis CityGML 2.0) ; le fichier IFC est
+    // ensuite rouvert dans outils/visionneuse-ifc.html, où web-ifc le relit sans
+    // rien devoir à la page : ce qu'on y voit est ce que le fichier contient.
+    // Les cadres de la visionneuse visent un point en mètres (est, nord) depuis
+    // l'origine du fichier, le centre de la scène.
+    {
+        id: 'e-titre', lieu: NOTRE_DAME, duree: 7, formats: ['export'],
+        court: 'Notre-Dame de Paris et l’île de la Cité',
+        carte: { titre: 'Export BIM', sous: 'Vue 3D IGN · la maquette du lieu, en IFC ou en CityGML' }, carteDifferee: true,
+        async jouer(s) {
+            await s.chauffer({ ...NOTRE_DAME, hauteur: 20, distance: 800, azimut: 120, elevation: 34 }, 20);
+            await s.glisser(s.duree, { ...NOTRE_DAME, hauteur: 20, distance: 800, azimut: 120, elevation: 34 },
+                                     { ...NOTRE_DAME, hauteur: 20, distance: 600, azimut: 135, elevation: 32 }, t => apparaitre(s, t, 2));
+        },
+    },
+    {
+        id: 'e-ifc', lieu: NOTRE_DAME, duree: 10, formats: ['export'],
+        court: 'Relief, bâtiments, arbres : un clic, et la maquette part en IFC 4',
+        async jouer(s) {
+            // Le curseur part du panneau : venu de la vue, il ouvrait au passage l'infobulle d'un arbre.
+            await montrerCurseur({ x: 150, y: 600 });
+            await page.mouse.move(150, 600);
+            for (const id of ['x-relief', 'x-batiments', 'x-arbres']) { await s.curseurVers({ selecteur: '#' + id }, 0.6); await filmer(0.25); }
+            const { note } = await s.exporter('btn-ifc');
+            await s.cartouche(cartoucheExport('IFC 4', note, 'Lambert-93, altitudes NGF'));
+            await s.glisser(5.6, null, { ...NOTRE_DAME, hauteur: 20, distance: 420, azimut: 150, elevation: 30 });
+        },
+    },
+    {
+        id: 'e-citygml', lieu: NOTRE_DAME, duree: 7, formats: ['export'],
+        court: 'Ou en CityGML 2.0, pour les SIG et les maquettes urbaines',
+        async jouer(s) {
+            const { note } = await s.exporter('btn-citygml');
+            await s.cartouche(cartoucheExport('CityGML 2.0', note));
+            await s.glisser(5.2, null, { ...NOTRE_DAME, hauteur: 25, distance: 330, azimut: 175, elevation: 32 });
+        },
+    },
+    {
+        id: 'e-visionneuse', lieu: null, duree: 9, formats: ['export'],
+        court: 'Rouvert dans une visionneuse IFC : chaque bâtiment, chaque arbre est un objet',
+        async jouer(s) {
+            await s.cartouche('');
+            await s.ouvrirIfc();
+            await s.glisser(s.duree, { est: 0, nord: 0, hauteur: 10, distance: 900, azimut: 150, elevation: 38 },
+                                     { est: 0, nord: 0, hauteur: 15, distance: 560, azimut: 168, elevation: 33 });
+        },
+    },
+    {
+        id: 'e-batiment', lieu: null, duree: 10, formats: ['export'],
+        court: 'Un bâtiment : classe IFC, identifiant BD TOPO, usage, hauteur et sa source',
+        async jouer(s) {
+            const id = await page.evaluate(() => window.__visionneuse.plusProche('Bâtiment existant', 0, 0));
+            await s.glisser(3, null, { est: 0, nord: 0, hauteur: 30, distance: 330, azimut: 200, elevation: 30 });
+            await s.cliquerObjet(id, 1.2);
+            await filmer(s.duree - 5.15);
+        },
+    },
+    {
+        id: 'e-arbre', lieu: null, duree: 9, formats: ['export'],
+        court: 'Un arbre : sa hauteur et son houppier, mesurés au LiDAR HD',
+        async jouer(s) {
+            // Le plus haut du square Jean-XXIII, au chevet : le plus proche du
+            // point était un pin de 8 m, perdu dans la masse.
+            const id = await page.evaluate(() => window.__visionneuse.plusHaut('Arbre', 80, -55, 45));
+            const c = await page.evaluate(id => window.__visionneuse.centre(id), id);
+            await s.glisser(3, null, { ...c, distance: 85, azimut: 165, elevation: 30 });
+            await s.cliquerObjet(id, 1.2);
+            await filmer(s.duree - 5.15);
+        },
+    },
+    { ...finSerie('export', null, null, 'Monuments © contributeurs OpenStreetMap (ODbL) · visionneuse : web-ifc (MPL-2.0)'),
+      async jouer(s) {
+          await s.cartouche(''); await s.cacherCurseur();
+          await page.evaluate(() => window.__visionneuse.choisir(null));
+          await s.glisser(s.duree, null, { est: 0, nord: 0, hauteur: 10, distance: 820, azimut: 200, elevation: 40 });
+      } },
 ];
+/** Le cartouche d'un export, tiré de la note de la page : format, taille, contenu, repère. */
+function cartoucheExport(format, note, repere) {
+    const m = note.match(/ : ([\d,]+ Mo), (.*?)\. ([^,.]*)/);
+    if (!m) throw new Error(`note d'export inattendue : ${note}`);
+    const contenu = m[2].split(', ');
+    return `<b>${format}</b> · ${m[1]}<br>${contenu.slice(0, -1).join(' · ')}<br>${contenu.at(-1)}<br>${repere || m[3]}`;
+}
 // Ce que chaque film lit d'avance, sur le serveur, avant de filmer : le clic
 // filmé trouve alors sa couche en cache, sans attente à l'image.
 const PRELECTURES = { lidar: ['nuage'], 'dpe-dvf': ['dpe', 'dvf'], bornes: ['bornes'] };
@@ -1069,6 +1158,10 @@ const STYLE_DEMO = `
     /* Les liens de l'infobulle épinglée (Recentrer, Y aller), à la taille de son texte. */
     #tip .lien-ext { font-size:${Math.round(fmt.police * 0.5)}px !important; padding:${Math.round(fmt.police * 0.15)}px ${Math.round(fmt.police * 0.3)}px !important; }
     ${fmt.serie ? '#demo-carte { background:rgba(18,20,24,.74) !important; }' : ''}
+    /* Centrée par ses deux bords plutôt que par left:50% et translateX(-50%) :
+       sa largeur y était bornée à la moitié de la vue, et la légende du carré,
+       panneau visible, tenait sur quatre lignes de 390 px. */
+    ${fmt.serie ? '#demo-legende { left:8% !important; right:8%; width:fit-content; margin:0 auto; transform:none !important; max-width:none; }' : ''}
     /* Le carton de fin de la série : trois liens, puis les crédits. */
     #demo-carte .fin-liens { display:flex; flex-direction:column; gap:${fmt.police * 0.55}px; margin-top:${fmt.police * 0.3}px; white-space:normal; }
     #demo-carte .fin-liens b { display:block; font-size:${Math.round(fmt.police * 0.7)}px; font-weight:500; opacity:.75; }
@@ -1082,6 +1175,27 @@ const STYLE_DEMO = `
         margin:-${fmt.police * 0.8}px 0 0 -${fmt.police * 0.8}px; border-radius:50%; border:3px solid #fff;
         background:rgba(255,179,71,.35); opacity:0; pointer-events:none; }
 `;
+// La fiche de la visionneuse IFC (film « export »), lisible à l'image : en
+// paysage à droite, au carré en bas, la vue au-dessus, sur deux colonnes
+// posées en grille — le fichier, son repère et son contenu à gauche, la
+// sélection à droite. En colonnes CSS, la gauche débordait en 19 px, et la
+// sélection partait dans une troisième colonne, hors de l'image. En 16 px, la
+// fiche de la cathédrale (sept propriétés) tient dans la moitié basse. La
+// légende et le cartouche restent sur la vue, la carte de titre couvre tout.
+const STYLE_VISIONNEUSE = ASPECT === 'carre' ? `
+    :root { font-size:16px; --bas:50%; }
+    #vue, #depot { inset:0 0 var(--bas) 0 !important; }
+    #fiche { top:auto !important; height:var(--bas); width:100% !important; border-left:0 !important;
+        border-top:1px solid var(--bord); overflow:hidden !important; display:grid; grid-template-columns:1fr 1fr;
+        grid-template-rows:repeat(6, auto) 1fr; column-gap:2.2rem; align-content:start; }
+    #fiche > * { grid-column:1; align-self:start; }
+    #fiche > h2:last-of-type { grid-column:2; grid-row:1; margin-top:0; }
+    #fiche > #choix { grid-column:2; grid-row:2 / -1; }
+    #demo-legende { bottom:calc(var(--bas) + 2.5%) !important; }
+` : `
+    :root { font-size:17px; }
+    #demo-legende { right:calc(var(--fiche) + 8%) !important; }
+`;
 const HTML_DEMO = '<div id="demo-carte"><h1></h1><p></p></div><div id="demo-legende"></div><div id="demo-cartouche"></div>'
     + '<div id="demo-chapitre"><b></b><span></span></div><div id="demo-photo"><img alt=""><span></span></div>'
     + '<div id="demo-onde"></div><div id="demo-curseur"><svg viewBox="0 0 24 24" width="100%" height="100%">'
@@ -1091,6 +1205,12 @@ page.on('request', async r => {
     if (r.resourceType() !== 'document') return r.continue();
     const rep = await fetch(r.url());
     let html = await rep.text();
+    if (VISIONNEUSE && r.url().startsWith(VISIONNEUSE)) {
+        if (!html.includes('<div id="vue"></div>')) { console.error('visionneuse inattendue : #vue introuvable'); process.exit(1); }
+        html = html.replace('</style>', STYLE_DEMO + STYLE_VISIONNEUSE + '</style>')
+                   .replace('<div id="vue"></div>', '<div id="vue"></div>' + HTML_DEMO);
+        return r.respond({ status: rep.status, contentType: 'text/html; charset=utf-8', body: html });
+    }
     const ancre = 'requestAnimationFrame(boucle);\n</script>';
     if (!html.includes(ancre)) { console.error('page inattendue : la boucle de rendu est introuvable'); process.exit(1); }
     html = html.replace(ancre, `window.__demo = { THREE, camera, controls, renderer, scene, ySol, majSoleil, DATE_SIMULEE,
@@ -1100,6 +1220,32 @@ page.on('request', async r => {
                .replace('<div id="tip"></div>', '<div id="tip"></div>' + HTML_DEMO);
     r.respond({ status: rep.status, contentType: 'text/html; charset=utf-8', body: html });
 });
+
+// --- Visionneuse IFC (film « export ») --------------------------------------------
+// Le fichier téléchargé par la page (dans TRAVAIL) et outils/visionneuse-ifc.html,
+// servis par un petit serveur local, lancé à la demande : la visionneuse lit
+// le fichier par fetch, comme sur n'importe quel serveur.
+const VISIONNEUSE_HTML = path.join(path.dirname(fileURLToPath(import.meta.url)), 'visionneuse-ifc.html');
+let VISIONNEUSE = null;
+let fichierIfc = null;          // le dernier IFC exporté par la page
+async function serveurVisionneuse() {
+    if (VISIONNEUSE) return VISIONNEUSE;
+    const s = http.createServer((q, r) => {
+        const nom = path.basename(decodeURIComponent(new URL(q.url, 'http://x').pathname));
+        const f = nom === 'visionneuse-ifc.html' ? VISIONNEUSE_HTML : path.join(TRAVAIL, nom);
+        if (!fs.existsSync(f)) { r.writeHead(404); return r.end(); }
+        r.writeHead(200, { 'Content-Type': f.endsWith('.html') ? 'text/html; charset=utf-8' : 'application/octet-stream' });
+        fs.createReadStream(f).pipe(r);
+    });
+    await new Promise(ok => s.listen(0, '127.0.0.1', ok));
+    s.unref();
+    return VISIONNEUSE = `http://127.0.0.1:${s.address().port}`;
+}
+if (FORMAT === 'export') {
+    // Les fichiers exportés arrivent dans TRAVAIL, sans boîte de dialogue.
+    const cdp = await page.createCDPSession();
+    await cdp.send('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: TRAVAIL });
+}
 
 // --- Encodage au fil de l'eau ------------------------------------------------
 // Les images partent dans ffmpeg par un tube : 5 000 JPEG ne tiennent pas sur
@@ -1215,8 +1361,10 @@ async function couche(nom) {
     return r.json();
 }
 
-/** Caméra posée sur un cadre : point visé (lon, lat, hauteur au-dessus du sol), distance, azimut, élévation. */
+/** Caméra posée sur un cadre : point visé (lon, lat, hauteur au-dessus du sol), distance, azimut, élévation ;
+ *  dans la visionneuse IFC, point visé en mètres (est, nord) depuis l'origine du fichier. */
 const poserCadre = c => page.evaluate(c => {
+    if (c.est != null) return window.__visionneuse.poser(c);
     const d = window.__demo;
     const x = (c.lon - d.LON0) * d.M_PAR_DEGRE_LON, z = -(c.lat - d.LAT0) * d.M_PAR_DEGRE_LAT;
     const y = d.ySol(c.lon, c.lat) + (c.hauteur || 0);
@@ -1226,7 +1374,8 @@ const poserCadre = c => page.evaluate(c => {
                           z - c.distance * Math.cos(c.azimut * r) * cosE);
 }, c);
 const cadreEntre = (a, b, t) => ({
-    lon: a.lon + (b.lon - a.lon) * t, lat: a.lat + (b.lat - a.lat) * t,
+    ...(b.est != null ? { est: a.est + (b.est - a.est) * t, nord: a.nord + (b.nord - a.nord) * t }
+                      : { lon: a.lon + (b.lon - a.lon) * t, lat: a.lat + (b.lat - a.lat) * t }),
     hauteur: (a.hauteur || 0) + ((b.hauteur || 0) - (a.hauteur || 0)) * t,
     distance: Math.exp(Math.log(a.distance) + (Math.log(b.distance) - Math.log(a.distance)) * t),
     azimut: a.azimut + (b.azimut - a.azimut) * t, elevation: a.elevation + (b.elevation - a.elevation) * t,
@@ -1235,6 +1384,7 @@ let dernierCadre = null;
 
 /** Cadre courant lu sur la caméra (après une orbite, par exemple). */
 const lireCadre = () => page.evaluate(() => {
+    if (window.__visionneuse) return window.__visionneuse.lire();
     const d = window.__demo, t = d.controls.target, p = d.camera.position;
     const v = p.clone().sub(t), dist = v.length();
     return { lon: d.LON0 + t.x / d.M_PAR_DEGRE_LON, lat: d.LAT0 - t.z / d.M_PAR_DEGRE_LAT,
@@ -1549,7 +1699,7 @@ const outils = {
     },
     /** L'infobulle épinglée refermée : sous le carton de fin, elle brouillait les liens. */
     async fermerInfobulle() {
-        await page.evaluate(() => { const t = document.getElementById('tip'); t.style.display = 'none'; t.classList.remove('epingle'); });
+        await page.evaluate(() => { const t = document.getElementById('tip'); if (t) { t.style.display = 'none'; t.classList.remove('epingle'); } });
     },
     /** Le curseur va sur un point de la scène (ou de l'écran) et clique. */
     async cliquerSur(cible, secondes) { await outils.curseurVers(cible, secondes); await outils.clic(); },
@@ -1613,6 +1763,49 @@ const outils = {
             await page.evaluate(dt => window.__pas(dt), 1000 / FPS);
             await new Promise(r => setTimeout(r, 60));
         }
+    },
+    /** Un export de la page : le curseur clique son bouton, le fichier arrive dans TRAVAIL.
+     *  L'écriture tient la page une à deux secondes au premier pas de rendu ; l'horloge
+     *  étant figée, le film n'en voit rien. Rend le fichier et la note de la page. */
+    async exporter(id) {
+        await page.$eval('#' + id, b => b.scrollIntoView({ block: 'nearest' }));
+        await outils.bouton(id);
+        for (let i = 0; i < 300 && await page.$eval('#note-export', e => /Écriture/.test(e.textContent)); i++) await filmer(1 / FPS);
+        const note = await page.$eval('#note-export', e => e.textContent.trim());
+        const fichier = path.join(TRAVAIL, note.split(' : ')[0]);
+        // Chrome écrit dans un .crdownload, renommé une fois le fichier complet.
+        for (let i = 0; i < 600 && !fs.existsSync(fichier); i++) await new Promise(r => setTimeout(r, 100));
+        if (!fs.existsSync(fichier)) throw new Error(`export ${id} : ${fichier} absent — ${note}`);
+        if (fichier.endsWith('.ifc')) fichierIfc = fichier;
+        console.log(`    ${note}`);
+        return { fichier, note };
+    },
+    /** Le dernier IFC exporté, ouvert dans la visionneuse ; l'horloge refigée, l'habillage reposé. */
+    async ouvrirIfc() {
+        const base = await serveurVisionneuse();
+        await page.goto(`${base}/visionneuse-ifc.html?fichier=${encodeURIComponent(path.basename(fichierIfc))}`,
+                        { waitUntil: 'domcontentloaded' });
+        await page.waitForFunction(() => window.__visionneuse && window.__visionneuse.pret, { timeout: 5 * 60 * 1000, polling: 200 });
+        console.log(`  visionneuse : ${fichierIfc}`);
+        lieuCourant = { visionneuse: fichierIfc };
+        dernierCadre = null;
+        curseur = null;
+        await page.evaluate(() => window.__manuel());
+        await page.waitForFunction(() => window.__pret(), { timeout: 5000, polling: 100 });
+        await page.evaluate((l, c) => {
+            document.getElementById('demo-legende').textContent = l;
+            document.getElementById('demo-cartouche').innerHTML = c;
+        }, legende.texte || '', cartoucheCourant);
+    },
+    /** Dans la visionneuse, le curseur clique un objet (son numéro dans le fichier) là où
+     *  rien ne le cache, puis s'écarte pour laisser voir sa surbrillance ; sa fiche attendue. */
+    async cliquerObjet(id, secondes) {
+        const ecran = id != null && await page.evaluate(id => window.__visionneuse.ecranElement(id), id);
+        if (!ecran) throw new Error(`objet ${id} : introuvable ou caché à l'écran`);
+        await outils.cliquerSur({ ecran }, secondes);
+        await page.waitForFunction(id => window.__visionneuse.choisi() === id && document.querySelector('#choix h3'),
+                                   { timeout: 10000, polling: 100 }, id);
+        await outils.curseurVers({ x: ecran.x + fmt.police * 2.5, y: ecran.y + fmt.police * 2 }, 0.5);
     },
     /** Le cartouche des bornes : stations, points de charge, et les classes de puissance. */
     async legendeBornes() {

@@ -1,0 +1,397 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Visionneuse IFC</title>
+<link rel="icon" href="data:,">
+<!--
+  Un regard sur l'export IFC de la page (⬇ IFC 4) qui ne doit rien à la page :
+  le fichier est relu par web-ifc (That Open Company, MPL-2.0), la bibliothèque
+  libre qui lit l'IFC dans un navigateur, et chaque volume affiché est celui
+  qu'elle en tire. Le clic sur un objet donne sa classe et ses propriétés. Elle
+  sert aussi au film « export » (outils/demo-video.mjs).
+
+    python3 -m http.server -d outils 8000
+    http://localhost:8000/visionneuse-ifc.html, puis y glisser un fichier .ifc
+    (ou ?fichier=<adresse du fichier>, servi par le même serveur)
+
+  outils/valider_ifc.py contrôle le schéma et les volumes ; ici, on regarde.
+-->
+<style>
+    /* Tailles en rem : le film (outils/demo-video.mjs) grossit tout d'un coup. */
+    :root { --fond:#1d2026; --bord:#30353d; --texte:#e7e9ec; --pale:#9aa3ad; --accent:#ff9f43; --fiche:26rem; font-size:14px; }
+    html, body { margin:0; height:100%; overflow:hidden; background:var(--fond); color:var(--texte);
+        font:1rem/1.45 system-ui, -apple-system, "Helvetica Neue", sans-serif; }
+    #vue { position:absolute; inset:0 var(--fiche) 0 0; background:linear-gradient(#b9c8d8, #e9eef3 70%); }
+    #vue canvas { display:block; }
+    #fiche { position:absolute; top:0; right:0; bottom:0; width:var(--fiche); box-sizing:border-box; padding:1.3rem 1.4rem;
+        overflow:auto; background:var(--fond); border-left:1px solid var(--bord); }
+    #fiche h1 { margin:0 0 .15rem; font-size:.93rem; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--pale); }
+    #fiche h2 { margin:1.3rem 0 .45rem; font-size:.86rem; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--pale); }
+    #fichier { font-weight:600; word-break:break-all; }
+    .note { color:var(--pale); font-size:.9rem; }
+    table { width:100%; border-collapse:collapse; }
+    td { padding:.2rem 0; vertical-align:top; border-bottom:1px solid var(--bord); }
+    td:last-child { text-align:right; padding-left:.7rem; font-weight:600; word-break:break-word; }
+    .genre td:first-child { display:flex; align-items:center; gap:.6rem; }
+    .pastille { width:.85rem; height:.85rem; border-radius:3px; flex:none; }
+    .classe { font-family:ui-monospace, "SF Mono", Menlo, monospace; font-size:.86rem; color:var(--pale); font-weight:400; }
+    #choix:empty::before { content:"Cliquer un objet pour ses propriétés."; color:var(--pale); }
+    #choix .titre { font-size:1.2rem; font-weight:700; margin:.15rem 0; }
+    #choix h3 { margin:1rem 0 .3rem; font-size:.93rem; color:var(--accent); font-family:ui-monospace, "SF Mono", Menlo, monospace; font-weight:600; }
+    #depot { position:absolute; inset:0 var(--fiche) 0 0; display:flex; align-items:center; justify-content:center;
+        color:#2b3440; font-size:1.2rem; pointer-events:none; }
+    #depot[hidden] { display:none; }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+<div id="vue"></div>
+<div id="depot">Glisser ici un fichier .ifc</div>
+<aside id="fiche">
+    <h1>Visionneuse IFC · web-ifc</h1>
+    <div id="fichier">—</div>
+    <div class="note" id="etat">Chargement de web-ifc…</div>
+    <h2>Repère</h2>
+    <div class="note" id="repere">—</div>
+    <h2>Contenu</h2>
+    <table id="contenu"></table>
+    <h2>Sélection</h2>
+    <div id="choix"></div>
+</aside>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import * as WebIFC from 'https://cdn.jsdelivr.net/npm/web-ifc@0.0.77/web-ifc-api.js';
+
+// --- web-ifc ---------------------------------------------------------------
+// Fil unique : la version à plusieurs fils demande une page isolée
+// (SharedArrayBuffer), qu'un simple serveur de fichiers ne donne pas.
+const ifc = new WebIFC.IfcAPI();
+ifc.SetWasmPath('https://cdn.jsdelivr.net/npm/web-ifc@0.0.77/', true);
+const ifcPret = ifc.Init(undefined, true);
+
+const $ = id => document.getElementById(id);
+const fr = (n, d = 0) => n.toLocaleString('fr-FR', { maximumFractionDigits: d });
+const NOMS_CLASSES = {
+    IFCBUILDINGELEMENTPROXY: 'IfcBuildingElementProxy', IFCGEOGRAPHICELEMENT: 'IfcGeographicElement',
+    IFCBUILDING: 'IfcBuilding', IFCWALL: 'IfcWall', IFCSLAB: 'IfcSlab', IFCROOF: 'IfcRoof', IFCSITE: 'IfcSite',
+};
+const nomClasse = type => { const n = ifc.GetNameFromTypeCode(type); return NOMS_CLASSES[n] || n; };
+const valeur = v => v == null ? null : typeof v === 'object' && 'value' in v ? v.value : v;
+
+// --- three.js ----------------------------------------------------------------
+const vue = $('vue');
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+vue.append(renderer.domElement);
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(40, 1, 1, 30000);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.maxPolarAngle = Math.PI * 0.495;
+scene.add(new THREE.HemisphereLight(0xf4f7fb, 0x7d838b, 1.5));
+const soleil = new THREE.DirectionalLight(0xfff6e8, 2.8);
+soleil.castShadow = true;
+soleil.shadow.mapSize.set(4096, 4096);
+soleil.shadow.bias = -0.0004;
+soleil.shadow.normalBias = 0.6;
+scene.add(soleil, soleil.target);
+new ResizeObserver(() => {
+    renderer.setSize(vue.clientWidth, vue.clientHeight);
+    camera.aspect = vue.clientWidth / vue.clientHeight;
+    camera.updateProjectionMatrix();
+}).observe(vue);
+function boucle() {
+    controls.update();
+    renderer.render(scene, camera);
+    requestAnimationFrame(boucle);
+}
+requestAnimationFrame(boucle);
+
+// --- Lecture ----------------------------------------------------------------
+// Tous les objets dans deux maillages, le terrain à part (il reçoit les
+// ombres sans en porter) : 4 600 objets à Notre-Dame, 20 000 à Gordes,
+// autant d'appels de dessin sinon. Chaque sommet garde l'objet d'où il vient,
+// pour le clic.
+let modele = null, maillages = [], plages = new Map(), choisi = null, surbrillance = null;
+let boite = new THREE.Box3();
+
+async function ouvrir(octets, nom) {
+    await ifcPret;
+    if (modele != null) { ifc.CloseModel(modele); }
+    for (const m of [...maillages, surbrillance]) if (m) { scene.remove(m); m.geometry.dispose(); }
+    maillages = []; plages = new Map(); choisi = null; surbrillance = null; $('choix').innerHTML = '';
+    $('depot').hidden = true;
+    $('fichier').textContent = nom;
+    $('etat').textContent = `Lecture de ${fr(octets.byteLength / 1e6, 1)} Mo…`;
+    await new Promise(r => setTimeout(r, 30));
+    const debut = performance.now();
+    modele = ifc.OpenModel(new Uint8Array(octets), { COORDINATE_TO_ORIGIN: false });
+    const terrains = new Set();
+    const genres = new Map();
+    for (const type of [WebIFC.IFCBUILDINGELEMENTPROXY, WebIFC.IFCGEOGRAPHICELEMENT]) {
+        const ids = ifc.GetLineIDsWithType(modele, type);
+        for (let i = 0; i < ids.size(); i++) {
+            const l = ifc.GetLine(modele, ids.get(i));
+            const terrain = valeur(l.PredefinedType) === 'TERRAIN';
+            if (terrain) terrains.add(l.expressID);
+            const genre = terrain ? 'Terrain' : valeur(l.ObjectType) || nomClasse(type);
+            const g = genres.get(genre) || genres.set(genre, { classe: nomClasse(type), n: 0, couleur: null }).get(genre);
+            g.n++;
+        }
+    }
+    const lots = { objets: [], terrain: [] };
+    const genreDe = new Map();
+    for (const [genre, g] of genres) genreDe.set(genre, g);
+    const m4 = new THREE.Matrix4(), m3 = new THREE.Matrix3(), v = new THREE.Vector3(), c = new THREE.Color();
+    ifc.StreamAllMeshes(modele, mesh => {
+        const id = mesh.expressID;
+        const lot = terrains.has(id) ? lots.terrain : lots.objets;
+        const morceau = { id, positions: [], normales: [], couleurs: [], indices: [] };
+        let base = 0;
+        for (let i = 0; i < mesh.geometries.size(); i++) {
+            const pg = mesh.geometries.get(i);
+            const geo = ifc.GetGeometry(modele, pg.geometryExpressID);
+            const sommets = ifc.GetVertexArray(geo.GetVertexData(), geo.GetVertexDataSize());
+            const index = ifc.GetIndexArray(geo.GetIndexData(), geo.GetIndexDataSize());
+            m4.fromArray(pg.flatTransformation);
+            m3.getNormalMatrix(m4);
+            c.setRGB(pg.color.x, pg.color.y, pg.color.z, THREE.SRGBColorSpace);
+            for (let k = 0; k < sommets.length; k += 6) {
+                v.set(sommets[k], sommets[k + 1], sommets[k + 2]).applyMatrix4(m4);
+                morceau.positions.push(v.x, v.y, v.z);
+                v.set(sommets[k + 3], sommets[k + 4], sommets[k + 5]).applyMatrix3(m3).normalize();
+                morceau.normales.push(v.x, v.y, v.z);
+                morceau.couleurs.push(c.r, c.g, c.b);
+            }
+            for (let k = 0; k < index.length; k++) morceau.indices.push(base + index[k]);
+            base += sommets.length / 6;
+            geo.delete();
+            if (i === 0) {
+                const l = ifc.GetLine(modele, id);
+                const genre = terrains.has(id) ? 'Terrain' : valeur(l.ObjectType) || nomClasse(ifc.GetLineType(modele, id));
+                const g = genreDe.get(genre);
+                if (g && !g.couleur) g.couleur = `#${c.clone().convertLinearToSRGB().getHexString()}`;
+            }
+        }
+        lot.push(morceau);
+    });
+    for (const [nomLot, morceaux] of Object.entries(lots)) {
+        if (!morceaux.length) continue;
+        const nS = morceaux.reduce((t, m) => t + m.positions.length / 3, 0);
+        const nI = morceaux.reduce((t, m) => t + m.indices.length, 0);
+        const pos = new Float32Array(nS * 3), nor = new Float32Array(nS * 3), col = new Float32Array(nS * 3);
+        const idx = new Uint32Array(nI), idsSommets = new Uint32Array(nS);
+        let s = 0, i = 0;
+        for (const m of morceaux) {
+            pos.set(m.positions, s * 3); nor.set(m.normales, s * 3); col.set(m.couleurs, s * 3);
+            idsSommets.fill(m.id, s, s + m.positions.length / 3);
+            for (let k = 0; k < m.indices.length; k++) idx[i + k] = m.indices[k] + s;
+            plages.set(m.id, { lot: nomLot, debut: i, fin: i + m.indices.length });
+            s += m.positions.length / 3; i += m.indices.length;
+        }
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+        geo.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+        geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+        geo.setIndex(new THREE.BufferAttribute(idx, 1));
+        geo.computeBoundingBox(); geo.computeBoundingSphere();
+        const mesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide }));
+        mesh.userData = { lot: nomLot, idsSommets };
+        mesh.castShadow = nomLot === 'objets';
+        mesh.receiveShadow = true;
+        scene.add(mesh);
+        maillages.push(mesh);
+    }
+    boite = new THREE.Box3();
+    for (const m of maillages) boite.union(m.geometry.boundingBox);
+    cadrer();
+    decrire(genres, performance.now() - debut);
+    // Deux images avant de se dire prête : ombres et matériaux compilés.
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    window.__visionneuse.pret = true;
+}
+
+/** Le soleil et sa carte d'ombre sur toute l'emprise, la caméra en vue d'ensemble. */
+function cadrer() {
+    const centre = boite.getCenter(new THREE.Vector3()), taille = boite.getSize(new THREE.Vector3());
+    const r = Math.max(taille.x, taille.z) * 0.75;
+    soleil.target.position.copy(centre);
+    soleil.position.copy(centre).add(new THREE.Vector3(0.45, 0.75, 0.5).normalize().multiplyScalar(r * 2));
+    Object.assign(soleil.shadow.camera, { left: -r, right: r, top: r, bottom: -r, near: 1, far: r * 4.5 });
+    soleil.shadow.camera.updateProjectionMatrix();
+    controls.target.copy(centre);
+    camera.position.copy(centre).add(new THREE.Vector3(0.5, 0.8, 1).normalize().multiplyScalar(r * 1.6));
+}
+
+/** Le fichier, son repère et ce qu'il contient, dans la fiche. */
+function decrire(genres, ms) {
+    const schema = ifc.GetModelSchema(modele);
+    const projet = ifc.GetLineIDsWithType(modele, WebIFC.IFCPROJECT);
+    const nomProjet = projet.size() ? valeur(ifc.GetLine(modele, projet.get(0)).Name) : null;
+    $('etat').textContent = `${schema}${nomProjet ? ` · ${nomProjet}` : ''} · lu en ${fr(ms / 1000, 1)} s`;
+    const crs = ifc.GetLineIDsWithType(modele, WebIFC.IFCPROJECTEDCRS);
+    const conv = ifc.GetLineIDsWithType(modele, WebIFC.IFCMAPCONVERSION);
+    if (crs.size() && conv.size()) {
+        const k = ifc.GetLine(modele, crs.get(0)), m = ifc.GetLine(modele, conv.get(0));
+        $('repere').innerHTML = `<b>${valeur(k.Name)}</b> · ${valeur(k.Description) || ''}<br>`
+            + `origine ${fr(valeur(m.Eastings))} E, ${fr(valeur(m.Northings))} N, ${fr(valeur(m.OrthogonalHeight))} m`
+            + '<br><span class="classe">IfcMapConversion</span>';
+    } else $('repere').textContent = 'Pas de géoréférencement (IfcMapConversion).';
+    $('contenu').innerHTML = [...genres].sort((a, b) => b[1].n - a[1].n).map(([genre, g]) =>
+        `<tr class="genre"><td><span class="pastille" style="background:${g.couleur || '#888'}"></span>`
+        + `<span>${genre}<br><span class="classe">${g.classe}</span></span></td><td>${fr(g.n)}</td></tr>`).join('');
+}
+
+/** La fiche d'un objet : sa classe, son nom, et ses jeux de propriétés tels que lus. */
+async function afficher(id) {
+    choisi = id;
+    if (surbrillance) { scene.remove(surbrillance); surbrillance.geometry.dispose(); surbrillance = null; }
+    if (id == null) { $('choix').innerHTML = ''; return; }
+    const p = plages.get(id), m = maillages.find(x => x.userData.lot === p.lot);
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', m.geometry.attributes.position);
+    geo.setAttribute('normal', m.geometry.attributes.normal);
+    geo.setIndex(new THREE.BufferAttribute(m.geometry.index.array.slice(p.debut, p.fin), 1));
+    surbrillance = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({
+        color: 0xff9f43, emissive: 0x7a3a00, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }));
+    scene.add(surbrillance);
+    const l = ifc.GetLine(modele, id);
+    const lignes = (rangs) => '<table>' + rangs.filter(([, v]) => v != null && v !== '')
+        .map(([n, v]) => `<tr><td>${n}</td><td>${v}</td></tr>`).join('') + '</table>';
+    let html = `<div class="classe">${nomClasse(ifc.GetLineType(modele, id))}</div>`
+        + `<div class="titre">${valeur(l.Name) || '—'}</div>`
+        + (valeur(l.Description) ? `<div class="note">${valeur(l.Description)}</div>` : '')
+        + lignes([['ObjectType', valeur(l.ObjectType)], ['Tag', valeur(l.Tag)], ['GlobalId', valeur(l.GlobalId)]]);
+    for (const pset of await ifc.properties.getPropertySets(modele, id, true)) {
+        html += `<h3>${valeur(pset.Name)}</h3>` + lignes((pset.HasProperties || []).map(q => {
+            const nv = q.NominalValue, x = valeur(nv);
+            const longueur = /LENGTH/i.test((nv && (nv.name || nv.constructor && nv.constructor.name)) || '');
+            return [valeur(q.Name), typeof x === 'number' ? fr(x, longueur ? 2 : 3) + (longueur ? ' m' : '') : x];
+        }));
+    }
+    if (choisi === id) $('choix').innerHTML = html;
+}
+
+// --- Interactions -------------------------------------------------------------
+const rayon = new THREE.Raycaster();
+/** L'objet sous un point de l'écran (pixels de la page), et le point touché. */
+function objetSous(x, y) {
+    const r = renderer.domElement.getBoundingClientRect();
+    rayon.setFromCamera(new THREE.Vector2((x - r.left) / r.width * 2 - 1, -(y - r.top) / r.height * 2 + 1), camera);
+    const t = rayon.intersectObjects(maillages, false)[0];
+    if (!t) return null;
+    return { id: t.object.userData.idsSommets[t.face.a], point: t.point };
+}
+let appui = null;
+renderer.domElement.addEventListener('pointerdown', e => { appui = { x: e.clientX, y: e.clientY }; });
+renderer.domElement.addEventListener('pointerup', e => {
+    if (!appui || Math.hypot(e.clientX - appui.x, e.clientY - appui.y) > 4) return;
+    const o = objetSous(e.clientX, e.clientY);
+    afficher(o ? o.id : null);
+});
+vue.addEventListener('dragover', e => e.preventDefault());
+vue.addEventListener('drop', async e => {
+    e.preventDefault();
+    const f = e.dataTransfer.files[0];
+    if (f) await ouvrir(await f.arrayBuffer(), f.name);
+});
+
+// --- Pour le film (outils/demo-video.mjs) ----------------------------------------
+// Les cadres comme ceux de la page : un point visé (est, nord en mètres depuis
+// l'origine du fichier, hauteur au-dessus d'elle), une distance, un azimut
+// depuis le nord du quadrillage, une élévation.
+const RAD = Math.PI / 180;
+window.__visionneuse = {
+    pret: false,
+    poser(c) {
+        const cosE = Math.cos(c.elevation * RAD);
+        controls.target.set(c.est, c.hauteur || 0, -c.nord);
+        camera.position.set(c.est + c.distance * Math.sin(c.azimut * RAD) * cosE, (c.hauteur || 0) + c.distance * Math.sin(c.elevation * RAD),
+                            -c.nord - c.distance * Math.cos(c.azimut * RAD) * cosE);
+        controls.update();
+    },
+    lire() {
+        const t = controls.target, d = camera.position.clone().sub(t), dist = d.length();
+        return { est: t.x, nord: -t.z, hauteur: t.y, distance: dist,
+                 azimut: Math.atan2(d.x, -d.z) / RAD, elevation: Math.asin(d.y / dist) / RAD };
+    },
+    /** L'objet d'un genre (ObjectType, ou « Terrain ») le plus proche d'un point (est, nord). */
+    plusProche(genre, est, nord) {
+        const o = objetsDuGenre(genre, est, nord).sort((a, b) => a.d - b.d)[0];
+        return o ? o.id : null;
+    },
+    /** Le plus haut objet d'un genre à moins de `rayon` mètres d'un point (est, nord). */
+    plusHaut(genre, est, nord, rayon) {
+        const o = objetsDuGenre(genre, est, nord).filter(o => o.d <= rayon)
+            .sort((a, b) => (b.b.max.y - b.b.min.y) - (a.b.max.y - a.b.min.y))[0];
+        return o ? o.id : null;
+    },
+    /** Le milieu d'un objet : est, nord, et la hauteur au-dessus de l'origine. */
+    centre(id) {
+        const c = boiteDe(id).getCenter(new THREE.Vector3());
+        return { est: c.x, nord: -c.z, hauteur: c.y };
+    },
+    /** Où cliquer un objet à l'écran : un point de sa surface que rien ne cache. */
+    ecranElement(id) {
+        const r = renderer.domElement.getBoundingClientRect();
+        const p = plages.get(id), m = maillages.find(x => x.userData.lot === p.lot);
+        const pos = m.geometry.attributes.position, idx = m.geometry.index.array;
+        const b = boiteDe(id), centre = b.getCenter(new THREE.Vector3());
+        const candidats = [centre, new THREE.Vector3(centre.x, b.max.y * 0.8 + b.min.y * 0.2, centre.z)];
+        for (let k = p.debut; k < p.fin && candidats.length < 60; k += Math.max(3, Math.floor((p.fin - p.debut) / 50) * 3)) {
+            const v = new THREE.Vector3().fromBufferAttribute(pos, idx[k]);
+            candidats.push(v.lerp(centre, 0.15));
+        }
+        for (const v of candidats) {
+            const e = v.clone().project(camera);
+            if (Math.abs(e.x) > 0.95 || Math.abs(e.y) > 0.95) continue;
+            const x = r.left + (e.x + 1) / 2 * r.width, y = r.top + (1 - e.y) / 2 * r.height;
+            const o = objetSous(x, y);
+            if (o && o.id === id) return { x, y };
+        }
+        return null;
+    },
+    choisi: () => choisi,
+    choisir: id => afficher(id),
+};
+/** Les objets d'un genre, leur boîte, et la distance de leur milieu au point (est, nord). */
+function objetsDuGenre(genre, est, nord) {
+    const r = [];
+    for (const [id, p] of plages) {
+        const g = p.lot === 'terrain' ? 'Terrain' : valeur(ifc.GetLine(modele, id).ObjectType);
+        if (g !== genre) continue;
+        const b = boiteDe(id);
+        r.push({ id, b, d: Math.hypot((b.min.x + b.max.x) / 2 - est, -(b.min.z + b.max.z) / 2 - nord) });
+    }
+    return r;
+}
+function boiteDe(id) {
+    const p = plages.get(id), m = maillages.find(x => x.userData.lot === p.lot);
+    const pos = m.geometry.attributes.position, idx = m.geometry.index.array, b = new THREE.Box3(), v = new THREE.Vector3();
+    for (let k = p.debut; k < p.fin; k++) b.expandByPoint(v.fromBufferAttribute(pos, idx[k]));
+    return b;
+}
+
+const adresse = new URLSearchParams(location.search).get('fichier');
+if (adresse) {
+    const rep = await fetch(adresse);
+    if (!rep.ok) $('etat').textContent = `${adresse} : HTTP ${rep.status}`;
+    else await ouvrir(await rep.arrayBuffer(), decodeURIComponent(adresse.split('/').pop()));
+} else {
+    await ifcPret;
+    $('etat').textContent = 'web-ifc 0.0.77 prêt.';
+}
+</script>
+</body>
+</html>
