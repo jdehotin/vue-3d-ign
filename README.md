@@ -379,18 +379,18 @@ des scènes construites en septembre 2026 ; ils suivent les mises à jour de l'I
 
 | Lieu | Ce qu'il montre |
 |---|---|
-| [Gordes, village](http://localhost:8080/?lat=43.9116&lon=5.2003) | Village perché : 84 m de relief sur l'emprise, 242 m dans l'anneau, 2 160 houppiers |
-| [Château de Versailles, cour](http://localhost:8080/?lat=48.8049&lon=2.1204) | Un monument plus grand que la scène : coupé à son bord, le château garde la surface mesurée de ses toits et ses cours ouvertes ; 146 arbres des jardins |
-| [Rocamadour, basilique](http://localhost:8080/?lat=44.7994&lon=1.6177) | Sanctuaire accroché à la falaise : 130 m de dénivelé sous les bâtiments |
-| [Chamonix, église](http://localhost:8080/?lat=45.9232&lon=6.8733) | Fond de vallée : l'anneau monte de 624 m sur les pentes alentour |
-| [Abbaye du Mont-Saint-Michel](http://localhost:8080/?lat=48.6360&lon=-1.5114) | Le rocher et sa baie. Hors LiDAR HD : l'abbaye est reprise au modèle 3D d'OpenStreetMap, flèche comprise |
-| [Saint-Malo, cathédrale](http://localhost:8080/?lat=48.6495&lon=-2.0256) | Ville close dense (249 toits mesurés) ; la mer laisse un tiers de l'anneau vide |
-| [Cité de Carcassonne](http://localhost:8080/?lat=43.2065&lon=2.3640) | 30 murs de rempart, de 3 à 25 m, et 291 bâtiments serrés sur 44 m de relief |
-| [Notre-Dame de Paris](http://localhost:8080/?lat=48.8530&lon=2.3499) | L'île de la Cité et 807 arbres des quais et des squares, la cathédrale reprise à OpenStreetMap ; ni arbre dans la Seine, ni grue de chantier prise pour un arbre de 88 m |
-| [Cathédrale de Strasbourg](http://localhost:8080/?lat=48.5819&lon=7.7510) | Tissu médiéval en plaine : toits LiDAR à plusieurs corps, et la cathédrale reprise à OpenStreetMap |
-| [Château de Chambord](http://localhost:8080/?lat=47.6162&lon=1.5171) | Le château isolé dans son domaine boisé : donjon et tours mesurés au LiDAR au-dessus des terrasses, enceinte sous sa photo aérienne, 475 houppiers |
-| [Pont du Gard](http://localhost:8080/?lat=43.9475&lon=4.5350) | Deux ponts réduits à leur tablier, faute d'arches dans la BD TOPO : l'aqueduc à 48 m du Gardon, le pont routier à 21 m |
-| [Raffinerie de Feyzin, parc de stockage](http://localhost:8080/?lat=45.6734&lon=4.8409) | 30 citernes à leur hauteur BD TOPO, dont 14 que le LiDAR ne voit pas ; hors du sursol, elles ne se couvrent plus de faux arbres (82 houppiers et masses, contre 545) |
+| [Gordes, village](https://vue-3d-ign.kysoe.com/?lat=43.9116&lon=5.2003) | Village perché : 84 m de relief sur l'emprise, 242 m dans l'anneau, 2 160 houppiers |
+| [Château de Versailles, cour](https://vue-3d-ign.kysoe.com/?lat=48.8049&lon=2.1204) | Un monument plus grand que la scène : coupé à son bord, le château garde la surface mesurée de ses toits et ses cours ouvertes ; 146 arbres des jardins |
+| [Rocamadour, basilique](https://vue-3d-ign.kysoe.com/?lat=44.7994&lon=1.6177) | Sanctuaire accroché à la falaise : 130 m de dénivelé sous les bâtiments |
+| [Chamonix, église](https://vue-3d-ign.kysoe.com/?lat=45.9232&lon=6.8733) | Fond de vallée : l'anneau monte de 624 m sur les pentes alentour |
+| [Abbaye du Mont-Saint-Michel](https://vue-3d-ign.kysoe.com/?lat=48.6360&lon=-1.5114) | Le rocher et sa baie. Hors LiDAR HD : l'abbaye est reprise au modèle 3D d'OpenStreetMap, flèche comprise |
+| [Saint-Malo, cathédrale](https://vue-3d-ign.kysoe.com/?lat=48.6495&lon=-2.0256) | Ville close dense (249 toits mesurés) ; la mer laisse un tiers de l'anneau vide |
+| [Cité de Carcassonne](https://vue-3d-ign.kysoe.com/?lat=43.2065&lon=2.3640) | 30 murs de rempart, de 3 à 25 m, et 291 bâtiments serrés sur 44 m de relief |
+| [Notre-Dame de Paris](https://vue-3d-ign.kysoe.com/?lat=48.8530&lon=2.3499) | L'île de la Cité et 807 arbres des quais et des squares, la cathédrale reprise à OpenStreetMap ; ni arbre dans la Seine, ni grue de chantier prise pour un arbre de 88 m |
+| [Cathédrale de Strasbourg](https://vue-3d-ign.kysoe.com/?lat=48.5819&lon=7.7510) | Tissu médiéval en plaine : toits LiDAR à plusieurs corps, et la cathédrale reprise à OpenStreetMap |
+| [Château de Chambord](https://vue-3d-ign.kysoe.com/?lat=47.6162&lon=1.5171) | Le château isolé dans son domaine boisé : donjon et tours mesurés au LiDAR au-dessus des terrasses, enceinte sous sa photo aérienne, 475 houppiers |
+| [Pont du Gard](https://vue-3d-ign.kysoe.com/?lat=43.9475&lon=4.5350) | Deux ponts réduits à leur tablier, faute d'arches dans la BD TOPO : l'aqueduc à 48 m du Gardon, le pont routier à 21 m |
+| [Raffinerie de Feyzin, parc de stockage](https://vue-3d-ign.kysoe.com/?lat=45.6734&lon=4.8409) | 30 citernes à leur hauteur BD TOPO, dont 14 que le LiDAR ne voit pas ; hors du sursol, elles ne se couvrent plus de faux arbres (82 houppiers et masses, contre 545) |
 
 Chaque premier chargement construit la scène, en quelques secondes.
 
