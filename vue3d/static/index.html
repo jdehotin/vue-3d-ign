@@ -1067,22 +1067,30 @@ document.getElementById('form-point').addEventListener('submit', async e => {
 // nommé le plus proche : il est trop souvent anodin — « Poste de gaz » à 48 m
 // du point de Gardanne, « Poste de Gordes » avant le château, « Clocher » à
 // Notre-Dame. Sans réponse, les coordonnées suffisent.
+// L'onglet prend l'adresse postale du point, la plus proche selon le même
+// géocodage : il n'en rend pas au-delà de 200 à 300 m (au château de
+// Chambord, 190 m à 150 m au nord, rien à 300 m), et sur quinze lieux publics
+// elle est à 2 à 126 m du point (l'Arc de Triomphe, Versailles). Sans
+// adresse, en forêt ou sur l'eau, il prend le nom du panneau.
 (async () => {
     const nomPoint = document.getElementById('nom-point');
-    let nom = null;
+    let nom = null, adresse = null;
     try {
         const l = JSON.parse(sessionStorage.getItem(CLE_LIEU) || 'null');
         if (l && Math.abs(l.lat - LAT0) < 1e-7 && Math.abs(l.lon - LON0) < 1e-7) nom = l.nom;
     } catch (e) { /* stockage refusé ou illisible */ }
-    if (!nom) {
-        try {
-            const r = await fetch(`${URL_GEOCODAGE}/reverse?` + new URLSearchParams({
-                lat: LAT0, lon: LON0, index: 'address', limit: 1 }));
-            const p = r.ok ? (((await r.json()).features || [])[0] || {}).properties : null;
-            if (p && p.city) nom = p.postcode ? `${p.city} (${p.postcode})` : p.city;
-        } catch (e) { /* le nom n'est qu'un confort */ }
-    }
+    try {
+        const r = await fetch(`${URL_GEOCODAGE}/reverse?` + new URLSearchParams({
+            lat: LAT0, lon: LON0, index: 'address', limit: 1 }));
+        const p = r.ok ? (((await r.json()).features || [])[0] || {}).properties : null;
+        if (p && p.city) {
+            const commune = p.postcode ? `${p.city} (${p.postcode})` : p.city;
+            nom = nom || commune;
+            adresse = p.name && p.name !== p.city ? `${p.name}, ${[p.postcode, p.city].filter(Boolean).join(' ')}` : commune;
+        }
+    } catch (e) { /* le nom n'est qu'un confort */ }
     if (nom) { nomPoint.textContent = nom; nomPoint.hidden = false; }
+    if (adresse || nom) document.title = `${adresse || nom} · Vue 3D IGN`;
 })();
 const selectZone = document.getElementById('in-zone');
 // Une zone hors des choix proposés (?zone=850) s'ajoute à la liste.

@@ -15,6 +15,11 @@ messages de commit et dans les commentaires des modules.
 
 ### Ajouté
 
+- **L'onglet porte l'adresse postale du point** : « 1 Place du Château,
+  84220 Gordes · Vue 3D IGN ». La plus proche selon le géocodage inverse de
+  l'IGN, qui n'en rend pas au-delà de 200 à 300 m : sur quinze lieux publics,
+  elle est à 2 à 126 m du point. En forêt ou sur l'eau, sans adresse,
+  l'onglet prend le nom du panneau, ou reste « Vue 3D IGN ».
 - **Les bornes de recharge pour véhicules électriques**, au clic sur leur
   bouton, comme les DPE : une borne par station, et au-dessus une pastille à
   éclair teinte de sa puissance la plus haute (jusqu'à 22 kW, 23 à 149 kW,
