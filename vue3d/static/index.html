@@ -90,6 +90,16 @@
                        text-shadow:0 2px 6px #000, 0 0 2px #000; }
         #jeu-message small { display:block; font-size:14px; font-weight:500; }
         #jeu-message[hidden] { display:none; }
+        /* L'indice, par moments : de quel côté tourner, la flèche vers lui,
+           l'avant du drone en haut. Sous le titre d'une manche, qu'il suit. */
+        #jeu-indice { position:absolute; left:16px; right:16px; top:30%; z-index:4; pointer-events:none;
+                      display:flex; flex-direction:column; align-items:center; gap:2px; text-align:center;
+                      color:#fff; font:700 clamp(17px, 4.4vw, 22px)/1.3 system-ui, sans-serif;
+                      text-shadow:0 2px 6px #000, 0 0 2px #000; }
+        #jeu-indice[hidden] { display:none; }
+        #jeu-indice svg { width:56px; height:56px; fill:#ff5a48; stroke:#fff; stroke-width:1.2;
+                          filter:drop-shadow(0 2px 4px rgba(0,0,0,.6)); }
+        #jeu-indice small { font-size:14px; font-weight:500; }
         /* Le seul à se cliquer : #haut-gauche laisse passer la souris. */
         .conseil { pointer-events:auto; flex-wrap:wrap; }
         .conseil button { background:none; border:0; padding:0; font:inherit; cursor:pointer; }
@@ -509,6 +519,10 @@
         </div>
         <div id="attente" hidden></div>
         <div id="jeu-message" role="status" hidden></div>
+        <div id="jeu-indice" role="status" hidden>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l8 9h-5v11H9V11H4z"/></svg>
+            <span></span><small></small>
+        </div>
         <div id="boussole" title="Orientation">
             <div class="rose" id="rose">
                 <div class="aiguille"></div>
@@ -10061,20 +10075,29 @@ const JEU_CADENCE_S = 0.25;
 const JEU_RAYON_TOUCHE = 1.6;               // m de la trajectoire à son buste
 const JEU_RAYON_SOUFFLE = 3;                // m du point d'impact
 const JEU_ENTRE_MANCHES_S = 5;
+// Un indice au milieu de la vue, par moments : la flèche du bandeau, en
+// haut à gauche, passait inaperçue. Le premier après le titre de la manche
+// (4 s), puis toutes les 15 s, affiché 4 s.
+const JEU_INDICE_PREMIER_S = 5;
+const JEU_INDICE_S = 15;
+const JEU_INDICE_DUREE_S = 4;
+const JEU_SOUS_LE_DRONE_M = 20;             // plus près, l'indice ne dit plus de côté
 const CLE_RECORD_JEU = 'vue3d.jeu-record';
 const AIDE_JEU = AU_DOIGT
-    ? 'Traque : la flèche rouge, en haut à gauche, pointe vers lui · TIR, ou toucher la vue, pour tirer · '
-      + 'le bouton Jeu pour arrêter'
-    : 'Traque : la flèche rouge, en haut à gauche, pointe vers lui · F tire sous le réticule, '
-      + 'un clic là où il désigne · flèches, Q D, espace, Maj pour voler · Échap pour sortir';
+    ? `Traque : un indice toutes les ${JEU_INDICE_S} s, la flèche rouge en haut à gauche tout le temps · `
+      + 'TIR, ou toucher la vue, pour tirer · le bouton Jeu pour arrêter'
+    : `Traque : un indice toutes les ${JEU_INDICE_S} s, la flèche rouge en haut à gauche tout le temps · `
+      + 'F tire sous le réticule, un clic là où il désigne · flèches, Q D, espace, Maj pour voler · '
+      + 'Échap pour sortir';
 
 const btnJeu = document.getElementById('t-jeu');
 const hudJeu = document.getElementById('hud-jeu');
 const messageJeu = document.getElementById('jeu-message');
+const indiceJeu = document.getElementById('jeu-indice');
 const padTir = document.getElementById('pad-tir');
 const jeu = { actif: false, graphe: null, coureur: null, tirs: [], effets: [],
               manche: 0, touches: 0, tirsManche: 0, debut: 0, dernierTir: -Infinity, relance: null,
-              hud: 0, vise: null };
+              hud: 0, vise: null, prochainIndice: Infinity, finIndice: 0 };
 const groupeJeu = new THREE.Group();
 groupeJeu.visible = false;
 scene.add(groupeJeu);
@@ -10550,9 +10573,26 @@ function souffle(point, touche) {
 let audioJeu = null;
 function son(quoi) {
     try {
+        // Le bip d'un indice peut précéder tout geste (?jeu=1) : créé alors,
+        // le contexte resterait suspendu, et les tirs muets ensuite.
+        if (!audioJeu && navigator.userActivation && !navigator.userActivation.hasBeenActive) return;
         audioJeu = audioJeu || new AudioContext();
+        if (audioJeu.state === 'suspended') audioJeu.resume();
         const t = audioJeu.currentTime, volume = audioJeu.createGain();
         volume.connect(audioJeu.destination);
+        if (quoi === 'indice') {
+            for (const [debut, frequence] of [[0, 660], [0.11, 990]]) {
+                const o = audioJeu.createOscillator();
+                const g = audioJeu.createGain();
+                o.frequency.value = frequence;
+                g.gain.setValueAtTime(0.06, t + debut);
+                g.gain.exponentialRampToValueAtTime(0.001, t + debut + 0.09);
+                o.connect(g).connect(volume);
+                o.start(t + debut);
+                o.stop(t + debut + 0.1);
+            }
+            return;
+        }
         if (quoi === 'tir') {
             const o = audioJeu.createOscillator();
             o.type = 'square';
@@ -10585,10 +10625,47 @@ function annoncer(html, duree) {
     finAnnonce = setTimeout(() => { messageJeu.hidden = true; }, duree * 1000);
 }
 
+const DIRECTIONS_CARDINALES = ['au nord', 'au nord-est', "à l'est", 'au sud-est',
+                               'au sud', 'au sud-ouest', "à l'ouest", 'au nord-ouest'];
+/** Le côté où tourner, d'après l'angle du drone vers lui, en degrés, positif à droite. */
+function coteIndice(relatif) {
+    const a = Math.abs(relatif), cote = relatif > 0 ? 'à droite' : 'à gauche';
+    if (a < 20) return 'Tout droit';
+    if (a < 60) return `Un peu ${cote}`;
+    if (a < 120) return `Tournez ${cote}`;
+    if (a < 160) return `Derrière vous, ${cote}`;
+    return 'Demi-tour';
+}
+
+/**
+ * L'indice : de quel côté tourner, sa distance, le point cardinal, ce qu'il
+ * fait. Recalculé tant qu'il est affiché : la flèche suit le drone qui tourne.
+ * Le texte n'est réécrit que s'il change, la zone étant lue par les lecteurs
+ * d'écran.
+ */
+function majIndice(c) {
+    const dx = c.xy[0] - drone.position.x, dz = -c.xy[1] - drone.position.z;
+    const distance = Math.hypot(dx, dz), azimut = Math.atan2(dx, -dz) * 180 / Math.PI;
+    const relatif = ((azimut - drone.cap * 180 / Math.PI) % 360 + 540) % 360 - 180;
+    const dessous = distance < JEU_SOUS_LE_DRONE_M;
+    const fleche = indiceJeu.querySelector('svg');
+    // Pas `hidden` : une propriété d'HTMLElement, sans effet sur un SVGElement.
+    fleche.style.display = dessous ? 'none' : '';
+    fleche.style.transform = `rotate(${relatif.toFixed(0)}deg)`;
+    const etat = c.fuite ? ' · il détale' : c.pause > 0 ? ' · il se cache' : ' · il court';
+    const titre = dessous ? 'Il est juste en dessous !' : coteIndice(relatif);
+    const detail = dessous ? `descendez${etat}`
+        : `à ${Math.round(distance / 10) * 10} m ${DIRECTIONS_CARDINALES[Math.round(((azimut + 360) % 360) / 45) % 8]}${etat}`;
+    const [span, small] = [indiceJeu.querySelector('span'), indiceJeu.querySelector('small')];
+    if (span.textContent !== titre) span.textContent = titre;
+    if (small.textContent !== detail) small.textContent = detail;
+}
+
 function toucher(point) {
     const c = jeu.coureur;
     c.touche = true;
     jeu.touches++;
+    indiceJeu.hidden = true;
     souffle(point, true);
     const duree = (performance.now() - jeu.debut) / 1000;
     let record = null;
@@ -10633,8 +10710,9 @@ function nouvelleManche() {
     jeu.tirsManche = 0;
     jeu.relance = null;
     jeu.debut = performance.now();
+    jeu.prochainIndice = jeu.debut + JEU_INDICE_PREMIER_S * 1000;
     annoncer(`Retrouvez Vladimir Poutine<small>il court sur les routes, entre les véhicules · `
-             + `la flèche rouge pointe vers lui</small>`, 4);
+             + `un indice toutes les ${JEU_INDICE_S} s</small>`, 4);
 }
 
 function activerJeu() {
@@ -10668,7 +10746,7 @@ function arreterJeu() {
     jeu.tirs = [];
     jeu.effets = [];
     jeu.coureur = null;
-    hudJeu.hidden = messageJeu.hidden = padTir.hidden = true;
+    hudJeu.hidden = messageJeu.hidden = indiceJeu.hidden = padTir.hidden = true;
     if (droneActif) aideVue.textContent = AIDE_DRONE;
 }
 
@@ -10725,8 +10803,18 @@ function majJeu(dt, maintenant) {
         return false;
     });
 
+    if (!c.touche && maintenant > jeu.prochainIndice) {
+        jeu.prochainIndice = maintenant + JEU_INDICE_S * 1000;
+        jeu.finIndice = maintenant + JEU_INDICE_DUREE_S * 1000;
+        majIndice(c);
+        indiceJeu.hidden = false;
+        son('indice');
+    }
+    if (!indiceJeu.hidden && maintenant > jeu.finIndice) indiceJeu.hidden = true;
+
     if (maintenant - jeu.hud > 150) {
         jeu.hud = maintenant;
+        if (!indiceJeu.hidden) majIndice(c);
         const dx = c.xy[0] - drone.position.x, dz = -c.xy[1] - drone.position.z;
         const relatif = (Math.atan2(dx, -dz) - drone.cap) * 180 / Math.PI;
         const chrono = Math.floor((maintenant - jeu.debut) / 1000);

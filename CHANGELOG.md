@@ -19,12 +19,15 @@ messages de commit et dans les commentaires des modules.
   scène un petit bonhomme, Vladimir Poutine en figurine, qui court sur les
   routes BD TOPO de véhicule en véhicule : il en choisit un à 30 à 150 m par
   la route, y va par le plus court chemin, s'y cache quelques secondes, et
-  détale quand le drone approche à moins de 45 m. Une flèche et sa distance
-  disent où il est ; **F**, ou **TIR** au doigt, tire sous le réticule rouge,
-  un clic ou un toucher tire là où il désigne. Touché, il tombe, une
-  nouvelle manche commence 5 s plus tard, loin du drone ; le meilleur temps
-  est gardé dans le navigateur. `?jeu=1` ouvre la page dans la traque, drone
-  décollé. À Gordes, il reste à 16 m d'un véhicule en médiane, contre 132 m
+  détale quand le drone approche à moins de 45 m. Toutes les 15 s, un indice
+  au milieu de la vue dit de quel côté tourner (« Tournez à droite »,
+  « Demi-tour »…), avec sa distance, le point cardinal, s'il court ou se
+  cache, une grande flèche et un bip ; la petite flèche du bandeau, en haut
+  à gauche, passait inaperçue. **F**, ou **TIR** au doigt, tire sous le
+  réticule rouge, un clic ou un toucher tire là où il désigne. Touché, il
+  tombe, une nouvelle manche commence 5 s plus tard, loin du drone ; le
+  meilleur temps est gardé dans le navigateur. `?jeu=1` ouvre la page dans
+  la traque, drone décollé. À Gordes, il reste à 16 m d'un véhicule en médiane, contre 132 m
   au hasard des carrefours. Rien dans la scène ni dans le cache ; sans la
   couche des véhicules, il court au hasard des routes.
 - **Une zone de 2 000 m**, par `&zone=2000` dans l'URL ; la
