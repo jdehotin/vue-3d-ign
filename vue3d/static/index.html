@@ -507,7 +507,7 @@
                 </svg>
             </button>
             <button type="button" id="t-moi" class="bouton-vue" aria-label="Ma position"
-                    title="Ma position : un repère dans la scène, suivi en continu ; cliquer à nouveau pour arrêter">
+                    title="Ma position : un repère dans la scène, suivi en continu ; à nouveau, la scène recentrée si vous en êtes sorti, sinon le suivi arrêté">
                 <svg viewBox="0 0 24 24" aria-hidden="true">
                     <circle cx="12" cy="12" r="6.5"/><circle cx="12" cy="12" r="2"/>
                     <path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3"/>
@@ -567,7 +567,7 @@
                         <div><b>Survoler en drone</b><span data-doigt="Le bouton drone, à droite : les flèches à l'écran pour avancer, tourner, monter, descendre ; le même bouton pour sortir."
                             data-souris="Le bouton drone, à droite : ↑ ↓ avancer, ← → tourner, Q D glisser, espace monter, Maj descendre ; Échap pour sortir."></span></div></li>
                     <li><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="6.5"/><circle cx="12" cy="12" r="2"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3"/></svg>
-                        <div><b>Ma position</b><span>Le bouton cible, à droite : vous dans la scène, suivi en continu.</span></div></li>
+                        <div><b>Ma position</b><span>Le bouton cible, à droite : vous dans la scène, suivi en continu ; sorti de la scène, le même bouton la recentre sur vous.</span></div></li>
                 </ul>
                 <footer>
                     <span>Ce guide se rouvre par le bouton <b>?</b> à droite de la vue.</span>
@@ -7157,7 +7157,7 @@ const moi = {
         new THREE.CylinderGeometry(0.14, 0.14, 12, 8),
         new THREE.MeshStandardMaterial({ color: BLEU_POSITION, transparent: true, opacity: 0.55 })),
     cercle: null,
-    lon: null, lat: null, precision: null, x: 0, y: 0,
+    lon: null, lat: null, precision: null, x: 0, y: 0, dehors: false,
 };
 moi.point.castShadow = true;
 groupePosition.add(moi.point, moi.tige);
@@ -7206,6 +7206,8 @@ function majPosition(coords) {
         ? '± ' + Math.round(moi.precision) + ' m' : '—';
     document.getElementById('m-dist').textContent = dist >= 1000
         ? (dist / 1000).toFixed(1) + ' km' : Math.round(dist) + ' m';
+    // Hors de la scène, cercle de précision compris : le bouton la recentre.
+    moi.dehors = distanceAEmprise(moi.lon, moi.lat) > (moi.precision || 0);
     const note = document.getElementById('m-note');
     if (distanceAEmprise(moi.lon, moi.lat) > 0) {
         // Toutes les couches dérivent du centre calculé côté serveur : le seul
@@ -7256,16 +7258,31 @@ let suiviPosition = null;   // identifiant du watchPosition en cours
 // n'annonce pas une attente.
 const ANNONCE_MOI_S = 8;
 let effacerAnnonceMoi = null;
-function annoncerMoi(texte, enCours = false) {
-    document.getElementById('m-note').textContent = texte;
+function annoncerMoi(texte, enCours = false, auPanneau = true) {
+    if (auPanneau) document.getElementById('m-note').textContent = texte;
     clearTimeout(effacerAnnonceMoi);
     etatCouche('etat-moi', texte, enCours);
     if (texte && !enCours) effacerAnnonceMoi = setTimeout(() => etatCouche('etat-moi', null), ANNONCE_MOI_S * 1000);
 }
 
+// Sortie de la scène pendant le suivi, dite sur la vue, là où est le bouton :
+// le panneau, qui le disait seul, est replié sur un petit écran.
+const annoncerSortie = () => annoncerMoi(
+    "Hors de la scène chargée : le bouton de position la recentre ici.", false, false);
+
 btnMoi.addEventListener('click', () => {
     if (suiviPosition === null) {
         demarrerSuivi();
+        return;
+    }
+    // Suivi en cours, position sortie de la scène : le bouton la recentre
+    // ici, et le suivi reprend après le rechargement. Il arrêtait le suivi,
+    // et la scène restait où elle était : dans une Tesla en marche, le
+    // 16 octobre 2026, rappuyer pour se retrouver n'y changeait rien. En
+    // voiture, on sort d'une zone de 1 000 m en moins d'une minute.
+    if (moi.dehors) {
+        annoncerMoi("Recentrage sur votre position…", true);
+        location.assign(urlRecentree());
         return;
     }
     navigator.geolocation.clearWatch(suiviPosition);
@@ -7275,7 +7292,12 @@ btnMoi.addEventListener('click', () => {
     annoncerMoi("Suivi arrêté.");
 });
 
-function demarrerSuivi() {
+/**
+ * Allume le suivi. Son premier relevé hors de la scène la recentre, sauf à la
+ * reprise qui suit un recentrage (`recentrer` faux) : un relevé encore hors
+ * de la scène y bouclerait. Un appui sur le bouton recentre toujours.
+ */
+function demarrerSuivi(recentrer = true) {
     document.getElementById('sec-moi').hidden = false;
     if (!navigator.geolocation) {
         annoncerMoi("Ce navigateur ne propose pas de géolocalisation.");
@@ -7293,6 +7315,7 @@ function demarrerSuivi() {
     let premiere = true;
     suiviPosition = navigator.geolocation.watchPosition(
         pos => {
+            const etaitDehors = moi.dehors;
             majPosition(pos.coords);
             groupePosition.visible = true;
             if (premiere) {
@@ -7301,17 +7324,20 @@ function demarrerSuivi() {
                 // la page se recentre sur soi, une seule fois. Pas à chaque
                 // relevé — on bouge en marchant, et chaque recentrage relance
                 // une construction de plusieurs secondes.
-                if (!RELANCE_MOI && distanceAEmprise(moi.lon, moi.lat) > (moi.precision || 0)) {
+                if (recentrer && moi.dehors) {
                     annoncerMoi("Hors de la scène : recentrage sur votre position…", true);
                     location.assign(urlRecentree());
                     return;
                 }
-                // Le détail (précision, hors de la scène) reste au panneau.
+                // Le détail (précision) reste au panneau.
                 clearTimeout(effacerAnnonceMoi);
                 etatCouche('etat-moi', null);
                 cadrerSurMoi();
                 btnMoi.disabled = false;
                 btnMoi.classList.add('on');
+                if (moi.dehors) annoncerSortie();
+            } else if (moi.dehors && !etaitDehors) {
+                annoncerSortie();
             }
         },
         err => {
@@ -7329,7 +7355,7 @@ function demarrerSuivi() {
 
 // Page rechargée par un recentrage : le suivi reprend une fois la scène
 // arrivée — son cadrage tombe alors sur la position, centre de la page.
-if (RELANCE_MOI) chargementArtefact.then(demarrerSuivi);
+if (RELANCE_MOI) chargementArtefact.then(() => demarrerSuivi(false));
 
 // --- Textures procédurales ------------------------------------------------
 // Générées en DataTexture et non sur un canvas : le tableau de pixels se

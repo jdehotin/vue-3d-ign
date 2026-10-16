@@ -204,6 +204,13 @@ messages de commit et dans les commentaires des modules.
 
 ### Corrigé
 
+- **« Ma position » recentre la scène quand on en est sorti.** Rappuyer sur
+  le bouton pendant le suivi l'arrêtait, et la scène restait où elle était :
+  dans une Tesla en marche, on ne se retrouvait plus. Hors de la scène, le
+  bouton la recentre désormais sur la position, et la vue annonce la
+  sortie ; dans la scène, il arrête le suivi comme avant. Et une page déjà
+  recentrée une fois ne se recentrait plus jamais, même au bouton rallumé :
+  seule la reprise automatique qui suit un recentrage s'en abstient.
 - **Le pincement à deux doigts zoome de nouveau, sur téléphone comme sur
   l'écran d'une Tesla.** Pour remplacer la molette d'OrbitControls (un
   facteur fixe par événement, qu'un pavé tactile compose jusqu'à faire
