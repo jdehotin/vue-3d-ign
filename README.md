@@ -798,6 +798,11 @@ node outils/demo-video.mjs readme      # docs/demo/demo-readme.gif, celui ci-des
 node outils/demo-video.mjs foncier     # docs/demo/demo-foncier.mp4 (1080×1080, DPE et ventes à Honfleur, zone de 1 000 m, en zooms)
 node outils/demo-video.mjs industrie   # docs/demo/demo-industrie.mp4 (1080×1080, trois sites industriels, BD TOPO puis LiDAR HD)
 MUSIQUE=chant.mp3 node outils/demo-video.mjs gadzarts   # docs/demo/demo-gadzarts.mp4 (1080×1080, les huit campus Arts et Métiers)
+# La série « fonctionnalités », un film par fonction, carré (LinkedIn) ou paysage (YouTube) :
+node outils/demo-video.mjs lidar carre        # docs/demo/demo-lidar-carre.mp4 — LiDAR HD, à Chambord
+node outils/demo-video.mjs recherche paysage  # docs/demo/demo-recherche-paysage.mp4 — recherche et recentrage, Versailles et Paris
+#   dpe-dvf (La Rochelle), drone (lac d’Annecy), bornes (Arc de Triomphe),
+#   vehicules (Saint-Tropez, détecteur requis), soleil (Chamonix)
 ```
 
 Le film `foncier` n'a besoin d'aucun détecteur, et ne montre des DPE et des
