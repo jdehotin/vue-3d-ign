@@ -171,7 +171,8 @@
         /* Épinglée par un clic : elle ne suit plus la souris et ses liens se cliquent. */
         #tip.epingle { pointer-events:auto; }
         /* Commandes de la vue, en colonne sous la boussole : la navigation,
-           pas l'affichage. Centrées sous elle (64 px, à 14 px du bord). */
+           et un seul réglage de l'affichage, le nuage LiDAR, aussi au panneau.
+           Centrées sous elle (64 px, à 14 px du bord). */
         .bouton-vue { width:40px; height:40px; padding:0; border-radius:50%; display:flex;
                       align-items:center; justify-content:center; cursor:pointer;
                       background:rgba(31,35,40,.85); border:1px solid var(--line); color:var(--text); }
@@ -182,6 +183,7 @@
         .bouton-vue:disabled { cursor:wait; opacity:.6; }
         .bouton-vue svg { width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.8;
                           stroke-linecap:round; stroke-linejoin:round; }
+        .bouton-vue.texte { font:600 10px/1 system-ui, sans-serif; letter-spacing:.02em; }
         #nav-vue { position:absolute; top:88px; right:26px; z-index:3; display:flex;
                    flex-direction:column; gap:8px; }
         .pastille-borne { display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:6px; }
@@ -513,6 +515,8 @@
                     <path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3"/>
                 </svg>
             </button>
+            <button type="button" id="v-nuage" class="bouton-vue texte" hidden aria-label="Nuage LiDAR"
+                    title="Nuage LiDAR : tout le bâti en points du LiDAR HD ; les ouvrages ajourés, comme la tour Eiffel, y sont toujours">LiDAR</button>
             <button type="button" id="t-drone" class="bouton-vue" aria-label="Drone"
                     title="Piloter un drone, vu de derrière : au clavier, flèches, Q D, espace et Maj ; au doigt, les flèches à l'écran">
                 <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -5578,7 +5582,7 @@ function construireNuage() {
     const bati = nuage(na, n, document.getElementById('t-nuage').classList.contains('on'));
     pointsNuage = { lon, lat, h, classe, pos, attributs, bati, col, base: col.slice(), couleurs };
     placerNuage();
-    document.getElementById('t-nuage').hidden = n === na;
+    for (const id of ['t-nuage', 'v-nuage']) document.getElementById(id).hidden = n === na;
     if ((NUAGE.masses_expliquees.length || NUAGE.houppiers_expliques.length) && vegPrete) {
         construireVegetation();
     }
@@ -5693,9 +5697,11 @@ async function chargerNuage(essai = 1, proche = true) {
     }
 }
 
-document.getElementById('t-nuage').addEventListener('click', e => {
-    const on = !e.currentTarget.classList.contains('on');
-    e.currentTarget.classList.toggle('on', on);
+// Le même interrupteur au panneau et sur la vue, au-dessus du drone.
+const boutonsNuage = [document.getElementById('t-nuage'), document.getElementById('v-nuage')];
+for (const b of boutonsNuage) b.addEventListener('click', () => {
+    const on = !b.classList.contains('on');
+    for (const c of boutonsNuage) c.classList.toggle('on', on);
     if (pointsNuage) pointsNuage.bati.visible = on;
     majLegendeEcarts();
 });

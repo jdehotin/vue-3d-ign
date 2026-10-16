@@ -180,6 +180,8 @@ messages de commit et dans les commentaires des modules.
 
 ### Modifié
 
+- **Le bouton du nuage LiDAR aussi sur la vue**, au-dessus du drone, accordé
+  à celui du panneau.
 - **« Ma position » est une icône sur la vue**, sous le bouton plein écran,
   et non plus un bouton du panneau : sur téléphone, le panneau est replié.
   Ses messages (localisation en cours, refus, https exigé) s'affichent aussi
