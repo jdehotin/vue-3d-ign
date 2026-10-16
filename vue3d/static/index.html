@@ -1070,8 +1070,10 @@ document.getElementById('form-point').addEventListener('submit', async e => {
 // L'onglet prend l'adresse postale du point, la plus proche selon le même
 // géocodage : il n'en rend pas au-delà de 200 à 300 m (au château de
 // Chambord, 190 m à 150 m au nord, rien à 300 m), et sur quinze lieux publics
-// elle est à 2 à 126 m du point (l'Arc de Triomphe, Versailles). Sans
-// adresse, en forêt ou sur l'eau, il prend le nom du panneau.
+// elle est à 2 à 126 m du point (l'Arc de Triomphe, Versailles). Le nom
+// choisi dans la liste la précède (« Arc de Triomphe — 9 Place Charles de
+// Gaulle, 75116 Paris »), sauf s'il y est déjà : une adresse, une commune.
+// Sans adresse, en forêt ou sur l'eau, l'onglet prend le nom du panneau.
 (async () => {
     const nomPoint = document.getElementById('nom-point');
     let nom = null, adresse = null;
@@ -1079,6 +1081,7 @@ document.getElementById('form-point').addEventListener('submit', async e => {
         const l = JSON.parse(sessionStorage.getItem(CLE_LIEU) || 'null');
         if (l && Math.abs(l.lat - LAT0) < 1e-7 && Math.abs(l.lon - LON0) < 1e-7) nom = l.nom;
     } catch (e) { /* stockage refusé ou illisible */ }
+    const choisi = nom;
     try {
         const r = await fetch(`${URL_GEOCODAGE}/reverse?` + new URLSearchParams({
             lat: LAT0, lon: LON0, index: 'address', limit: 1 }));
@@ -1090,7 +1093,9 @@ document.getElementById('form-point').addEventListener('submit', async e => {
         }
     } catch (e) { /* le nom n'est qu'un confort */ }
     if (nom) { nomPoint.textContent = nom; nomPoint.hidden = false; }
-    if (adresse || nom) document.title = `${adresse || nom} · Vue 3D IGN`;
+    const dedans = (a, b) => a.toLocaleLowerCase('fr').includes(b.toLocaleLowerCase('fr'));
+    const titre = [...new Set([choisi && !(adresse && dedans(adresse, choisi)) ? choisi : null, adresse || nom])].filter(Boolean);
+    if (titre.length) document.title = `${titre.join(' — ')} · Vue 3D IGN`;
 })();
 const selectZone = document.getElementById('in-zone');
 // Une zone hors des choix proposés (?zone=850) s'ajoute à la liste.
