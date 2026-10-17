@@ -156,6 +156,60 @@ docker cp vue-3d-ign-vue3d-1:/modeles ./modeles
 docker cp vue-3d-ign-vue3d-1:/cache ./cache       # facultatif : les scènes déjà construites
 ```
 
+### Avec container, l'outil d'Apple
+
+Sur un Mac Apple silicon sous macOS 26,
+[`container`](https://github.com/apple/container) remplace Docker Desktop :
+il construit le même `Dockerfile` et fait tourner chaque conteneur dans sa
+propre petite machine virtuelle Linux.
+
+```bash
+brew install container                       # une fois
+./run_container.sh                           # sans détecteur, comme docker compose
+VUE3D_VEHICULES=tous ./run_container.sh      # les deux détecteurs, au processeur
+```
+
+Le script prend les variables de `docker-compose.yml`, avec les mêmes
+défauts (`VUE3D_VEHICULES`, `VUE3D_PANNEAUX=oui`, `VUE3D_PORT`). Il démarre
+le service `container` s'il ne tourne pas (le premier lancement installe le
+noyau Linux), reconstruit l'image, remplace le conteneur précédent et attend
+que le service réponde. Les scènes sont gardées dans le volume
+`vue-3d-ign-scenes`, distinct du volume `scenes` de Docker.
+
+```bash
+container logs -f vue-3d-ign                 # journaux
+container stop vue-3d-ign                    # arrêt ; relancer le script pour repartir
+container volume rm vue-3d-ign-scenes        # oublier les scènes (conteneur arrêté)
+container builder stop                       # rendre les 2 Go de la machine de construction
+container system stop                        # tout éteindre
+```
+
+Ce qui change par rapport à Docker :
+
+- **Pas de CoreML.** Le conteneur est un Linux, qui ne voit ni le Neural
+  Engine ni le GPU : les détecteurs y tournent au processeur, comme sous
+  Docker. Pour CoreML, `run_macOS_CoreML.sh`.
+- **Des ressources fixées par conteneur.** `container` donne 1 Go et
+  4 cœurs par défaut ; le script donne au service tous les cœurs et 4 Go
+  (`VUE3D_CPUS`, `VUE3D_MEMOIRE`), puisqu'il monte à 2 Go avec `tous` en
+  zone de 1 000 m. Docker Desktop partage au contraire une seule machine
+  virtuelle entre tous ses conteneurs.
+- **La machine de construction reste allumée** après une construction,
+  avec ses 2 Go, jusqu'à `container builder stop`. Ils suffisent à exporter
+  les deux réseaux, mais elle n'a que 2 cœurs : l'image `tous` s'y construit
+  en 82 s, contre 69 s sous Docker Desktop avec dix cœurs (une mesure
+  chacun, sur un Mac à dix cœurs).
+- **Rien ne relance le conteneur** après un redémarrage du Mac : `container`
+  n'a pas de politique de redémarrage. Il faut relancer le script.
+- **Un volume neuf appartient à root**, là où Docker lui donne le
+  propriétaire du dossier de l'image : le script le confie à l'utilisateur
+  du service avant de démarrer, sinon aucune scène ne s'écrirait.
+
+Le port est publié sur toutes les interfaces, comme avec Docker. Le script
+refuse de démarrer si un autre service l'écoute déjà : `docker compose
+stop` libère celui du conteneur Docker, sinon `VUE3D_PORT=8081
+./run_container.sh`.
+
 ### Les véhicules, les piscines et les bateaux, en option
 
 L'orthophoto montre des véhicules, des piscines et des bateaux ; un réseau

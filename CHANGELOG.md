@@ -15,6 +15,14 @@ messages de commit et dans les commentaires des modules.
 
 ### Ajouté
 
+- **Le service sous `container`, l'outil d'Apple, à la place de Docker
+  Desktop.** `run_container.sh` construit le même `Dockerfile` et lance le
+  service dans une petite machine virtuelle Linux (macOS 26, Apple silicon,
+  `brew install container`), avec les variables et les défauts de
+  `docker-compose.yml`. Il lui donne tous les cœurs et 4 Go, au lieu du
+  1 Go par défaut de `container`, et garde les scènes dans le volume
+  `vue-3d-ign-scenes`. Pas de CoreML : les détecteurs y tournent au
+  processeur, comme sous Docker.
 - **Un jeu en drone : la traque.** En vol, le bouton **Jeu** lâche dans la
   scène un petit bonhomme, Vladimir Poutine en figurine, qui court sur les
   routes BD TOPO de véhicule en véhicule : il en choisit un à 30 à 150 m par

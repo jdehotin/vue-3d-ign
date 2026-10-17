@@ -16,6 +16,7 @@ docker compose up -d --build                     # conteneur, port 8080 (VUE3D_P
 VUE3D_VEHICULES=rtmdet docker compose up -d --build   # avec la couche des véhicules (aucun | rtmdet | yolo | tous)
 VUE3D_PANNEAUX=oui docker compose up -d --build        # avec les panneaux solaires du registre OpenPVMapper (CC-BY 4.0)
 ./run_macOS_CoreML.sh                            # sans Docker, les deux détecteurs sur CoreML (Mac)
+./run_container.sh                               # l'image sous container d'Apple (macOS 26) au lieu de Docker ; pas de CoreML
 node outils/verifier-geometrie.mjs               # géométrie de la page, exécutée sous Node
 node outils/verifier-recherche.mjs               # recherche d'un lieu, exécutée sous Node
 node outils/verifier-export.mjs essai.ifc essai.gml   # exports IFC et CityGML, exécutés sous Node
