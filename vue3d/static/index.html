@@ -3172,10 +3172,15 @@ const sceneConstruite = chargerScene()
 // repère flottait sur le relief nu sans que rien ne le dise.
 const DEMI_EMPRISE_DEG = ZONE / 2 / 111320;
 
+/** Emprise chargée, [ouest, sud, est, nord] en degrés. */
+function emprise() {
+    return (ARTEFACT && ARTEFACT.bbox) || [LON0 - DEMI_EMPRISE_DEG, LAT0 - DEMI_EMPRISE_DEG,
+                                           LON0 + DEMI_EMPRISE_DEG, LAT0 + DEMI_EMPRISE_DEG];
+}
+
 /** Distance en mètres d'un point à l'emprise chargée ; 0 à l'intérieur. */
 function distanceAEmprise(lon, lat) {
-    const [o, s, e, n] = (ARTEFACT && ARTEFACT.bbox) || [LON0 - DEMI_EMPRISE_DEG, LAT0 - DEMI_EMPRISE_DEG,
-                                                         LON0 + DEMI_EMPRISE_DEG, LAT0 + DEMI_EMPRISE_DEG];
+    const [o, s, e, n] = emprise();
     return Math.hypot(Math.max(o - lon, 0, lon - e) * M_PAR_DEGRE_LON,
                       Math.max(s - lat, 0, lat - n) * M_PAR_DEGRE_LAT);
 }
@@ -3204,8 +3209,49 @@ function cadrer() {
     }
     const centre = new THREE.Vector3(0, ySol(CENTER[0], CENTER[1]), 0);
     controls.target.copy(centre);
-    camera.position.set(centre.x + 110, centre.y + 90, centre.z + 110);
+    // Vue du sud-est, 30° au-dessus de l'horizon ; la distance suit la zone.
+    const direction = new THREE.Vector3(110, 90, 110).normalize();
+    const distance = distanceOuverture(centre, direction);
+    camera.position.copy(centre).addScaledVector(direction, distance);
     controls.update();
+}
+
+// À l'ouverture, la caméra recule jusqu'à voir le milieu des quatre côtés de
+// l'emprise, à 90 % du bord de l'écran. Elle se tenait à 180 m, réglés pour
+// l'emprise de 356 m : en zone de 1 000 m, on ne voyait que le centre. Ainsi,
+// à Gordes sur une vue de 1 100 × 850 px : 321 m en zone de 350 m, 906 m à
+// 1 000 m, 1 856 m à 2 000 m, l'emprise entière à l'écran sauf le coin le
+// plus proche ; 2 078 m à 1 000 m sur un téléphone en portrait (390 px de large).
+const MARGE_OUVERTURE = 0.9;
+
+/**
+ * Distance de la caméra au centre, le long de `direction`, pour que les
+ * milieux des côtés de l'emprise, posés sur le relief, tiennent dans l'écran
+ * (NDC à ±MARGE_OUVERTURE). Par dichotomie, sur une copie de la caméra : son
+ * aspect est celui de la vue.
+ */
+function distanceOuverture(centre, direction) {
+    const [o, s, e, n] = emprise();
+    const [x0, y0] = toLocal(o, s), [x1, y1] = toLocal(e, n);
+    const milieux = [[(x0 + x1) / 2, y0], [x1, (y0 + y1) / 2], [(x0 + x1) / 2, y1], [x0, (y0 + y1) / 2]]
+        .map(([x, y]) => new THREE.Vector3(x, ySol(...toLonLat(x, y)), -y));
+    const essai = camera.clone(), p = new THREE.Vector3();
+    const voit = d => {
+        essai.position.copy(centre).addScaledVector(direction, d);
+        essai.lookAt(centre);
+        essai.updateMatrixWorld();
+        return milieux.every(m => {
+            p.copy(m).project(essai);
+            return p.z < 1 && Math.abs(p.x) <= MARGE_OUVERTURE && Math.abs(p.y) <= MARGE_OUVERTURE;
+        });
+    };
+    let pres = controls.minDistance, loin = controls.maxDistance;
+    if (!voit(loin)) return loin;
+    while (loin - pres > 1) {
+        const d = (pres + loin) / 2;
+        if (voit(d)) loin = d; else pres = d;
+    }
+    return loin;
 }
 
 // --- Fond cartographique -------------------------------------------------

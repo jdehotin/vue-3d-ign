@@ -203,6 +203,13 @@ messages de commit et dans les commentaires des modules.
 
 ### Modifié
 
+- **À l'ouverture, la scène entière est dans le cadre.** La caméra se tenait
+  à 180 m du point, réglés pour l'ancienne emprise de 356 m : en zone de
+  1 000 m, on ne voyait que le centre. Elle recule désormais, sous le même
+  angle, jusqu'à voir le milieu des quatre côtés de l'emprise, d'après la
+  zone, le relief et la forme de la vue : à Gordes, 321 m en zone de 350 m,
+  906 m à 1 000 m, 1 856 m à 2 000 m ; plus loin sur un téléphone en
+  portrait, plus étroit (2 078 m à 1 000 m).
 - **La page s'ouvre là où l'on est.** Sans point dans l'URL, elle propose
   de se géolocaliser : position déjà autorisée, ou autorisée à la demande,
   la scène se construit autour d'elle, repère de « Ma position » suivi.

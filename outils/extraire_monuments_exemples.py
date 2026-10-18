@@ -31,7 +31,7 @@ sys.path.insert(0, str(RACINE))
 from vue3d.monuments import EXTRAIT_EXEMPLES, cle_emprise, fetch_monuments
 from vue3d.scene import emprise, point_normalise
 
-LIEN = re.compile(r"localhost:8080/\?lat=(-?[\d.]+)&lon=(-?[\d.]+)")
+LIEN = re.compile(r"/\?lat=(-?[\d.]+)&lon=(-?[\d.]+)")
 
 
 def lieux_du_readme():

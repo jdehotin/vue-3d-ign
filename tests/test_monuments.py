@@ -153,7 +153,7 @@ def _lieux_du_readme():
     from vue3d.scene import point_normalise
     texte = (Path(__file__).resolve().parent.parent / "README.md").read_text(encoding="utf-8")
     return {point_normalise(float(a), float(b))
-            for a, b in re.findall(r"localhost:8080/\?lat=(-?[\d.]+)&lon=(-?[\d.]+)", texte)}
+            for a, b in re.findall(r"/\?lat=(-?[\d.]+)&lon=(-?[\d.]+)", texte)}
 
 
 def test_chaque_lieu_d_exemple_du_readme_est_dans_l_extrait():
