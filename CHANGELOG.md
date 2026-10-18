@@ -23,6 +23,20 @@ messages de commit et dans les commentaires des modules.
   1 Go par défaut de `container`, et garde les scènes dans le volume
   `vue-3d-ign-scenes`. Pas de CoreML : les détecteurs y tournent au
   processeur, comme sous Docker.
+- **Un second jeu en drone : les incendies**, celui du bouton **Jeu**
+  désormais (et de `?jeu=1`). Six incendies se déclarent un à un aux
+  carrefours de la ville, une manifestation autour de chacun : une trentaine
+  de manifestants qui scandent, pancartes levées. Le drone les éteint en
+  larguant de l'eau (**F**, un clic, ou **EAU** au doigt) ; elle tombe en
+  gardant la vitesse du drone, et un réticule bleu montre où elle arrivera.
+  Un foyer grandit tant qu'on le laisse : quatre largages l'éteignent au plus
+  fort, et 45 s au plus fort le rendent hors de contrôle. La réserve de
+  douze largages se remplit à la base, d'où le drone a décollé, ou au ras de
+  l'eau de la BD TOPO. Les manifestants s'écartent d'une eau tombée près
+  d'eux, applaudissent le feu éteint, puis se dispersent. Une colonne de
+  fumée signale chaque foyer de loin, et l'indice des 15 s pointe vers le
+  plus proche, ou vers la base quand la réserve est vide. Rien dans la
+  scène ni dans le cache.
 - **Un jeu en drone : la traque.** En vol, le bouton **Jeu** lâche dans la
   scène un petit bonhomme, Vladimir, une figurine, qui court sur les
   routes BD TOPO de véhicule en véhicule : il en choisit un à 30 à 150 m par
@@ -34,8 +48,9 @@ messages de commit et dans les commentaires des modules.
   à gauche, passait inaperçue. **F**, ou **TIR** au doigt, tire sous le
   réticule rouge, un clic ou un toucher tire là où il désigne. Touché, il
   tombe, une nouvelle manche commence 5 s plus tard, loin du drone ; le
-  meilleur temps est gardé dans le navigateur. `?jeu=1` ouvre la page dans
-  la traque, drone décollé. À Gordes, il reste à 16 m d'un véhicule en médiane, contre 132 m
+  meilleur temps est gardé dans le navigateur. `?jeu=traque` ouvre la page
+  dans la traque, drone décollé ; le bouton **Jeu** lance depuis les
+  incendies. À Gordes, il reste à 16 m d'un véhicule en médiane, contre 132 m
   au hasard des carrefours. Rien dans la scène ni dans le cache ; sans la
   couche des véhicules, il court au hasard des routes.
 - **Une zone de 2 000 m**, par `&zone=2000` dans l'URL ; la

@@ -557,7 +557,7 @@
                 </svg>
             </button>
             <button type="button" id="t-jeu" class="bouton-vue texte" hidden aria-label="Jeu"
-                    title="Jeu : retrouver Vladimir, qui court sur les routes entre les véhicules, et le toucher depuis le drone">Jeu</button>
+                    title="Jeu : éteindre depuis le drone les incendies qui se déclarent dans la ville, au milieu des manifestations">Jeu</button>
             <button type="button" id="btn-aide" class="bouton-vue" aria-label="Prise en main"
                     aria-haspopup="dialog" aria-controls="tuto" title="Prise en main : les gestes, et ce que montre la vue">
                 <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -9581,7 +9581,7 @@ function objetSous(touche) {
 
 renderer.domElement.addEventListener('pointermove', e => {
     // Pendant la traque, pas d'infobulle sous le viseur (activerJeu la ferme).
-    if (tipEpingle || jeu.actif) return;
+    if (tipEpingle || jeu.actif || feux.actif) return;
     const r = renderer.domElement.getBoundingClientRect();
     souris.x = ((e.clientX - r.left) / r.width) * 2 - 1;
     souris.y = -((e.clientY - r.top) / r.height) * 2 + 1;
@@ -9980,6 +9980,7 @@ function entrerDrone() {
 
 function sortirDrone() {
     arreterJeu();
+    arreterIncendies();
     btnJeu.hidden = true;
     droneActif = false;
     btnDrone.classList.remove('on');
@@ -10102,6 +10103,9 @@ function majDrone(dt, maintenant) {
 // lui, sous le réticule rouge ; un clic, ou un toucher, vise ce qu'il
 // désigne. Les valeurs ci-dessous sont des réglages de jeu, pas des mesures.
 const JEU_DEMANDE = PARAMS.has('jeu') && PARAMS.get('jeu') !== '0';
+// Le jeu du bouton « Jeu » : les incendies, sauf ?jeu=traque. Un objet, que
+// le tournage (outils/demo-video.mjs) règle pour filmer la traque.
+const choixJeu = { type: PARAMS.get('jeu') === 'traque' ? 'traque' : 'incendies' };
 const JEU_ECHELLE = 1.5;                    // 2,6 m : plus grand que nature, pour se voir du ciel
 const JEU_VITESSE = 3.2;                    // m/s, au petit trot
 const JEU_VITESSE_FUITE = 6.5;              // m/s, le drone à moins de JEU_ALERTE
@@ -10673,7 +10677,7 @@ function annoncer(html, duree) {
     // tournage à horloge figée (outils/demo-video.mjs) fait filer trois à
     // quatre fois plus vite que celui du film. Hors traque, une minuterie.
     jeu.finMessage = performance.now() + duree * 1000;
-    if (!jeu.actif) finAnnonce = setTimeout(() => { messageJeu.hidden = true; }, duree * 1000);
+    if (!jeu.actif && !feux.actif) finAnnonce = setTimeout(() => { messageJeu.hidden = true; }, duree * 1000);
 }
 
 const DIRECTIONS_CARDINALES = ['au nord', 'au nord-est', "à l'est", 'au sud-est',
@@ -10780,6 +10784,8 @@ function activerJeu() {
     groupeJeu.visible = true;
     hudJeu.hidden = false;
     padTir.hidden = !TACTILE;
+    padTir.textContent = 'TIR';
+    padTir.setAttribute('aria-label', 'Tirer');
     aideVue.textContent = AIDE_JEU;
     detacherTip();
     tip.style.display = 'none';
@@ -10802,11 +10808,15 @@ function arreterJeu() {
 }
 
 btnJeu.addEventListener('click', () => {
-    if (jeu.actif) arreterJeu(); else activerJeu();
+    if (jeu.actif) arreterJeu();
+    else if (feux.actif) arreterIncendies();
+    else if (choixJeu.type === 'traque') activerJeu();
+    else activerIncendies();
     // Comme le drone : l'espace, qui fait monter, presserait encore le bouton.
     btnJeu.blur();
 });
-if (JEU_DEMANDE) Promise.allSettled([sceneConstruite, reliefCharge]).then(activerJeu);
+if (JEU_DEMANDE) Promise.allSettled([sceneConstruite, reliefCharge])
+    .then(() => (choixJeu.type === 'traque' ? activerJeu() : activerIncendies()));
 
 const busteJeu = new THREE.Vector3(), trajet = new THREE.Line3(), surTrajet = new THREE.Vector3();
 function majJeu(dt, maintenant) {
@@ -10876,6 +10886,636 @@ function majJeu(dt, maintenant) {
               + `Vladimir à ${Math.round(Math.hypot(dx, dz))} m${c.fuite ? ', il détale' : c.pause > 0 ? ', il se cache' : ''} · `
               + `${Math.floor(chrono / 60)}:${String(chrono % 60).padStart(2, '0')} · `
               + `${jeu.tirsManche} tir${jeu.tirsManche > 1 ? 's' : ''} · touché ${jeu.touches} fois`;
+    }
+}
+
+// --- Jeu : les incendies --------------------------------------------------------
+// L'autre jeu en drone, celui du bouton « Jeu » (et de ?jeu=1) ; la traque
+// reste jouable par ?jeu=traque. Des incendies se déclarent un à un aux
+// carrefours de la ville, une manifestation autour de chacun ; le drone les
+// éteint en larguant de l'eau. Elle tombe en gardant la vitesse du drone :
+// on largue avant d'être dessus, et le réticule bleu dit où elle arrivera.
+// La réserve se remplit à la base, d'où le drone a décollé, ou au ras de
+// l'eau de la BD TOPO (lac, rivière). Les manifestants sont le décor : ils
+// scandent, s'écartent d'une eau tombée près d'eux, applaudissent le feu
+// éteint, puis se dispersent. Rien dans la scène ni dans le cache. Les
+// valeurs ci-dessous sont des réglages de jeu, pas des mesures.
+const FEU_PAR_PARTIE = 6;
+const FEU_SIMULTANES = 4;
+const FEU_DEPART = 2;                       // déclarés d'emblée, puis un toutes les FEU_INTERVALLE_S
+const FEU_INTERVALLE_S = 25;
+const FEU_ECART_M = 120;                    // au moins, entre deux foyers
+const FEU_DISTANCE = [150, 500];            // m de la base
+const FEU_INTENSITE_DEPART = 0.35;
+const FEU_CROISSANCE = 1 / 80;              // par seconde : au plus fort en 52 s
+const FEU_EAU = 0.25;                       // un largage dans le foyer : quatre au plus fort
+const FEU_PERDU_S = 45;                     // au plus fort tout ce temps : hors de contrôle
+const FEU_FOULE = 32;                       // manifestants autour d'un foyer
+const FEU_FOULE_RAYON = [7, 17];            // m du foyer
+const FEU_ECHELLE_FOULE = 1.3;              // un peu plus grands que nature, comme Vladimir
+const FEU_ENTRE_PARTIES_S = 8;
+const EAU_RESERVE = 12;                     // largages
+const EAU_CADENCE_S = 0.4;
+const EAU_REMPLISSAGE_S = 0.25;             // par largage rendu
+const EAU_BASE_M = 15;                      // de la base, à l'horizontale, pour remplir
+const EAU_HAUTEUR_M = 20;                   // au plus au-dessus du sol, à la base ou sur l'eau
+const EAU_ECLABOUSSURE_M = 4;               // les manifestants plus près s'écartent
+const PESANTEUR = 9.81;
+const CLE_RECORD_FEUX = 'vue3d.incendies-record';
+const AIDE_INCENDIES = AU_DOIGT
+    ? `Incendies : un indice toutes les ${JEU_INDICE_S} s · EAU, ou toucher la vue, pour larguer · `
+      + 'remplir au ras de la base ou de l\'eau · le bouton Jeu pour arrêter'
+    : `Incendies : un indice toutes les ${JEU_INDICE_S} s · F, ou un clic, largue l'eau, qui tombe sous `
+      + 'le réticule bleu · remplir au ras de la base ou de l\'eau · flèches, Q D, espace, Maj '
+      + 'pour voler · Échap pour sortir';
+
+const feux = { actif: false, foyers: [], gouttes: [], effets: [], reserve: EAU_RESERVE, remplissage: 0,
+               remplit: false, declares: 0, eteints: 0, perdus: 0, debut: 0, prochain: 0, relance: null,
+               dernierLargage: -Infinity, base: new THREE.Vector3(), hud: 0, prochainIndice: Infinity,
+               finIndice: 0, prochainEau: 0, surEau: false };
+const groupeFeux = new THREE.Group();
+groupeFeux.visible = false;
+scene.add(groupeFeux);
+
+// La foule : une figure par manifestant, en maillages instanciés (jambes,
+// torse, tête, bâton et pancarte), couleurs tirées par personne. Pas d'ombre
+// portée, comme le drone. Un emplacement par manifestant possible, libéré à
+// sa dispersion.
+const FOULE_MAX = FEU_PAR_PARTIE * FEU_FOULE;
+const foule = (() => {
+    const materiau = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85 });
+    const parties = {
+        jambes: new THREE.BoxGeometry(0.34, 0.8, 0.22).translate(0, 0.4, 0),
+        torse: new THREE.BoxGeometry(0.44, 0.62, 0.26).translate(0, 1.11, 0),
+        tete: new THREE.SphereGeometry(0.12, 10, 8).scale(0.95, 1.1, 1).translate(0, 1.58, 0),
+        baton: new THREE.BoxGeometry(0.03, 0.9, 0.03).translate(0, 0.45, 0),
+        pancarte: new THREE.BoxGeometry(0.62, 0.42, 0.03).translate(0, 0.95, 0),
+    };
+    const maillages = {};
+    const blanc = new THREE.Color(0xffffff), nul = new THREE.Matrix4().makeScale(0, 0, 0);
+    for (const [nom, geo] of Object.entries(parties)) {
+        const m = new THREE.InstancedMesh(geo, materiau, FOULE_MAX);
+        // Ses bornes sont celles d'une figure à l'origine : la foule, loin
+        // de là, serait écartée du rendu.
+        m.frustumCulled = false;
+        for (let i = 0; i < FOULE_MAX; i++) { m.setMatrixAt(i, nul); m.setColorAt(i, blanc); }
+        maillages[nom] = m;
+        groupeFeux.add(m);
+    }
+    return { maillages, gens: new Array(FOULE_MAX).fill(null), nul };
+})();
+const TEINTES_HABITS = [0xc0392b, 0x2e86c1, 0xf1c40f, 0x27ae60, 0x8e44ad, 0xe67e22, 0xecf0f1, 0x34495e, 0x16a085, 0xd35400];
+const TEINTES_JAMBES = [0x1f2a44, 0x2c3e50, 0x3b3b3b, 0x5d6d7e, 0x1b2631];
+const TEINTES_PEAU = [0xf1c27d, 0xe0ac69, 0xc68642, 0x8d5524, 0xffdbac];
+const TEINTES_PANCARTES = [0xffffff, 0xfff3b0, 0xffd6d6, 0xd6f0ff];
+
+// Les foyers : un sol brûlé, une barricade, des flammes qui vacillent, une
+// colonne de fumée qui se voit de loin, emportée par un vent d'ouest.
+const GEO_DISQUE = new THREE.CircleGeometry(1, 24);
+const GEO_FLAMME = new THREE.ConeGeometry(1, 1, 7).translate(0, 0.5, 0);
+const GEO_BOUFFEE = new THREE.SphereGeometry(1, 10, 8);
+const GEO_GOUTTE = new THREE.SphereGeometry(0.7, 10, 8);
+const GEO_DEBRIS = new THREE.BoxGeometry(1.6, 0.5, 0.9);
+const MAT_BRULE = new THREE.MeshBasicMaterial({ color: 0x111111, transparent: true, opacity: 0.55, depthWrite: false,
+    polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 });
+const MAT_DEBRIS = new THREE.MeshStandardMaterial({ color: 0x3b2a1e, roughness: 0.9 });
+const MAT_FLAMMES = [0xff5a00, 0xff8c00, 0xffc400].map(c => new THREE.MeshBasicMaterial({
+    color: c, transparent: true, opacity: 0.88, depthWrite: false }));
+const MAT_GOUTTE = new THREE.MeshBasicMaterial({ color: 0x8fd3ff, transparent: true, opacity: 0.85 });
+const VENT = new THREE.Vector3(1.5, 0, 0.3);   // m/s, vers l'est
+
+// La base : un « H » au sol et une colonne bleue qui se voit de loin.
+const base = new THREE.Group();
+{
+    const blanc = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, depthWrite: false,
+        polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 });
+    const anneau = new THREE.Mesh(new THREE.RingGeometry(6, 6.8, 40), blanc);
+    anneau.rotation.x = -Math.PI / 2;
+    const h = new THREE.Group();
+    for (const [l, p, x] of [[0.9, 6, -1.6], [0.9, 6, 1.6], [3.2, 0.9, 0]]) {
+        const barre = new THREE.Mesh(new THREE.PlaneGeometry(l, p), blanc);
+        barre.position.x = x;
+        h.add(barre);
+    }
+    h.rotation.x = -Math.PI / 2;
+    const colonne = new THREE.Mesh(new THREE.CylinderGeometry(2, 2, 60, 16, 1, true).translate(0, 30, 0),
+        new THREE.MeshBasicMaterial({ color: 0x5ab4ff, transparent: true, opacity: 0.18, depthWrite: false,
+                                      side: THREE.DoubleSide }));
+    base.add(anneau, h, colonne);
+    base.children.slice(0, 2).forEach(o => { o.position.y = 0.08; });
+    base.userData.colonne = colonne;
+    groupeFeux.add(base);
+}
+
+// Le réticule de l'eau : où tomberait un largage lâché maintenant.
+const reticuleEau = new THREE.Mesh(new THREE.RingGeometry(1.4, 1.9, 32), new THREE.MeshBasicMaterial({
+    color: 0x3aa8ff, transparent: true, opacity: 0.9, depthTest: false, depthWrite: false }));
+reticuleEau.add(new THREE.Mesh(new THREE.CircleGeometry(0.3, 12), reticuleEau.material));
+reticuleEau.rotation.x = -Math.PI / 2;
+reticuleEau.renderOrder = reticuleEau.children[0].renderOrder = 10;
+groupeFeux.add(reticuleEau);
+
+const rayonFeu = f => 2.5 + 4.5 * f.intensite;
+/** Un point local (est, nord) où un manifestant peut se tenir : dans l'emprise, hors des bâtiments. */
+function placeLibre(x, y) {
+    const [o, s] = toLocal(BORNES.o, BORNES.s), [e, n] = toLocal(BORNES.e, BORNES.n);
+    if (x < o + 3 || x > e - 3 || y < s + 3 || y > n - 3) return false;
+    const sol = solSous(x, -y, false), dessus = solSous(x, -y, true);
+    return sol !== null && dessus - sol < 0.8;
+}
+
+/** Les nœuds du graphe des routes, gardés une fois : les carrefours en tête. */
+function noeudsJeu() {
+    if (jeu.graphe.noeuds) return jeu.graphe.noeuds;
+    const vus = new Set();
+    for (const a of jeu.graphe.aretes) { vus.add(a.a); vus.add(a.b); }
+    return jeu.graphe.noeuds = [...vus];
+}
+
+/**
+ * Un nouveau foyer : un carrefour de la ville (trois branches ou plus), à
+ * FEU_DISTANCE de la base et FEU_ECART_M des autres foyers, le plus dégagé
+ * d'une quinzaine tirés au hasard — la foule doit tenir autour, hors des
+ * bâtiments. À défaut, un point de route quelconque.
+ */
+function declarerFoyer() {
+    const noeuds = noeudsJeu(), carrefours = noeuds.filter(n => n.aretes.length >= 3);
+    const loinDesAutres = (x, y) => feux.foyers.every(f => f.etat === 'fini' || Math.hypot(f.x - x, f.y - y) >= FEU_ECART_M);
+    const [bx, by] = [feux.base.x, -feux.base.z];
+    let meilleur = null;
+    for (let k = 0; k < 60 && (!meilleur || k < 15); k++) {
+        let x, y;
+        if (carrefours.length && k < 45) ({ x, y } = carrefours[Math.floor(Math.random() * carrefours.length)]);
+        else { const a = areteAuHasard(jeu.graphe); [x, y] = pointArete(a, Math.random() * a.longueur); }
+        const d = Math.hypot(x - bx, y - by);
+        if (d < FEU_DISTANCE[0] || d > FEU_DISTANCE[1] || !loinDesAutres(x, y)) continue;
+        let libres = 0;
+        for (let i = 0; i < 12; i++) {
+            const a = i / 12 * 2 * Math.PI, r = (FEU_FOULE_RAYON[0] + FEU_FOULE_RAYON[1]) / 2;
+            if (placeLibre(x + r * Math.cos(a), y + r * Math.sin(a))) libres++;
+        }
+        if (!meilleur || libres > meilleur.libres) meilleur = { x, y, libres };
+    }
+    if (!meilleur) return null;
+    const f = creerFoyer(meilleur.x, meilleur.y);
+    feux.foyers.push(f);
+    feux.declares++;
+    return f;
+}
+
+function creerFoyer(x, y) {
+    const groupe = new THREE.Group();
+    const sol = new THREE.Mesh(GEO_DISQUE, MAT_BRULE);
+    sol.rotation.x = -Math.PI / 2;
+    sol.position.y = 0.06;
+    groupe.add(sol);
+    for (let i = 0; i < 4; i++) {
+        const d = new THREE.Mesh(GEO_DEBRIS, MAT_DEBRIS);
+        d.position.set((Math.random() - 0.5) * 1.6, 0.25 + 0.3 * (i % 2), (Math.random() - 0.5) * 1.6);
+        d.rotation.y = Math.random() * Math.PI;
+        groupe.add(d);
+    }
+    const flammes = [];
+    for (let i = 0; i < 9; i++) {
+        const m = new THREE.Mesh(GEO_FLAMME, MAT_FLAMMES[i % 3]);
+        const a = Math.random() * 2 * Math.PI, r = Math.sqrt(Math.random());
+        flammes.push({ m, ax: Math.cos(a) * r, az: Math.sin(a) * r, h: 0.7 + 0.6 * Math.random(),
+                       l: 0.6 + 0.5 * Math.random(), phase: Math.random() * 10 });
+        groupe.add(m);
+    }
+    groupeFeux.add(groupe);
+    const f = { x, y, groupe, sol, flammes, fumee: [], intensite: FEU_INTENSITE_DEPART, auMax: 0,
+                etat: 'brule', fin: 0, prochaineBouffee: 0, gens: [] };
+    placerFoule(f);
+    return f;
+}
+
+/** La manifestation autour d'un foyer, tournée vers lui. */
+function placerFoule(f) {
+    const libres = [];
+    for (let i = 0; i < FOULE_MAX && libres.length < FEU_FOULE; i++) if (!foule.gens[i]) libres.push(i);
+    const couleur = new THREE.Color(), pris = [];
+    for (let essai = 0; essai < 4 * FEU_FOULE && pris.length < libres.length; essai++) {
+        const a = Math.random() * 2 * Math.PI;
+        const r = FEU_FOULE_RAYON[0] + Math.random() * (FEU_FOULE_RAYON[1] - FEU_FOULE_RAYON[0]);
+        const x = f.x + r * Math.cos(a), y = f.y + r * Math.sin(a);
+        if (!placeLibre(x, y) || pris.some(p => Math.hypot(p.x - x, p.y - y) < 0.9)) continue;
+        const i = libres[pris.length];
+        const p = { i, foyer: f, x, y, phase: Math.random() * 10, pancarte: Math.random() < 0.55,
+                    etat: 'scande', depuis: 0, ex: 0, ey: 0, vx: 0, vy: 0, echelle: FEU_ECHELLE_FOULE };
+        const tire = l => l[Math.floor(Math.random() * l.length)];
+        const m = foule.maillages;
+        m.torse.setColorAt(i, couleur.set(tire(TEINTES_HABITS)));
+        m.jambes.setColorAt(i, couleur.set(tire(TEINTES_JAMBES)));
+        m.tete.setColorAt(i, couleur.set(tire(TEINTES_PEAU)));
+        m.baton.setColorAt(i, couleur.set(0x7a5230));
+        m.pancarte.setColorAt(i, couleur.set(tire(TEINTES_PANCARTES)));
+        foule.gens[i] = p;
+        pris.push(p);
+    }
+    for (const m of Object.values(foule.maillages)) m.instanceColor.needsUpdate = true;
+    f.gens = pris;
+}
+
+function libererPersonne(p) {
+    foule.gens[p.i] = null;
+    for (const m of Object.values(foule.maillages)) { m.setMatrixAt(p.i, foule.nul); m.instanceMatrix.needsUpdate = true; }
+}
+
+const mFigure = new THREE.Matrix4(), mPancarte = new THREE.Matrix4(), mLocal = new THREE.Matrix4();
+const qFigure = new THREE.Quaternion(), eFigure = new THREE.Euler(), vFigure = new THREE.Vector3(), sFigure = new THREE.Vector3();
+/** La foule à l'image suivante : elle scande, s'écarte de l'eau, applaudit, puis s'en va. */
+function majFoule(dt, t) {
+    const m = foule.maillages;
+    for (const p of foule.gens) {
+        if (!p) continue;
+        p.depuis += dt;
+        if (p.etat === 'applaudit' && p.depuis > 3) { p.etat = 'part'; p.depuis = 0; }
+        // Écartée par l'eau : une poussée amortie en une demi-seconde.
+        p.ex += p.vx * dt; p.ey += p.vy * dt;
+        const amorti = Math.exp(-dt / 0.5);
+        p.vx *= amorti; p.vy *= amorti;
+        let x = p.x + p.ex, y = p.y + p.ey, echelle = p.echelle;
+        if (p.etat === 'part') {
+            // Dispersée : elle s'éloigne du foyer à pied, et s'efface au bout de 6 s.
+            const dx = x - p.foyer.x, dy = y - p.foyer.y, l = Math.hypot(dx, dy) || 1;
+            p.x += dx / l * 1.6 * dt; p.y += dy / l * 1.6 * dt;
+            echelle *= Math.min(1, Math.max(0, (6 - p.depuis) / 1));
+            if (p.depuis > 6) { libererPersonne(p); continue; }
+        }
+        const saut = p.etat === 'applaudit' ? Math.abs(Math.sin(t * 9 + p.phase)) * 0.45
+                   : p.etat === 'scande' ? Math.abs(Math.sin(t * 4 + p.phase)) * 0.1 : Math.abs(Math.sin(t * 7 + p.phase)) * 0.05;
+        const cap = p.etat === 'part' ? Math.atan2(x - p.foyer.x, y - p.foyer.y) : Math.atan2(p.foyer.x - x, p.foyer.y - y);
+        mFigure.compose(vFigure.set(x, ySol(...toLonLat(x, y)) + saut, -y), qFigure.setFromEuler(eFigure.set(0, -cap, 0)),
+                        sFigure.setScalar(echelle));
+        m.jambes.setMatrixAt(p.i, mFigure);
+        m.torse.setMatrixAt(p.i, mFigure);
+        m.tete.setMatrixAt(p.i, mFigure);
+        if (p.pancarte && p.etat !== 'part') {
+            // La pancarte brandie à bout de bras, qui se balance.
+            mLocal.makeRotationZ(Math.sin(t * 2.2 + p.phase) * (p.etat === 'applaudit' ? 0.5 : 0.25)).setPosition(0.18, 1.3, -0.12);
+            mPancarte.multiplyMatrices(mFigure, mLocal);
+            m.baton.setMatrixAt(p.i, mPancarte);
+            m.pancarte.setMatrixAt(p.i, mPancarte);
+        } else {
+            m.baton.setMatrixAt(p.i, foule.nul);
+            m.pancarte.setMatrixAt(p.i, foule.nul);
+        }
+    }
+    for (const mm of Object.values(m)) mm.instanceMatrix.needsUpdate = true;
+}
+
+/** Les flammes et la fumée d'un foyer à l'image suivante. */
+function majFoyer(f, dt, t, maintenant) {
+    const y0 = ySol(...toLonLat(f.x, f.y));
+    f.groupe.position.set(f.x, y0, -f.y);
+    if (f.etat === 'brule') {
+        f.intensite = Math.min(1, f.intensite + FEU_CROISSANCE * dt);
+        if (f.intensite >= 1) {
+            f.auMax += dt;
+            if (f.auMax > FEU_PERDU_S) perdreFoyer(f);
+        }
+    }
+    const r = rayonFeu(f);
+    f.sol.scale.setScalar(r + 1);
+    const allume = f.etat === 'brule' || f.etat === 'perdu';
+    for (const fl of f.flammes) {
+        fl.m.visible = allume;
+        if (!allume) continue;
+        const vacille = 0.8 + 0.25 * Math.sin(t * 9 + fl.phase) * Math.sin(t * 5.3 + 2 * fl.phase);
+        const h = (2 + 6 * f.intensite) * fl.h * vacille, l = (0.5 + 1.1 * f.intensite) * fl.l;
+        fl.m.position.set(fl.ax * r * 0.55, 0.2, fl.az * r * 0.55);
+        fl.m.scale.set(l, h, l);
+    }
+    // Une bouffée toutes les 0,25 s au plus fort, plus rarement au début ;
+    // de la vapeur blanche, en rafale, à l'extinction. Une toutes les 0,6 s
+    // ne faisait que trois bouffées à la fois au départ : pas de colonne, et
+    // le foyer ne se voyait pas de loin.
+    if (allume && maintenant > f.prochaineBouffee) {
+        f.prochaineBouffee = maintenant + 250 / Math.max(f.intensite, 0.3);
+        bouffee(f, 0x5c5c5c, 0.7, 20);
+    }
+    for (const b of f.fumee) {
+        b.age += dt;
+        const k = b.age / b.vie;
+        b.m.position.addScaledVector(b.v, dt);
+        b.m.scale.setScalar(b.r0 + (b.r1 - b.r0) * Math.min(k, 1));
+        // Dense jusqu'à mi-hauteur, puis qui se dissipe : un panache qui se voit de loin.
+        b.m.material.opacity = b.o * (1 - k * k) * Math.min(1, b.age * 2);
+    }
+    f.fumee = f.fumee.filter(b => {
+        if (b.age < b.vie) return true;
+        groupeFeux.remove(b.m);
+        b.m.material.dispose();
+        return false;
+    });
+    // Éteint ou perdu depuis un moment, la foule partie : le foyer s'efface.
+    if ((f.etat === 'eteint' && maintenant > f.fin) && !f.fumee.length) {
+        groupeFeux.remove(f.groupe);
+        f.etat = 'fini';
+    }
+}
+
+function bouffee(f, couleur, opacite, vie) {
+    const m = new THREE.Mesh(GEO_BOUFFEE, new THREE.MeshBasicMaterial({ color: couleur, transparent: true,
+        opacity: 0, depthWrite: false }));
+    const y0 = ySol(...toLonLat(f.x, f.y));
+    m.position.set(f.x + (Math.random() - 0.5) * 2, y0 + 2 + 3 * f.intensite, -f.y + (Math.random() - 0.5) * 2);
+    groupeFeux.add(m);
+    f.fumee.push({ m, age: 0, vie, o: opacite, r0: 1.5 + 1.5 * f.intensite, r1: 12 + 8 * f.intensite,
+                   v: new THREE.Vector3(VENT.x + (Math.random() - 0.5), 3.2 + Math.random(), VENT.z + (Math.random() - 0.5)) });
+}
+
+function eteindreFoyer(f) {
+    f.etat = 'eteint';
+    f.intensite = 0;
+    f.fin = performance.now() + 9000;
+    feux.eteints++;
+    for (let i = 0; i < 8; i++) bouffee(f, 0xf2f4f6, 0.7, 5);
+    for (const p of f.gens) if (p.etat !== 'part') { p.etat = 'applaudit'; p.depuis = Math.random() * 0.5; }
+    const restent = feux.foyers.filter(g => g.etat === 'brule').length;
+    annoncer(`Éteint !<small>la foule applaudit · ${restent} incendie${restent > 1 ? 's' : ''} en cours</small>`, 3);
+    son('touche');
+}
+
+function perdreFoyer(f) {
+    f.etat = 'perdu';
+    feux.perdus++;
+    for (const p of f.gens) if (p.etat === 'scande') { p.etat = 'part'; p.depuis = Math.random(); }
+    annoncer('Hors de contrôle<small>un foyer laissé trop longtemps au plus fort</small>', 3);
+}
+
+/** F, TIR (EAU), ou un clic : un largage, s'il reste de l'eau. */
+function larguer(maintenant) {
+    if (maintenant - feux.dernierLargage < EAU_CADENCE_S * 1000 || feux.reserve <= 0) return;
+    feux.dernierLargage = maintenant;
+    feux.reserve--;
+    const m = new THREE.Mesh(GEO_GOUTTE, MAT_GOUTTE);
+    m.position.copy(drone.position).y -= 0.5;
+    groupeFeux.add(m);
+    feux.gouttes.push({ m, v: drone.vitesse.clone().add(vFigure.set(0, -1, 0)) });
+}
+
+/** L'eau arrivée au sol en `p` : les foyers proches baissent, la foule s'écarte. */
+function eclabousser(p) {
+    const anneau = new THREE.Mesh(GEO_DISQUE, new THREE.MeshBasicMaterial({ color: 0xbfe6ff, transparent: true,
+        opacity: 0.8, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }));
+    anneau.rotation.x = -Math.PI / 2;
+    anneau.position.copy(p).y += 0.1;
+    groupeFeux.add(anneau);
+    feux.effets.push({ m: anneau, age: 0, duree: 0.6, taille: 5 });
+    son('impact');
+    const x = p.x, y = -p.z;
+    for (const f of feux.foyers) {
+        if (f.etat !== 'brule') continue;
+        if (Math.hypot(x - f.x, y - f.y) > rayonFeu(f) + 2) continue;
+        f.intensite -= FEU_EAU;
+        f.auMax = 0;
+        for (let i = 0; i < 3; i++) bouffee(f, 0xe8ecef, 0.6, 4);
+        if (f.intensite <= 0) eteindreFoyer(f);
+    }
+    for (const q of foule.gens) {
+        if (!q) continue;
+        const dx = q.x + q.ex - x, dy = q.y + q.ey - y, d = Math.hypot(dx, dy);
+        if (d > EAU_ECLABOUSSURE_M) continue;
+        // Tombée juste sur lui : il s'écarte d'un côté au hasard.
+        const a = d > 1e-3 ? Math.atan2(dy, dx) : Math.random() * 2 * Math.PI;
+        q.vx += Math.cos(a) * 5; q.vy += Math.sin(a) * 5;
+    }
+}
+
+const pointChute = new THREE.Vector3(), vitesseChute = new THREE.Vector3();
+/** Où tomberait un largage lâché maintenant, sur le terrain : null s'il quitte ce qui est chargé. */
+function chutePrevue() {
+    pointChute.copy(drone.position).y -= 0.5;
+    vitesseChute.copy(drone.vitesse).y -= 1;
+    for (let i = 0; i < 300; i++) {
+        vitesseChute.y -= PESANTEUR * 0.04;
+        pointChute.addScaledVector(vitesseChute, 0.04);
+        const sol = solSous(pointChute.x, pointChute.z, false);
+        if (sol === null) return null;
+        if (pointChute.y <= sol) { pointChute.y = sol; return pointChute; }
+    }
+    return null;
+}
+
+const rayonEau = new THREE.Raycaster(), versLeBasEau = new THREE.Vector3(0, -1, 0);
+/** La réserve se remplit à la base, ou au ras de l'eau (scrutée 5 fois par seconde : ses maillages sont lourds). */
+function majReserve(dt, maintenant) {
+    const sol = drone.sol ?? drone.position.y;
+    const pres = Math.hypot(drone.position.x - feux.base.x, drone.position.z - feux.base.z) < EAU_BASE_M
+                 && drone.position.y - feux.base.y < EAU_HAUTEUR_M;
+    if (maintenant > feux.prochainEau) {
+        feux.prochainEau = maintenant + 200;
+        feux.surEau = false;
+        if (groupeEau.children.length && feux.reserve < EAU_RESERVE && drone.position.y - sol < EAU_HAUTEUR_M) {
+            rayonEau.set(drone.position, versLeBasEau);
+            rayonEau.far = EAU_HAUTEUR_M + 2;
+            feux.surEau = rayonEau.intersectObjects(groupeEau.children, false).length > 0;
+        }
+    }
+    feux.remplit = (pres || feux.surEau) && feux.reserve < EAU_RESERVE;
+    if (!feux.remplit) { feux.remplissage = 0; return; }
+    feux.remplissage += dt;
+    while (feux.remplissage >= EAU_REMPLISSAGE_S && feux.reserve < EAU_RESERVE) {
+        feux.remplissage -= EAU_REMPLISSAGE_S;
+        feux.reserve++;
+    }
+}
+
+/** Le foyer encore en feu le plus proche du drone, et sa distance. */
+function foyerLePlusProche() {
+    let meilleur = null, d = Infinity;
+    for (const f of feux.foyers) {
+        if (f.etat !== 'brule') continue;
+        const e = Math.hypot(f.x - drone.position.x, -f.y - drone.position.z);
+        if (e < d) { d = e; meilleur = f; }
+    }
+    return meilleur;
+}
+
+/** L'indice des incendies : vers le foyer le plus proche, ou vers la base, réserve vide. */
+function majIndiceFeu() {
+    const f = feux.reserve ? foyerLePlusProche() : null;
+    const [x, y] = f ? [f.x, f.y] : [feux.base.x, -feux.base.z];
+    const dx = x - drone.position.x, dz = -y - drone.position.z;
+    const distance = Math.hypot(dx, dz), azimut = Math.atan2(dx, -dz) * 180 / Math.PI;
+    const relatif = ((azimut - drone.cap * 180 / Math.PI) % 360 + 540) % 360 - 180;
+    const dessous = distance < JEU_SOUS_LE_DRONE_M;
+    const fleche = indiceJeu.querySelector('svg');
+    fleche.style.display = dessous ? 'none' : '';
+    fleche.style.transform = `rotate(${relatif.toFixed(0)}deg)`;
+    const ou = `à ${Math.round(distance / 10) * 10} m ${DIRECTIONS_CARDINALES[Math.round(((azimut + 360) % 360) / 45) % 8]}`;
+    const titre = dessous ? (f ? 'Juste en dessous : larguez !' : 'La base est sous vous') : coteIndice(relatif);
+    const detail = f ? `incendie ${ou}${f.intensite >= 1 ? ' · au plus fort' : ''}` : `réserve vide · la base ${ou}`;
+    const [span, small] = [indiceJeu.querySelector('span'), indiceJeu.querySelector('small')];
+    if (span.textContent !== titre) span.textContent = titre;
+    if (small.textContent !== detail) small.textContent = detail;
+}
+
+function nouvellePartie() {
+    for (const f of feux.foyers) {
+        groupeFeux.remove(f.groupe);
+        for (const b of f.fumee) { groupeFeux.remove(b.m); b.m.material.dispose(); }
+    }
+    for (const p of foule.gens) if (p) libererPersonne(p);
+    feux.foyers = [];
+    feux.declares = feux.eteints = feux.perdus = 0;
+    feux.reserve = EAU_RESERVE;
+    feux.relance = null;
+    feux.debut = performance.now();
+    feux.prochain = feux.debut + FEU_INTERVALLE_S * 1000;
+    feux.prochainIndice = feux.debut + JEU_INDICE_PREMIER_S * 1000;
+    for (let i = 0; i < FEU_DEPART; i++) declarerFoyer();
+    annoncer(`Des incendies dans la ville<small>éteignez-les avec l'eau du drone · `
+             + `un indice toutes les ${JEU_INDICE_S} s</small>`, 4);
+}
+
+function finDePartie(maintenant) {
+    const duree = (maintenant - feux.debut) / 1000;
+    let record = null, nouveau = false;
+    if (!feux.perdus) {
+        try {
+            record = Number(localStorage.getItem(CLE_RECORD_FEUX)) || null;
+            nouveau = !record || duree < record;
+            if (nouveau) localStorage.setItem(CLE_RECORD_FEUX, duree.toFixed(1));
+        } catch (e) { /* navigation privée : pas de record */ }
+    }
+    const bilan = `${feux.eteints} éteint${feux.eteints > 1 ? 's' : ''} sur ${feux.declares} en ${enClair(duree)}`
+        + (feux.perdus ? ` · ${feux.perdus} hors de contrôle` : nouveau ? ' · record' : record ? ` · record : ${enClair(record)}` : '');
+    annoncer(`${feux.perdus ? 'Partie terminée' : 'Ville sauvée !'}<small>${bilan}<br>`
+             + `nouvelle partie dans ${FEU_ENTRE_PARTIES_S} s</small>`, FEU_ENTRE_PARTIES_S);
+    feux.relance = maintenant + FEU_ENTRE_PARTIES_S * 1000;
+}
+
+function activerIncendies() {
+    // La scène se construit encore : ni routes, ni emprise.
+    if (!ARTEFACT || !reliefRegle) return;
+    if (!droneActif) entrerDrone();
+    jeu.graphe = jeu.graphe || grapheJeu();
+    if (!jeu.graphe.aretes.length) {
+        annoncer('Pas d\'incendies ici<small>aucune route BD TOPO dans cette scène</small>', 4);
+        return;
+    }
+    feux.actif = true;
+    btnJeu.classList.add('on');
+    groupeFeux.visible = true;
+    hudJeu.hidden = false;
+    padTir.hidden = !TACTILE;
+    padTir.textContent = 'EAU';
+    padTir.setAttribute('aria-label', 'Larguer de l\'eau');
+    aideVue.textContent = AIDE_INCENDIES;
+    detacherTip();
+    tip.style.display = 'none';
+    // La base, sous le drone qui décolle.
+    feux.base.set(drone.position.x, solSous(drone.position.x, drone.position.z, false) ?? 0, drone.position.z);
+    base.position.copy(feux.base);
+    nouvellePartie();
+}
+
+function arreterIncendies() {
+    if (!feux.actif) return;
+    feux.actif = false;
+    btnJeu.classList.remove('on');
+    groupeFeux.visible = false;
+    for (const f of feux.foyers) {
+        groupeFeux.remove(f.groupe);
+        for (const b of f.fumee) { groupeFeux.remove(b.m); b.m.material.dispose(); }
+    }
+    for (const p of foule.gens) if (p) libererPersonne(p);
+    for (const { m } of feux.gouttes) groupeFeux.remove(m);
+    for (const { m } of feux.effets) { groupeFeux.remove(m); m.material.dispose(); }
+    feux.foyers = [];
+    feux.gouttes = [];
+    feux.effets = [];
+    hudJeu.hidden = messageJeu.hidden = indiceJeu.hidden = padTir.hidden = true;
+    padTir.textContent = 'TIR';
+    padTir.setAttribute('aria-label', 'Tirer');
+    if (droneActif) aideVue.textContent = AIDE_DRONE;
+}
+
+function majIncendies(dt, maintenant) {
+    const t = maintenant / 1000;
+    if (feux.relance && maintenant > feux.relance) nouvellePartie();
+    const enFeu = feux.foyers.filter(f => f.etat === 'brule').length;
+    // Un foyer de plus toutes les FEU_INTERVALLE_S ; sans attendre, s'il n'en brûle plus aucun.
+    if (!feux.relance && feux.declares < FEU_PAR_PARTIE && enFeu < FEU_SIMULTANES
+        && (maintenant > feux.prochain || !enFeu)) {
+        const f = declarerFoyer();
+        feux.prochain = maintenant + FEU_INTERVALLE_S * 1000;
+        if (f && feux.declares > FEU_DEPART) {
+            const dx = f.x - drone.position.x, dz = -f.y - drone.position.z;
+            const az = (Math.atan2(dx, -dz) * 180 / Math.PI + 360) % 360;
+            annoncer(`Nouvel incendie<small>${DIRECTIONS_CARDINALES[Math.round(az / 45) % 8]}, `
+                     + `à ${Math.round(Math.hypot(dx, dz) / 10) * 10} m</small>`, 3);
+        }
+    }
+    if (!feux.relance && feux.declares >= FEU_PAR_PARTIE && !feux.foyers.some(f => f.etat === 'brule')) finDePartie(maintenant);
+
+    for (const f of feux.foyers) if (f.etat !== 'fini') majFoyer(f, dt, t, maintenant);
+    majFoule(dt, t);
+    majReserve(dt, maintenant);
+    if (touchesDrone.has('KeyF')) larguer(maintenant);
+
+    // L'eau en chute, freinée par rien : elle garde la vitesse du drone.
+    feux.gouttes = feux.gouttes.filter(g => {
+        g.v.y -= PESANTEUR * dt;
+        g.m.position.addScaledVector(g.v, dt);
+        g.m.lookAt(vFigure.copy(g.m.position).add(g.v));
+        g.m.scale.set(1, 1, 1.8);
+        const sol = solSous(g.m.position.x, g.m.position.z, true);
+        if (sol !== null && g.m.position.y > sol && g.m.position.y > -1000) return true;
+        if (sol !== null) { g.m.position.y = sol; eclabousser(g.m.position); }
+        groupeFeux.remove(g.m);
+        return false;
+    });
+    feux.effets = feux.effets.filter(e => {
+        e.age += dt;
+        const k = Math.min(e.age / e.duree, 1);
+        e.m.scale.setScalar(0.5 + k * e.taille);
+        e.m.material.opacity = 0.8 * (1 - k);
+        if (k < 1) return true;
+        groupeFeux.remove(e.m);
+        e.m.material.dispose();
+        return false;
+    });
+
+    // La colonne de la base sert à la retrouver de loin : au décollage, la
+    // caméra était dedans, la vue voilée de bleu.
+    base.userData.colonne.visible = Math.hypot(camera.position.x - feux.base.x, camera.position.z - feux.base.z) > 40;
+    const chute = chutePrevue();
+    reticuleEau.visible = chute !== null && feux.reserve > 0;
+    if (chute) {
+        reticuleEau.position.copy(chute).y += 0.15;
+        reticuleEau.scale.setScalar(Math.max(1, camera.position.distanceTo(chute) / 50));
+    }
+
+    if (!feux.relance && maintenant > feux.prochainIndice) {
+        feux.prochainIndice = maintenant + JEU_INDICE_S * 1000;
+        feux.finIndice = maintenant + JEU_INDICE_DUREE_S * 1000;
+        majIndiceFeu();
+        indiceJeu.hidden = false;
+        son('indice');
+    }
+    if (!indiceJeu.hidden && (maintenant > feux.finIndice || feux.relance)) indiceJeu.hidden = true;
+    if (!messageJeu.hidden && maintenant > jeu.finMessage) messageJeu.hidden = true;
+
+    if (maintenant - feux.hud > 150) {
+        feux.hud = maintenant;
+        if (!indiceJeu.hidden) majIndiceFeu();
+        const f = foyerLePlusProche(), chrono = Math.floor((maintenant - feux.debut) / 1000);
+        let ou = '';
+        if (f) {
+            const dx = f.x - drone.position.x, dz = -f.y - drone.position.z;
+            const relatif = (Math.atan2(dx, -dz) - drone.cap) * 180 / Math.PI;
+            ou = ` · <span class="fleche" style="transform:rotate(${relatif.toFixed(0)}deg)">↑</span>`
+               + `le plus proche à ${Math.round(Math.hypot(dx, dz))} m`;
+        }
+        const enCours = feux.foyers.filter(g => g.etat === 'brule').length;
+        hudJeu.innerHTML = `${enCours} incendie${enCours > 1 ? 's' : ''} en cours · ${feux.eteints} éteint${feux.eteints > 1 ? 's' : ''}`
+            + (feux.perdus ? ` · ${feux.perdus} hors de contrôle` : '')
+            + ` · eau ${feux.reserve}/${EAU_RESERVE}${feux.remplit ? ' (remplissage)' : feux.reserve ? '' : ' : vide, à la base ou au ras de l\'eau'}`
+            + `${ou} · ${Math.floor(chrono / 60)}:${String(chrono % 60).padStart(2, '0')}`;
     }
 }
 
@@ -10974,6 +11614,8 @@ renderer.domElement.addEventListener('pointerup', e => {
     raycaster.setFromCamera(souris, camera);
     // Pendant la traque, un clic tire là où il désigne.
     if (jeu.actif) { tirerSelonRayon(raycaster.ray); return; }
+    // Aux incendies, un clic largue l'eau : elle tombe du drone, pas là où l'on clique.
+    if (feux.actif) { larguer(performance.now()); return; }
     const hit = raycaster.intersectObjects(ciblesSurvol, false)[0];
     if (!hit) return;
     // Un arbre, un véhicule, un bateau, une piscine : pas de fiche, mais son
@@ -11461,6 +12103,7 @@ function boucle(maintenant) {
     if (droneActif) majDrone(dt, maintenant);
     else controls.update();
     if (jeu.actif) majJeu(dt, maintenant);
+    if (feux.actif) majIncendies(dt, maintenant);
     majHorizon(maintenant);
     if (horizonActif) {
         ciel.position.copy(camera.position);
