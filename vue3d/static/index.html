@@ -10097,7 +10097,7 @@ const indiceJeu = document.getElementById('jeu-indice');
 const padTir = document.getElementById('pad-tir');
 const jeu = { actif: false, graphe: null, coureur: null, tirs: [], effets: [],
               manche: 0, touches: 0, tirsManche: 0, debut: 0, dernierTir: -Infinity, relance: null,
-              hud: 0, vise: null, prochainIndice: Infinity, finIndice: 0 };
+              hud: 0, vise: null, prochainIndice: Infinity, finIndice: 0, finMessage: 0 };
 const groupeJeu = new THREE.Group();
 groupeJeu.visible = false;
 scene.add(groupeJeu);
@@ -10622,7 +10622,12 @@ function annoncer(html, duree) {
     messageJeu.innerHTML = html;
     messageJeu.hidden = false;
     clearTimeout(finAnnonce);
-    finAnnonce = setTimeout(() => { messageJeu.hidden = true; }, duree * 1000);
+    // Traque en cours : effacé par majJeu, à l'horloge du jeu, celle des
+    // indices et des manches. Une minuterie compte le temps réel, que le
+    // tournage à horloge figée (outils/demo-video.mjs) fait filer trois à
+    // quatre fois plus vite que celui du film. Hors traque, une minuterie.
+    jeu.finMessage = performance.now() + duree * 1000;
+    if (!jeu.actif) finAnnonce = setTimeout(() => { messageJeu.hidden = true; }, duree * 1000);
 }
 
 const DIRECTIONS_CARDINALES = ['au nord', 'au nord-est', "à l'est", 'au sud-est',
@@ -10811,6 +10816,7 @@ function majJeu(dt, maintenant) {
         son('indice');
     }
     if (!indiceJeu.hidden && maintenant > jeu.finIndice) indiceJeu.hidden = true;
+    if (!messageJeu.hidden && maintenant > jeu.finMessage) messageJeu.hidden = true;
 
     if (maintenant - jeu.hud > 150) {
         jeu.hud = maintenant;
