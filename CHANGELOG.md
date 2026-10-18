@@ -24,7 +24,7 @@ messages de commit et dans les commentaires des modules.
   `vue-3d-ign-scenes`. Pas de CoreML : les détecteurs y tournent au
   processeur, comme sous Docker.
 - **Un jeu en drone : la traque.** En vol, le bouton **Jeu** lâche dans la
-  scène un petit bonhomme, Vladimir Poutine en figurine, qui court sur les
+  scène un petit bonhomme, Vladimir, une figurine, qui court sur les
   routes BD TOPO de véhicule en véhicule : il en choisit un à 30 à 150 m par
   la route, y va par le plus court chemin, s'y cache quelques secondes, et
   détale quand le drone approche à moins de 45 m. Toutes les 15 s, un indice

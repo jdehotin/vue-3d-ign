@@ -557,7 +557,7 @@
                 </svg>
             </button>
             <button type="button" id="t-jeu" class="bouton-vue texte" hidden aria-label="Jeu"
-                    title="Jeu : retrouver Vladimir Poutine, qui court sur les routes entre les véhicules, et le toucher depuis le drone">Jeu</button>
+                    title="Jeu : retrouver Vladimir, qui court sur les routes entre les véhicules, et le toucher depuis le drone">Jeu</button>
             <button type="button" id="btn-aide" class="bouton-vue" aria-label="Prise en main"
                     aria-haspopup="dialog" aria-controls="tuto" title="Prise en main : les gestes, et ce que montre la vue">
                 <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -10035,8 +10035,8 @@ function majDrone(dt, maintenant) {
 }
 
 // --- Jeu : la traque -------------------------------------------------------------
-// Depuis le drone, retrouver un petit bonhomme — Vladimir Poutine en
-// figurine : costume sombre, cravate, front dégarni — qui court sur les
+// Depuis le drone, retrouver un petit bonhomme — Vladimir, une figurine :
+// costume sombre, cravate, front dégarni — qui court sur les
 // routes, entre les véhicules, et le toucher. Le bouton « Jeu » apparaît en
 // vol ; ?jeu=1 ouvre la page dans la traque, drone décollé, une fois la scène
 // construite. Rien dans la scène ni dans le cache : le jeu ne lit que ce que
@@ -10716,7 +10716,7 @@ function nouvelleManche() {
     jeu.relance = null;
     jeu.debut = performance.now();
     jeu.prochainIndice = jeu.debut + JEU_INDICE_PREMIER_S * 1000;
-    annoncer(`Retrouvez Vladimir Poutine<small>il court sur les routes, entre les véhicules · `
+    annoncer(`Retrouvez Vladimir<small>il court sur les routes, entre les véhicules · `
              + `un indice toutes les ${JEU_INDICE_S} s</small>`, 4);
 }
 
@@ -10827,7 +10827,7 @@ function majJeu(dt, maintenant) {
         hudJeu.innerHTML = c.touche
             ? `Touché ! · ${jeu.touches} sur ${jeu.manche} manche${jeu.manche > 1 ? 's' : ''}`
             : `<span class="fleche" style="transform:rotate(${relatif.toFixed(0)}deg)">↑</span>`
-              + `Poutine à ${Math.round(Math.hypot(dx, dz))} m${c.fuite ? ', il détale' : c.pause > 0 ? ', il se cache' : ''} · `
+              + `Vladimir à ${Math.round(Math.hypot(dx, dz))} m${c.fuite ? ', il détale' : c.pause > 0 ? ', il se cache' : ''} · `
               + `${Math.floor(chrono / 60)}:${String(chrono % 60).padStart(2, '0')} · `
               + `${jeu.tirsManche} tir${jeu.tirsManche > 1 ? 's' : ''} · touché ${jeu.touches} fois`;
     }

@@ -1082,7 +1082,7 @@ const SEQUENCES_SERIE = [
     {
         id: 'j-titre', lieu: NICE, duree: 6, formats: ['jeu'],
         court: 'La promenade des Anglais, à Nice, en 3D depuis les données ouvertes de l’IGN',
-        carte: { titre: 'La traque', sous: 'Vue 3D IGN · un jeu en drone : retrouver Poutine, et le toucher' }, carteDifferee: true,
+        carte: { titre: 'La traque', sous: 'Vue 3D IGN · un jeu en drone : retrouver Vladimir, et le toucher' }, carteDifferee: true,
         async jouer(s) {
             await s.chauffer({ ...NICE, hauteur: 20, distance: 820, azimut: 200, elevation: 24 }, 25);
             await s.glisser(s.duree, { ...NICE, hauteur: 20, distance: 820, azimut: 200, elevation: 24 },
