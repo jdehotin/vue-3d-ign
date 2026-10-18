@@ -87,7 +87,15 @@ const FORMATS = {
 //
 //   node outils/demo-video.mjs bornes carre      # docs/demo/demo-bornes-carre.mp4
 //   node outils/demo-video.mjs bornes paysage    # docs/demo/demo-bornes-paysage.mp4
-const SERIE = ['lidar', 'recherche', 'dpe-dvf', 'drone', 'bornes', 'vehicules', 'soleil', 'export'];
+//   GRAINE=3 node outils/demo-video.mjs jeu carre   # la traque, une autre partie
+//
+// Le film `jeu` est une vraie partie : un pilote (piloter) tient les touches
+// du drone d'après l'indice et la position du bonhomme, et tire quand le
+// réticule est sur lui ; les touches tenues s'allument sur un clavier
+// incrusté. Le hasard de la page (ses choix de route, son point de départ)
+// est tiré d'une graine (GRAINE), pour qu'un tournage refasse la même partie.
+const SERIE = ['lidar', 'recherche', 'dpe-dvf', 'drone', 'bornes', 'vehicules', 'soleil', 'export', 'jeu'];
+const GRAINE = Number(process.env.GRAINE || 1);
 const DANS_SERIE = SERIE.includes(FORMAT);
 const ASPECT = DANS_SERIE ? (process.argv[3] || 'carre') : null;
 const ASPECTS = {
@@ -179,6 +187,20 @@ const SAINT_TROPEZ = { lat: 43.2722, lon: 6.6403, zone: 1000 };
 const CHAMONIX = { lat: 45.9237, lon: 6.8694, zone: 1000 };
 // Le point est sur la nef : la cathédrale est le bâtiment le plus proche de l'origine du fichier IFC.
 const NOTRE_DAME = { lat: 48.85296, lon: 2.34991, zone: 1000 };
+// La promenade des Anglais à Nice, pour la traque : 2 × 9 m de chaussée
+// bordés de voitures, la mer d'un côté, où le bonhomme se voit du drone ;
+// 281 véhicules détectés dans la zone (RTMDet, comptés le 2026-10-17). Le
+// Vieux-Port de Marseille, essayé d'abord, l'emmenait dans les rues du
+// Panier : on ne le voyait pas, même touché, entre les immeubles.
+const NICE = { lat: 43.6947, lon: 7.2655, zone: 1000 };
+// Mise en scène du départ, seulement : le drone décolle de la promenade (axe
+// à 88°), tourné vers l'ouest, et le bonhomme part caché contre une voiture
+// garée sur la chaussée, 249 m plus loin. Tiré au hasard, il partait à 422 m
+// au nord, et toute la poursuite se jouait entre les façades. Ensuite, la
+// partie est celle de la page : il fuit le drone qui arrive de l'est par les
+// branches qui l'en éloignent, la promenade, à découvert.
+const NICE_DECOLLAGE = { lat: 43.694882, lon: 7.265490 };
+const NICE_PLANQUE = { lat: 43.694831, lon: 7.262392 };
 const SITE = 'vue-3d-ign.kysoe.com';
 const LINKEDIN = 'linkedin.com/in/ysimon';
 const urlDe = l => `${BASE}/?lat=${l.lat}&lon=${l.lon}${l.zone ? `&zone=${l.zone}` : ''}`;
@@ -1052,6 +1074,89 @@ const SEQUENCES_SERIE = [
           await page.evaluate(() => window.__visionneuse.choisir(null));
           await s.glisser(s.duree, null, { est: 0, nord: 0, hauteur: 10, distance: 820, azimut: 200, elevation: 40 });
       } },
+
+    // --- La traque : la promenade des Anglais, à Nice -----------------------------------
+    // Une vraie partie, jouée par le pilote (piloter) : le décollage au-dessus
+    // de la mer, l'indice, la poursuite, le tir. Le clavier incrusté montre les
+    // touches que le pilote tient.
+    {
+        id: 'j-titre', lieu: NICE, duree: 6, formats: ['jeu'],
+        court: 'La promenade des Anglais, à Nice, en 3D depuis les données ouvertes de l’IGN',
+        carte: { titre: 'La traque', sous: 'Vue 3D IGN · un jeu en drone : retrouver Poutine, et le toucher' }, carteDifferee: true,
+        async jouer(s) {
+            await s.chauffer({ ...NICE, hauteur: 20, distance: 820, azimut: 200, elevation: 24 }, 25);
+            await s.glisser(s.duree, { ...NICE, hauteur: 20, distance: 820, azimut: 200, elevation: 24 },
+                                     { ...NICE, hauteur: 20, distance: 600, azimut: 192, elevation: 20 }, t => apparaitre(s, t, 2));
+        },
+    },
+    {
+        id: 'j-depart', lieu: NICE, duree: 7, formats: ['jeu'],
+        court: 'En drone, le bouton « Jeu » : il se cache quelque part dans la scène',
+        async jouer(s) {
+            // La caméra à l'est du point de décollage : le drone part vers l'ouest, le long de la promenade.
+            await s.glisser(1.5, null, { ...NICE_DECOLLAGE, hauteur: 15, distance: 170, azimut: 85, elevation: 18 });
+            await s.vitesse(8);
+            await s.bouton('t-drone', true);
+            // Plus de recul qu'au décollage (9 m) : le bonhomme se voit de plus loin.
+            await page.evaluate(() => { window.__demo.drone.recul = 12; });
+            await s.bouton('t-jeu', true);
+            await s.planquer(NICE_PLANQUE);
+            await s.lacher();
+            await s.clavier(true);
+            await filmer(1 / FPS);      // la page replace le bonhomme à l'image suivante
+            console.log('    départ :', await s.partie());
+        },
+    },
+    {
+        id: 'j-indice', lieu: NICE, duree: 8, formats: ['jeu'],
+        court: 'Toutes les 15 s, un indice : de quel côté tourner, à quelle distance',
+        async jouer(s) { await s.piloter(s.duree, { apresIndice: true, avancer: true, hauteur: 30 }); },
+    },
+    {
+        id: 'j-chasse', lieu: NICE, duree: 10, formats: ['jeu'],
+        court: 'Il court de voiture en voiture, sur les routes de la BD TOPO, et détale devant le drone',
+        async jouer(s) {
+            const p = await s.piloter(s.duree, { avancer: true, hauteur: 25 });
+            console.log(`    après la poursuite (vu ${Math.round(100 * p.vu)} %) :`, await s.partie());
+        },
+    },
+    {
+        // Durée minimale : la séquence dure jusqu'au tir qui touche, plus 4,5 s.
+        id: 'j-tir', lieu: NICE, duree: 8, formats: ['jeu'],
+        court: 'F tire sous le réticule rouge, un clic là où l’on vise',
+        async jouer(s) {
+            // Plus bas et plus près pour tirer : à 25 m et 12 m de recul, il était un point sur la chaussée.
+            await page.evaluate(() => { window.__demo.drone.recul = 8; });
+            const p = await s.piloter(12, { avancer: true, hauteur: 14, tirer: true, jusquauTouche: true });
+            let touche = p.touche;
+            // Pas touché au réticule : un clic sur lui, comme un joueur à la souris, s'il est en vue.
+            for (let essai = 0; !touche && essai < 8; essai++) {
+                const b = await s.busteEcran();
+                if (!b.devant || !await s.bonhommeVu()) { await s.piloter(1, { avancer: true, hauteur: 14 }); continue; }
+                await s.cliquerBonhomme(0.7);
+                await filmer(0.3);
+                await s.cacherCurseur();
+                touche = (await s.partie()).touche;
+            }
+            console.log(`    tir (vu ${Math.round(100 * p.vu)} % avant) :`, await s.partie());
+            await s.legende('Touché ! Une autre traque commence, ailleurs dans la scène', 4.5);
+            // Le réticule gardé sur lui, couché : sur sa lancée, le drone le laissait sous le clavier.
+            // Tombé à la renverse, il s'allonge vers la caméra, sous le réticule : à 16 m de recul et
+            // 10 m de haut, le réticule remonte de 855 à 760 px environ, le bonhomme à la même distance.
+            await page.evaluate(() => { window.__demo.drone.recul = 16; });
+            await s.piloter(4.5, { avancer: true, hauteur: 10 });
+        },
+    },
+    {
+        ...finSerie('jeu', NICE, null, 'Routes BD TOPO et orthophotos © IGN · véhicules détectés par RTMDet'),
+        async jouer(s) {
+            await s.cartouche('');
+            await s.clavier(false);
+            // La traque arrêtée : pas de nouvelle manche sous le carton.
+            await cliquer('t-jeu');
+            await s.voler(s.duree, ['Space']);
+        },
+    },
 ];
 /** Le cartouche d'un export, tiré de la note de la page : format, taille, contenu, repère. */
 function cartoucheExport(format, note, repere) {
@@ -1062,7 +1167,9 @@ function cartoucheExport(format, note, repere) {
 }
 // Ce que chaque film lit d'avance, sur le serveur, avant de filmer : le clic
 // filmé trouve alors sa couche en cache, sans attente à l'image.
-const PRELECTURES = { lidar: ['nuage'], 'dpe-dvf': ['dpe', 'dvf'], bornes: ['bornes'] };
+// La traque ne montre pas le nuage, mais la page le demande : en
+// construction, le serveur répond 503, une erreur pour le tournage.
+const PRELECTURES = { lidar: ['nuage'], 'dpe-dvf': ['dpe', 'dvf'], bornes: ['bornes'], jeu: ['nuage'] };
 
 // --- Voix -------------------------------------------------------------------
 // Avec une voix, les phrases sont dites avant le tournage : la durée de chaque
@@ -1119,6 +1226,19 @@ await page.evaluateOnNewDocument(() => {
     window.__pret = () => file.length > 0;
     window.__pas = dt => { horloge += dt; const cbs = file; file = []; for (const cb of cbs) cb(horloge); };
 });
+// La traque : le hasard de la page tiré d'une graine (mulberry32), pour qu'un
+// tournage refasse la même partie.
+if (FORMAT === 'jeu') {
+    await page.evaluateOnNewDocument(graine => {
+        let a = graine >>> 0;
+        Math.random = () => {
+            a = (a + 0x6D2B79F5) >>> 0;
+            let t = Math.imul(a ^ (a >>> 15), a | 1);
+            t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+            return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+        };
+    }, GRAINE);
+}
 
 // La page est servie telle quelle, à deux ajouts près : les objets de la
 // scène exposés au script (window.__demo), et le style des légendes.
@@ -1174,6 +1294,35 @@ const STYLE_DEMO = `
     #demo-onde { position:fixed; left:0; top:0; z-index:39; width:${fmt.police * 1.6}px; height:${fmt.police * 1.6}px;
         margin:-${fmt.police * 0.8}px 0 0 -${fmt.police * 0.8}px; border-radius:50%; border:3px solid #fff;
         background:rgba(255,179,71,.35); opacity:0; pointer-events:none; }
+    /* Le clavier incrusté de la traque : une rangée de touches, allumées tant
+       qu'elles sont tenues (habiller), chaque groupe titré dessous. En une seule
+       rangée, au ras du bas : sur deux, il couvrait le réticule et le bonhomme,
+       que le tir place juste au-dessus. */
+    #demo-clavier { position:absolute; left:50%; bottom:1.8%; transform:translateX(-50%); z-index:5; display:flex;
+        align-items:flex-start; gap:${Math.round(fmt.police * 0.55)}px; padding:${Math.round(fmt.police * 0.3)}px ${Math.round(fmt.police * 0.5)}px;
+        border-radius:${Math.round(fmt.police * 0.35)}px; background:rgba(18,20,24,.8); color:#fff; opacity:0; pointer-events:none;
+        font:500 ${Math.round(fmt.police * 0.5)}px/1.2 system-ui, -apple-system, "Helvetica Neue", sans-serif; white-space:nowrap; }
+    #demo-clavier .bloc { display:flex; flex-direction:column; align-items:center; gap:${Math.round(fmt.police * 0.15)}px; }
+    #demo-clavier .bloc > span { opacity:.85; }
+    #demo-clavier .touches { display:flex; gap:${Math.round(fmt.police * 0.13)}px; }
+    #demo-clavier kbd { display:flex; align-items:center; justify-content:center; box-sizing:border-box;
+        min-width:${Math.round(fmt.police * 1.32)}px; height:${Math.round(fmt.police * 1.32)}px; padding:0 ${Math.round(fmt.police * 0.25)}px;
+        border-radius:${Math.round(fmt.police * 0.22)}px; background:#2c3138; border:2px solid #59616b; border-bottom-width:4px; color:#fff;
+        font:700 ${Math.round(fmt.police * 0.62)}px/1 system-ui, -apple-system, "Helvetica Neue", sans-serif; }
+    #demo-clavier kbd.large { min-width:${Math.round(fmt.police * 2.4)}px; font-size:${Math.round(fmt.police * 0.52)}px; }
+    #demo-clavier kbd.appui { background:#ffb347; border-color:#ffb347; color:#1b1b1b; }
+    #demo-clavier kbd.tir { border-color:#ff8a7a; }
+    #demo-clavier kbd.tir.appui { background:#ff4a3a; border-color:#ff4a3a; color:#fff; }
+    ${FORMAT === 'jeu' ? `
+    /* La traque : la légende en haut, le clavier en bas ; le titre d'une
+       manche et l'indice de la page, grandis pour un téléphone, entre les deux. */
+    #haut-gauche { display:none !important; }
+    #demo-legende { top:3.5% !important; bottom:auto !important; }
+    #jeu-message { top:20% !important; font-size:${Math.round(fmt.police * 1.7)}px !important; }
+    #jeu-message small { font-size:${Math.round(fmt.police * 0.85)}px !important; }
+    #jeu-indice { top:19% !important; font-size:${Math.round(fmt.police * 1.3)}px !important; }
+    #jeu-indice svg { width:${Math.round(fmt.police * 2.6)}px; height:${Math.round(fmt.police * 2.6)}px; }
+    #jeu-indice small { font-size:${Math.round(fmt.police * 0.8)}px !important; }` : ''}
 `;
 // La fiche de la visionneuse IFC (film « export »), lisible à l'image : en
 // paysage à droite, au carré en bas, la vue au-dessus, sur deux colonnes
@@ -1199,7 +1348,17 @@ const STYLE_VISIONNEUSE = ASPECT === 'carre' ? `
 const HTML_DEMO = '<div id="demo-carte"><h1></h1><p></p></div><div id="demo-legende"></div><div id="demo-cartouche"></div>'
     + '<div id="demo-chapitre"><b></b><span></span></div><div id="demo-photo"><img alt=""><span></span></div>'
     + '<div id="demo-onde"></div><div id="demo-curseur"><svg viewBox="0 0 24 24" width="100%" height="100%">'
-    + '<path d="M3 2l15 11.5-6.6.9 3.9 7.4-2.9 1.5-3.9-7.5L3 20.3z" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/></svg></div>';
+    + '<path d="M3 2l15 11.5-6.6.9 3.9 7.4-2.9 1.5-3.9-7.5L3 20.3z" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/></svg></div>'
+    // Q et D : les touches KeyA et KeyD d'un clavier français, que la page écoute.
+    + (FORMAT === 'jeu' ? '<div id="demo-clavier">'
+        + '<div class="bloc"><div class="touches"><kbd data-code="ArrowLeft">←</kbd><kbd data-code="ArrowUp">↑</kbd>'
+        + '<kbd data-code="ArrowDown">↓</kbd><kbd data-code="ArrowRight">→</kbd></div><span>avancer, tourner</span></div>'
+        + '<div class="bloc"><div class="touches"><kbd data-code="KeyA">Q</kbd><kbd data-code="KeyD">D</kbd></div><span>glisser</span></div>'
+        + '<div class="bloc"><div class="touches"><kbd data-code="Space" class="large">espace</kbd></div><span>monter</span></div>'
+        + '<div class="bloc"><div class="touches"><kbd data-code="ShiftLeft" class="large">maj</kbd></div><span>descendre</span></div>'
+        + '<div class="bloc"><div class="touches"><kbd data-code="KeyF" class="tir">F</kbd></div><span>tirer</span></div>'
+        + '<div class="bloc"><div class="touches"><kbd data-code="clic" class="large">clic</kbd></div><span>tirer là</span></div>'
+        + '</div>' : '');
 await page.setRequestInterception(true);
 page.on('request', async r => {
     if (r.resourceType() !== 'document') return r.continue();
@@ -1215,7 +1374,8 @@ page.on('request', async r => {
     if (!html.includes(ancre)) { console.error('page inattendue : la boucle de rendu est introuvable'); process.exit(1); }
     html = html.replace(ancre, `window.__demo = { THREE, camera, controls, renderer, scene, ySol, majSoleil, DATE_SIMULEE,
             LON0, LAT0, M_PAR_DEGRE_LON, M_PAR_DEGRE_LAT, vegChargee: () => vegChargee,
-            MAT_CIBLE, MAT_CONTOUR_CIBLE, MAT_VOISIN };\n${ancre}`)
+            MAT_CIBLE, MAT_CONTOUR_CIBLE, MAT_VOISIN, jeu, drone, touchesDrone, groupeBatiments,
+            accesVehicules, seCacher };\n${ancre}`)
                .replace('</style>', STYLE_DEMO + '</style>')
                .replace('<div id="tip"></div>', '<div id="tip"></div>' + HTML_DEMO);
     r.respond({ status: rep.status, contentType: 'text/html; charset=utf-8', body: html });
@@ -1396,15 +1556,26 @@ const lireCadre = () => page.evaluate(() => {
 let legende = { texte: '', debut: 0, fin: 0 };
 let chapitre = { debut: 0, fin: 0 };
 let photo = { debut: 0, fin: 0 };
+let clavier = { debut: 0, fin: 0, clic: false };
 const FONDU_S = 0.4;
 async function habiller() {
     const t = images / FPS;
     const fondu = e => Math.max(0, Math.min(1, (t - e.debut) / FONDU_S, (e.fin - t) / FONDU_S));
-    await page.evaluate((o, oc, op) => {
+    await page.evaluate((o, oc, op, ok, clic) => {
         document.getElementById('demo-legende').style.opacity = o;
         document.getElementById('demo-chapitre').style.opacity = oc;
         document.getElementById('demo-photo').style.opacity = op;
-    }, legende.texte ? fondu(legende) : 0, fondu(chapitre), fondu(photo));
+        // Le clavier de la traque : chaque touche allumée tant que la page la tient.
+        const k = document.getElementById('demo-clavier');
+        if (!k) return;
+        k.style.opacity = ok;
+        const tenues = window.__demo && window.__demo.touchesDrone;
+        if (ok > 0 && tenues) {
+            for (const e of k.querySelectorAll('kbd')) {
+                e.classList.toggle('appui', e.dataset.code === 'clic' ? clic : tenues.has(e.dataset.code));
+            }
+        }
+    }, legende.texte ? fondu(legende) : 0, fondu(chapitre), fondu(photo), fondu(clavier), clavier.clic);
 }
 async function carte(c, opacite) {
     await page.evaluate((c, o) => {
@@ -1684,10 +1855,12 @@ const outils = {
     /** L'onde d'un clic sous le curseur ; le vrai clic part au premier tiers. */
     async clic() {
         let fait = false;
+        clavier.clic = true;
         await filmer(0.45, async t => {
             if (!fait && t >= 0.3) { fait = true; await page.mouse.click(curseur.x, curseur.y); }
             await onde(t);
         });
+        clavier.clic = false;
         await onde(null);
     },
     async cacherCurseur() { await montrerCurseur(null); },
@@ -1753,6 +1926,121 @@ const outils = {
         for (const t of touches) await page.keyboard.down(t);
         await filmer(secondes);
         for (const t of touches) await page.keyboard.up(t);
+    },
+
+    // --- Traque : le clavier incrusté, le pilote ---------------------------------------
+    /** Le clavier incrusté, en fondu : `true` l'affiche, `false` le retire. */
+    async clavier(vu) {
+        const t = images / FPS;
+        clavier = vu ? { debut: t, fin: Infinity, clic: false } : { ...clavier, fin: t + FONDU_S };
+    },
+    /** La légende remplacée en cours de séquence, affichée `secondes` (jusqu'à la fin prévue sinon). */
+    async legende(texte, secondes) {
+        const t = images / FPS;
+        legende = { texte, debut: t, fin: secondes ? t + secondes : legende.fin };
+        await page.evaluate(x => { document.getElementById('demo-legende').textContent = x; }, texte);
+    },
+    /**
+     * Le pilote de la traque, `secondes` au plus : il tient les touches de la
+     * page (touchesDrone) comme un joueur au clavier, image par image. Il
+     * tourne vers le bonhomme (`tourner`), une fois le premier indice donné
+     * (`apresIndice`) ; avance ou recule pour que le réticule, posé 40° sous
+     * l'horizon à h / tan 40° devant lui, tombe sur le bonhomme (`avancer`) ;
+     * vole à `hauteur` m au-dessus de la rue du bonhomme, à 3 m près — au-dessus
+     * des toits, il montait et descendait à chaque immeuble ; tire (F) quand le
+     * réticule est à moins de 3,5 m de lui et qu'on le voit depuis la caméra,
+     * sans bâtiment entre eux, depuis 0,7 s (`tirer`) : touché derrière un
+     * immeuble, il n'était pas à l'image. Rend { touche, vu } : vu, la part des
+     * images où on le voyait. S'arrête au tir qui touche si `jusquauTouche`.
+     */
+    async piloter(secondes, o) {
+        const n = Math.round(secondes * FPS);
+        let touche = false, vuDepuis = 0, vues = 0, i = 0;
+        for (; i < n && !(touche && o.jusquauTouche); i++) {
+            const e = await page.evaluate((o, peutTirer) => {
+                const d = window.__demo, j = d.jeu, dr = d.drone, k = d.touchesDrone, c = j.coureur;
+                k.clear();
+                if (!c) return { touche: false, vu: false };
+                const buste = new d.THREE.Vector3(c.xy[0], c.y + 1.8, -c.xy[1]);
+                const versLui = buste.clone().sub(d.camera.position), loin = versLui.length();
+                const rayon = new d.THREE.Raycaster(d.camera.position, versLui.normalize(), 0, loin - 0.5);
+                const vu = !rayon.intersectObjects(d.groupeBatiments.children, true).length;
+                if (o.apresIndice && document.getElementById('jeu-indice').hidden && j.prochainIndice - j.debut < 6000) {
+                    return { touche: c.touche, vu };
+                }
+                const dx = c.xy[0] - dr.position.x, dz = -c.xy[1] - dr.position.z, dist = Math.hypot(dx, dz);
+                const rel = ((Math.atan2(dx, -dz) - dr.cap) * 180 / Math.PI % 360 + 540) % 360 - 180;
+                const h = dr.position.y - c.y;
+                if (o.tourner !== false) { if (rel > 6) k.add('ArrowRight'); else if (rel < -6) k.add('ArrowLeft'); }
+                const visee = Math.max(h, 2) / Math.tan(40 * Math.PI / 180);
+                // Plus serré devant que derrière : à ±4 m, le drone qui le poursuivait
+                // se calait 4 m trop loin, le réticule derrière lui, et F ne partait pas.
+                if (o.avancer && Math.abs(rel) < 45) {
+                    if (dist > visee + 1) k.add('ArrowUp'); else if (dist < visee - 3) k.add('ArrowDown');
+                }
+                if (o.hauteur) { if (h < o.hauteur - 3) k.add('Space'); else if (h > o.hauteur + 3) k.add('ShiftLeft'); }
+                if (o.tirer && peutTirer && j.vise && !c.touche
+                    && Math.hypot(j.vise.x - c.xy[0], j.vise.z + c.xy[1]) < 3.5) k.add('KeyF');
+                return { touche: c.touche, vu };
+            }, o, vuDepuis >= 0.7 * FPS);
+            touche = e.touche;
+            vuDepuis = e.vu ? vuDepuis + 1 : 0;
+            if (e.vu) vues++;
+            await filmer(1 / FPS);
+        }
+        await page.evaluate(() => window.__demo.touchesDrone.clear());
+        return { touche, vu: i ? vues / i : 0 };
+    },
+    /** Le bonhomme vu depuis la caméra, sans bâtiment entre eux. */
+    async bonhommeVu() {
+        return page.evaluate(() => {
+            const d = window.__demo, c = d.jeu.coureur;
+            const buste = new d.THREE.Vector3(c.xy[0], c.y + 1.8, -c.xy[1]);
+            const versLui = buste.clone().sub(d.camera.position), loin = versLui.length();
+            const rayon = new d.THREE.Raycaster(d.camera.position, versLui.normalize(), 0, loin - 0.5);
+            return !rayon.intersectObjects(d.groupeBatiments.children, true).length;
+        });
+    },
+    /** Le bonhomme reposé, caché contre le véhicule le plus proche de `p` (mise en scène du départ). */
+    async planquer(p) {
+        const ecart = await page.evaluate(p => {
+            const d = window.__demo, c = d.jeu.coureur;
+            const x = (p.lon - d.LON0) * d.M_PAR_DEGRE_LON, y = (p.lat - d.LAT0) * d.M_PAR_DEGRE_LAT;
+            const v = d.accesVehicules().reduce((m, q) => (Math.hypot(q.x - x, q.y - y) < Math.hypot(m.x - x, m.y - y) ? q : m));
+            Object.assign(c, { arete: v.arete, s: v.s, but: null, chemin: [] });
+            d.seCacher(c, v);
+            return Math.hypot(v.x - x, v.y - y);
+        }, p);
+        if (ecart > 5) throw new Error(`planque : le véhicule le plus proche est à ${ecart.toFixed(1)} m du point voulu`);
+    },
+    /** Le buste du bonhomme, en pixels de la page, pour y cliquer. */
+    async busteEcran() {
+        return page.evaluate(() => {
+            const d = window.__demo, c = d.jeu.coureur;
+            const v = new d.THREE.Vector3(c.xy[0], c.y + 1.8, -c.xy[1]).project(d.camera);
+            const r = d.renderer.domElement.getBoundingClientRect();
+            return { x: r.left + (v.x + 1) / 2 * r.width, y: r.top + (1 - v.y) / 2 * r.height, devant: v.z < 1 };
+        });
+    },
+    /** Le curseur rejoint le bonhomme qui court, en `secondes`, le suit, et clique sur lui. */
+    async cliquerBonhomme(secondes) {
+        const depart = curseur || { x: fmt.largeur * 0.62, y: fmt.hauteur * 0.62 };
+        await filmer(secondes, async t => {
+            const b = await outils.busteEcran(), k = lisser(t);
+            await montrerCurseur({ x: depart.x + (b.x - depart.x) * k, y: depart.y + (b.y - depart.y) * k });
+            await page.mouse.move(curseur.x, curseur.y);
+        });
+        await montrerCurseur(await outils.busteEcran());
+        await outils.clic();
+    },
+    /** Où en est la partie : distance du bonhomme au drone, ce qu'il fait, manches. */
+    async partie() {
+        return page.evaluate(() => {
+            const d = window.__demo, j = d.jeu, c = j.coureur, dr = d.drone;
+            return c ? { distance: Math.round(Math.hypot(c.xy[0] - dr.position.x, -c.xy[1] - dr.position.z)),
+                         fuite: c.fuite, pause: c.pause > 0, touche: c.touche, manche: j.manche, touches: j.touches,
+                         tirs: j.tirsManche } : null;
+        });
     },
     /** Les tuiles de l'horizon chargées pour un cadre, avant de le filmer : la page
      *  tourne à vide, sans capture, pendant `secondes` réelles. */
