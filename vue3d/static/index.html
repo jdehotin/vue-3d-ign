@@ -10675,6 +10675,9 @@ let finAnnonce = null;
 function annoncer(html, duree) {
     messageJeu.innerHTML = html;
     messageJeu.hidden = false;
+    // Un message masque l'indice : posés au même endroit, l'un sur l'autre,
+    // « Éteint ! » et « Tournez à gauche » se lisaient mal (film des incendies).
+    indiceJeu.hidden = true;
     clearTimeout(finAnnonce);
     // Traque en cours : effacé par majJeu, à l'horloge du jeu, celle des
     // indices et des manches. Une minuterie compte le temps réel, que le
@@ -10871,7 +10874,8 @@ function majJeu(dt, maintenant) {
         return false;
     });
 
-    if (!c.touche && maintenant > jeu.prochainIndice) {
+    // L'indice attend qu'un message soit parti.
+    if (!c.touche && messageJeu.hidden && maintenant > jeu.prochainIndice) {
         jeu.prochainIndice = maintenant + JEU_INDICE_S * 1000;
         jeu.finIndice = maintenant + JEU_INDICE_DUREE_S * 1000;
         majIndice(c);
@@ -11223,13 +11227,14 @@ function majFoyer(f, dt, t, maintenant) {
     }
 }
 
-function bouffee(f, couleur, opacite, vie) {
+/** Une bouffée de fumée ou de vapeur : `taille`, son rayon final en m ; à défaut, d'après le foyer. */
+function bouffee(f, couleur, opacite, vie, taille) {
     const m = new THREE.Mesh(GEO_BOUFFEE, new THREE.MeshBasicMaterial({ color: couleur, transparent: true,
         opacity: 0, depthWrite: false }));
     const y0 = ySol(...toLonLat(f.x, f.y));
     m.position.set(f.x + (Math.random() - 0.5) * 2, y0 + 2 + 3 * f.intensite, -f.y + (Math.random() - 0.5) * 2);
     groupeFeux.add(m);
-    f.fumee.push({ m, age: 0, vie, o: opacite, r0: 1.5 + 1.5 * f.intensite, r1: 12 + 8 * f.intensite,
+    f.fumee.push({ m, age: 0, vie, o: opacite, r0: 1.5 + 1.5 * f.intensite, r1: taille ?? 12 + 8 * f.intensite,
                    v: new THREE.Vector3(VENT.x + (Math.random() - 0.5), 3.2 + Math.random(), VENT.z + (Math.random() - 0.5)) });
 }
 
@@ -11238,7 +11243,9 @@ function eteindreFoyer(f) {
     f.intensite = 0;
     f.fin = performance.now() + 9000;
     feux.eteints++;
-    for (let i = 0; i < 8; i++) bouffee(f, 0xf2f4f6, 0.7, 5);
+    // Une vapeur légère : huit bouffées de 12 m, opaques à 0,7, faisaient une
+    // boule blanche qui mangeait le centre de l'image (film des incendies).
+    for (let i = 0; i < 5; i++) bouffee(f, 0xf2f4f6, 0.4, 3.5, 6);
     for (const p of f.gens) if (p.etat !== 'part') { p.etat = 'applaudit'; p.depuis = Math.random() * 0.5; }
     const restent = feux.foyers.filter(g => g.etat === 'brule').length;
     annoncer(`Éteint !<small>la foule applaudit · ${restent} incendie${restent > 1 ? 's' : ''} en cours</small>`, 3);
@@ -11278,7 +11285,7 @@ function eclabousser(p) {
         if (Math.hypot(x - f.x, y - f.y) > rayonFeu(f) + 2) continue;
         f.intensite -= FEU_EAU;
         f.auMax = 0;
-        for (let i = 0; i < 3; i++) bouffee(f, 0xe8ecef, 0.6, 4);
+        for (let i = 0; i < 3; i++) bouffee(f, 0xe8ecef, 0.45, 3, 5);
         if (f.intensite <= 0) eteindreFoyer(f);
     }
     for (const q of foule.gens) {
@@ -11497,7 +11504,7 @@ function majIncendies(dt, maintenant) {
         reticuleEau.scale.setScalar(Math.max(1, camera.position.distanceTo(chute) / 50));
     }
 
-    if (!feux.relance && maintenant > feux.prochainIndice) {
+    if (!feux.relance && messageJeu.hidden && maintenant > feux.prochainIndice) {
         feux.prochainIndice = maintenant + JEU_INDICE_S * 1000;
         feux.finIndice = maintenant + JEU_INDICE_DUREE_S * 1000;
         majIndiceFeu();

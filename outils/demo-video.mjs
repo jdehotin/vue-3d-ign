@@ -88,13 +88,16 @@ const FORMATS = {
 //   node outils/demo-video.mjs bornes carre      # docs/demo/demo-bornes-carre.mp4
 //   node outils/demo-video.mjs bornes paysage    # docs/demo/demo-bornes-paysage.mp4
 //   GRAINE=3 node outils/demo-video.mjs jeu carre   # la traque, une autre partie
+//   node outils/demo-video.mjs feux carre        # les incendies, à Bordeaux
 //
-// Le film `jeu` est une vraie partie : un pilote (piloter) tient les touches
+// Les films `jeu` (la traque) et `feux` (les incendies) sont de vraies
+// parties : un pilote (piloter, piloterFeu) tient les touches
 // du drone d'après l'indice et la position du bonhomme, et tire quand le
 // réticule est sur lui ; les touches tenues s'allument sur un clavier
 // incrusté. Le hasard de la page (ses choix de route, son point de départ)
 // est tiré d'une graine (GRAINE), pour qu'un tournage refasse la même partie.
-const SERIE = ['lidar', 'recherche', 'dpe-dvf', 'drone', 'bornes', 'vehicules', 'soleil', 'export', 'jeu'];
+const SERIE = ['lidar', 'recherche', 'dpe-dvf', 'drone', 'bornes', 'vehicules', 'soleil', 'export', 'jeu', 'feux'];
+const FILM_JEU = FORMAT === 'jeu' || FORMAT === 'feux';
 const GRAINE = Number(process.env.GRAINE || 1);
 const DANS_SERIE = SERIE.includes(FORMAT);
 const ASPECT = DANS_SERIE ? (process.argv[3] || 'carre') : null;
@@ -201,6 +204,17 @@ const NICE = { lat: 43.6947, lon: 7.2655, zone: 1000 };
 // branches qui l'en éloignent, la promenade, à découvert.
 const NICE_DECOLLAGE = { lat: 43.694882, lon: 7.265490 };
 const NICE_PLANQUE = { lat: 43.694831, lon: 7.262392 };
+// Bordeaux, pour les incendies : la place de la Bourse et l'esplanade des
+// Quinconces, dégagées (60 et 64 places libres sur 64 à 7-17 m autour,
+// d'après les emprises BD TOPO), et la Garonne, à 138 m de la Bourse, pour
+// remplir la réserve. Mise en scène du départ, seulement : les deux premiers
+// foyers y sont posés, et le drone décolle d'un point dégagé à 238 m de la
+// Bourse ; tirés au hasard, ils partaient aux carrefours des rues étroites.
+// Ensuite, la partie est celle de la page.
+const BORDEAUX = { lat: 44.8430, lon: -0.5715, zone: 1000 };
+const BORDEAUX_BASE = { lat: 44.8424, lon: -0.5721 };
+const BORDEAUX_FOYERS = [{ lat: 44.8411, lon: -0.5697 }, { lat: 44.8447, lon: -0.5733 }];
+const BORDEAUX_EAU = { lat: 44.8408, lon: -0.5680 };
 const SITE = 'vue-3d-ign.kysoe.com';
 const LINKEDIN = 'linkedin.com/in/ysimon';
 const urlDe = l => `${BASE}/?lat=${l.lat}&lon=${l.lon}${l.zone ? `&zone=${l.zone}` : ''}`;
@@ -1157,6 +1171,85 @@ const SEQUENCES_SERIE = [
             await s.voler(s.duree, ['Space']);
         },
     },
+
+    // --- Les incendies : Bordeaux, de la place de la Bourse à la Garonne -----------------
+    // Une vraie partie, jouée par le pilote (piloterFeu), départ mis en scène
+    // (BORDEAUX_FOYERS) : le décollage, l'indice, le foyer de la Bourse et sa
+    // manifestation, les largages, le pompage dans la Garonne.
+    {
+        id: 'f-titre', lieu: BORDEAUX, duree: 6, formats: ['feux'],
+        court: 'Bordeaux, de la place de la Bourse aux Quinconces, en 3D depuis les données ouvertes de l’IGN',
+        carte: { titre: 'Les incendies', sous: 'Vue 3D IGN · un jeu en drone : éteindre les feux de la ville' }, carteDifferee: true,
+        async jouer(s) {
+            await s.chauffer({ ...BORDEAUX, hauteur: 20, distance: 850, azimut: 215, elevation: 26 }, 25);
+            await s.glisser(s.duree, { ...BORDEAUX, hauteur: 20, distance: 850, azimut: 215, elevation: 26 },
+                                     { ...BORDEAUX, hauteur: 20, distance: 640, azimut: 205, elevation: 22 }, t => apparaitre(s, t, 2));
+        },
+    },
+    {
+        id: 'f-depart', lieu: BORDEAUX, duree: 7, formats: ['feux'],
+        court: 'En drone, le bouton « Feux » : des incendies se déclarent dans la ville',
+        async jouer(s) {
+            // La caméra au sud-ouest du décollage : le drone part vers le nord-est, la Bourse sur sa droite.
+            await s.glisser(1.5, null, { ...BORDEAUX_BASE, hauteur: 15, distance: 170, azimut: 220, elevation: 18 });
+            await s.vitesse(8);
+            await s.bouton('t-drone', true);
+            await page.evaluate(() => { window.__demo.drone.recul = 12; });
+            await s.bouton('t-jeu', true);
+            await s.allumerFoyers(BORDEAUX_FOYERS);
+            await s.lacher();
+            await s.clavier(true);
+        },
+    },
+    {
+        id: 'f-indice', lieu: BORDEAUX, duree: 8, formats: ['feux'],
+        court: 'Toutes les 15 s, un indice : de quel côté tourner, à quelle distance',
+        async jouer(s) { await s.piloterFeu(s.duree, { apresIndice: true, hauteur: 35 }); },
+    },
+    {
+        id: 'f-approche', lieu: BORDEAUX, duree: 6, formats: ['feux'],
+        court: 'Une manifestation autour de chaque foyer, pancartes levées',
+        // À 30 m du foyer et 16 m de haut : à 22 m, au-dessus de lui, la foule n'était que des points.
+        async jouer(s) { await s.piloterFeu(s.duree, { hauteur: 16, arret: 30 }); },
+    },
+    {
+        // Durée minimale : jusqu'au foyer éteint, plus 3,5 s.
+        id: 'f-largage', lieu: BORDEAUX, duree: 6, formats: ['feux'],
+        court: 'F largue l’eau, qui tombe sous le réticule bleu',
+        async jouer(s) {
+            // Les passes à 12 m/s : à 24 m/s, le drone passait au-dessus du foyer avant d'avoir freiné.
+            await s.vitesse(4);
+            const e = await s.piloterFeu(16, { hauteur: 18, larguer: true, jusqua: 'eteint' });
+            console.log('    largage :', e);
+            await s.legende('Éteint ! La foule applaudit', 3.5);
+            await s.piloterFeu(3.5, { vers: BORDEAUX_FOYERS[0], hauteur: 16, arret: 30 });
+            await s.vitesse(8);
+        },
+    },
+    {
+        // Durée minimale : jusqu'à la réserve pleine.
+        id: 'f-reserve', lieu: BORDEAUX, duree: 6, formats: ['feux'],
+        court: 'La réserve se remplit au ras de l’eau, ou à la base',
+        async jouer(s) {
+            // La légende tenue jusqu'à la réserve pleine : à sa durée prévue (6 s), elle
+            // s'éteignait pendant le vol jusqu'au fleuve.
+            await s.legende('La réserve se remplit au ras de l’eau, ou à la base', 30);
+            const e = await s.piloterFeu(16, { vers: BORDEAUX_EAU, hauteur: 6, jusqua: 'plein',
+                legende: n => `La réserve se remplit au ras de l’eau, ou à la base · eau ${n}/12` });
+            console.log('    réserve :', e);
+            await s.piloterFeu(1, { vers: BORDEAUX_EAU, hauteur: 6 });
+        },
+    },
+    {
+        ...finSerie('feux', BORDEAUX, null, 'Routes, eau et orthophotos © IGN (BD TOPO, BD ORTHO)'),
+        async jouer(s) {
+            await s.cartouche('');
+            await s.clavier(false);
+            // Les incendies arrêtés : pas de nouvelle partie sous le carton.
+            await cliquer('t-jeu');
+            await s.voler(s.duree, ['Space']);
+        },
+    },
 ];
 /** Le cartouche d'un export, tiré de la note de la page : format, taille, contenu, repère. */
 function cartoucheExport(format, note, repere) {
@@ -1169,7 +1262,7 @@ function cartoucheExport(format, note, repere) {
 // filmé trouve alors sa couche en cache, sans attente à l'image.
 // La traque ne montre pas le nuage, mais la page le demande : en
 // construction, le serveur répond 503, une erreur pour le tournage.
-const PRELECTURES = { lidar: ['nuage'], 'dpe-dvf': ['dpe', 'dvf'], bornes: ['bornes'], jeu: ['nuage'] };
+const PRELECTURES = { lidar: ['nuage'], 'dpe-dvf': ['dpe', 'dvf'], bornes: ['bornes'], jeu: ['nuage'], feux: ['nuage'] };
 
 // --- Voix -------------------------------------------------------------------
 // Avec une voix, les phrases sont dites avant le tournage : la durée de chaque
@@ -1226,9 +1319,9 @@ await page.evaluateOnNewDocument(() => {
     window.__pret = () => file.length > 0;
     window.__pas = dt => { horloge += dt; const cbs = file; file = []; for (const cb of cbs) cb(horloge); };
 });
-// La traque : le hasard de la page tiré d'une graine (mulberry32), pour qu'un
+// Les jeux : le hasard de la page tiré d'une graine (mulberry32), pour qu'un
 // tournage refasse la même partie.
-if (FORMAT === 'jeu') {
+if (FILM_JEU) {
     await page.evaluateOnNewDocument(graine => {
         let a = graine >>> 0;
         Math.random = () => {
@@ -1313,7 +1406,9 @@ const STYLE_DEMO = `
     #demo-clavier kbd.appui { background:#ffb347; border-color:#ffb347; color:#1b1b1b; }
     #demo-clavier kbd.tir { border-color:#ff8a7a; }
     #demo-clavier kbd.tir.appui { background:#ff4a3a; border-color:#ff4a3a; color:#fff; }
-    ${FORMAT === 'jeu' ? `
+    #demo-clavier kbd.eau { border-color:#7cc4ff; }
+    #demo-clavier kbd.eau.appui { background:#3aa8ff; border-color:#3aa8ff; color:#fff; }
+    ${FILM_JEU ? `
     /* La traque : la légende en haut, le clavier en bas ; le titre d'une
        manche et l'indice de la page, grandis pour un téléphone, entre les deux. */
     #haut-gauche { display:none !important; }
@@ -1350,14 +1445,16 @@ const HTML_DEMO = '<div id="demo-carte"><h1></h1><p></p></div><div id="demo-lege
     + '<div id="demo-onde"></div><div id="demo-curseur"><svg viewBox="0 0 24 24" width="100%" height="100%">'
     + '<path d="M3 2l15 11.5-6.6.9 3.9 7.4-2.9 1.5-3.9-7.5L3 20.3z" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/></svg></div>'
     // Q et D : les touches KeyA et KeyD d'un clavier français, que la page écoute.
-    + (FORMAT === 'jeu' ? '<div id="demo-clavier">'
+    + (FILM_JEU ? '<div id="demo-clavier">'
         + '<div class="bloc"><div class="touches"><kbd data-code="ArrowLeft">←</kbd><kbd data-code="ArrowUp">↑</kbd>'
         + '<kbd data-code="ArrowDown">↓</kbd><kbd data-code="ArrowRight">→</kbd></div><span>avancer, tourner</span></div>'
         + '<div class="bloc"><div class="touches"><kbd data-code="KeyA">Q</kbd><kbd data-code="KeyD">D</kbd></div><span>glisser</span></div>'
         + '<div class="bloc"><div class="touches"><kbd data-code="Space" class="large">espace</kbd></div><span>monter</span></div>'
         + '<div class="bloc"><div class="touches"><kbd data-code="ShiftLeft" class="large">maj</kbd></div><span>descendre</span></div>'
-        + '<div class="bloc"><div class="touches"><kbd data-code="KeyF" class="tir">F</kbd></div><span>tirer</span></div>'
-        + '<div class="bloc"><div class="touches"><kbd data-code="clic" class="large">clic</kbd></div><span>tirer là</span></div>'
+        + `<div class="bloc"><div class="touches"><kbd data-code="KeyF" class="${FORMAT === 'feux' ? 'eau' : 'tir'}">F</kbd></div>`
+        + `<span>${FORMAT === 'feux' ? 'larguer' : 'tirer'}</span></div>`
+        + '<div class="bloc"><div class="touches"><kbd data-code="clic" class="large">clic</kbd></div>'
+        + `<span>${FORMAT === 'feux' ? 'larguer' : 'tirer là'}</span></div>`
         + '</div>' : '');
 await page.setRequestInterception(true);
 page.on('request', async r => {
@@ -1375,7 +1472,7 @@ page.on('request', async r => {
     html = html.replace(ancre, `window.__demo = { THREE, camera, controls, renderer, scene, ySol, majSoleil, DATE_SIMULEE,
             LON0, LAT0, M_PAR_DEGRE_LON, M_PAR_DEGRE_LAT, vegChargee: () => vegChargee,
             MAT_CIBLE, MAT_CONTOUR_CIBLE, MAT_VOISIN, jeu, drone, touchesDrone, groupeBatiments,
-            accesVehicules, seCacher };\n${ancre}`)
+            accesVehicules, seCacher, feux, chutePrevue, rayonFeu, creerFoyer, libererPersonne, groupeFeux };\n${ancre}`)
                .replace('</style>', STYLE_DEMO + '</style>')
                .replace('<div id="tip"></div>', '<div id="tip"></div>' + HTML_DEMO);
     r.respond({ status: rep.status, contentType: 'text/html; charset=utf-8', body: html });
@@ -2000,6 +2097,84 @@ const outils = {
             const rayon = new d.THREE.Raycaster(d.camera.position, versLui.normalize(), 0, loin - 0.5);
             return !rayon.intersectObjects(d.groupeBatiments.children, true).length;
         });
+    },
+    /** Les foyers de la partie remplacés par des foyers posés en `points` (mise en scène du départ). */
+    async allumerFoyers(points) {
+        await page.evaluate(points => {
+            const d = window.__demo, F = d.feux;
+            for (const f of F.foyers) {
+                d.groupeFeux.remove(f.groupe);
+                for (const b of f.fumee) { d.groupeFeux.remove(b.m); b.m.material.dispose(); }
+                for (const p of f.gens) d.libererPersonne(p);
+            }
+            F.foyers = points.map(p => d.creerFoyer((p.lon - d.LON0) * d.M_PAR_DEGRE_LON, (p.lat - d.LAT0) * d.M_PAR_DEGRE_LAT));
+            F.declares = F.foyers.length;
+        }, points);
+    },
+    /**
+     * Le pilote des incendies, `secondes` au plus : vers `vers` ({lat, lon}), ou
+     * vers le foyer en feu le plus proche ; une fois le premier indice donné
+     * (`apresIndice`). Il tourne vers la cible, avance tant qu'elle est plus
+     * loin que `arret` m plus ce que l'inertie (0,6 s) lui fait encore
+     * parcourir, recule s'il en est à moins de `arret` − 6 m, et tient `hauteur`
+     * m au-dessus du sol de la cible, à 2 m près. Avec `larguer`, il fait des
+     * passes : il fonce vers le foyer depuis 30 m, largue (F) quand l'eau
+     * lâchée tomberait dedans, et repart en arrière à 10 m — l'eau part en
+     * cloche devant lui, et il reste hors du panache : au-dessus du foyer, la
+     * fumée puis la vapeur noyaient toute l'image. S'arrête au foyer éteint
+     * (`jusqua: 'eteint'`) ou à la réserve pleine (`'plein'`) ;
+     * `legende(reserve)`, si elle est donnée, réécrit la légende quand la
+     * réserve change. Rend l'état de la partie.
+     */
+    async piloterFeu(secondes, o) {
+        const n = Math.round(secondes * FPS);
+        let e = null, eteints0 = null, reserve = null;
+        for (let i = 0; i < n; i++) {
+            e = await page.evaluate(o => {
+                const d = window.__demo, F = d.feux, dr = d.drone, k = d.touchesDrone;
+                k.clear();
+                let tx, ty, foyer = null;
+                if (o.vers) {
+                    tx = (o.vers.lon - d.LON0) * d.M_PAR_DEGRE_LON; ty = (o.vers.lat - d.LAT0) * d.M_PAR_DEGRE_LAT;
+                } else {
+                    let loin = Infinity;
+                    for (const f of F.foyers) {
+                        const l = f.etat === 'brule' && Math.hypot(f.x - dr.position.x, -f.y - dr.position.z);
+                        if (l !== false && l < loin) { loin = l; foyer = f; }
+                    }
+                    if (!foyer) return { eteints: F.eteints, reserve: F.reserve };
+                    tx = foyer.x; ty = foyer.y;
+                }
+                const etat = { eteints: F.eteints, reserve: F.reserve };
+                if (o.apresIndice && document.getElementById('jeu-indice').hidden && F.prochainIndice - F.debut < 6000) return etat;
+                const dx = tx - dr.position.x, dz = -ty - dr.position.z, dist = Math.hypot(dx, dz);
+                const rel = ((Math.atan2(dx, -dz) - dr.cap) * 180 / Math.PI % 360 + 540) % 360 - 180;
+                const v = Math.hypot(dr.vitesse.x, dr.vitesse.z), arret = o.arret || 3;
+                if (dist > 3) { if (rel > 6) k.add('ArrowRight'); else if (rel < -6) k.add('ArrowLeft'); }
+                if (o.larguer) {
+                    const passe = window.__passe = (window.__passe ?? true) ? dist > 10 : dist > 30;
+                    if (Math.abs(rel) < 45) k.add(passe ? 'ArrowUp' : 'ArrowDown');
+                } else if (Math.abs(rel) < 45 && dist > arret + v * 0.7) k.add('ArrowUp');
+                else if (dist < arret - 6 || (Math.abs(rel) > 135 && dist > 3)) k.add('ArrowDown');
+                const h = dr.position.y - d.ySol(d.LON0 + tx / d.M_PAR_DEGRE_LON, d.LAT0 + ty / d.M_PAR_DEGRE_LAT);
+                if (o.hauteur) { if (h < o.hauteur - 2) k.add('Space'); else if (h > o.hauteur + 2) k.add('ShiftLeft'); }
+                if (o.larguer && foyer) {
+                    const p = d.chutePrevue();
+                    if (p && Math.hypot(p.x - foyer.x, p.z + foyer.y) < d.rayonFeu(foyer)) k.add('KeyF');
+                }
+                return etat;
+            }, o);
+            if (eteints0 === null) eteints0 = e.eteints;
+            if (o.legende && e.reserve !== reserve) {
+                reserve = e.reserve;
+                await page.evaluate(t => { document.getElementById('demo-legende').textContent = t; }, o.legende(reserve));
+            }
+            await filmer(1 / FPS);
+            if (o.jusqua === 'eteint' && e.eteints > eteints0) break;
+            if (o.jusqua === 'plein' && e.reserve >= 12) break;
+        }
+        await page.evaluate(() => window.__demo.touchesDrone.clear());
+        return e;
     },
     /** Le bonhomme reposé, caché contre le véhicule le plus proche de `p` (mise en scène du départ). */
     async planquer(p) {
