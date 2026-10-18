@@ -556,8 +556,11 @@
                     <rect x="10" y="10" width="4" height="4" rx="1"/>
                 </svg>
             </button>
-            <button type="button" id="t-jeu" class="bouton-vue texte" hidden aria-label="Jeu"
-                    title="Jeu : éteindre depuis le drone les incendies qui se déclarent dans la ville, au milieu des manifestations">Jeu</button>
+            <!-- Les deux jeux du drone, visibles en vol ; chacun s'arrête par son bouton. -->
+            <button type="button" id="t-jeu" class="bouton-vue texte" hidden aria-label="Jeu des incendies"
+                    title="Jeu : éteindre depuis le drone les incendies qui se déclarent dans la ville, au milieu des manifestations">Feux</button>
+            <button type="button" id="t-traque" class="bouton-vue texte" hidden aria-label="Jeu de la traque"
+                    title="Jeu : retrouver Vladimir, qui court sur les routes entre les véhicules, et le toucher depuis le drone">Traque</button>
             <button type="button" id="btn-aide" class="bouton-vue" aria-label="Prise en main"
                     aria-haspopup="dialog" aria-controls="tuto" title="Prise en main : les gestes, et ce que montre la vue">
                 <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -9975,13 +9978,13 @@ function entrerDrone() {
     hudDrone.hidden = false;
     padDrone.hidden = !TACTILE;
     decalage.hidden = true;
-    btnJeu.hidden = false;
+    btnJeu.hidden = btnTraque.hidden = false;
 }
 
 function sortirDrone() {
     arreterJeu();
     arreterIncendies();
-    btnJeu.hidden = true;
+    btnJeu.hidden = btnTraque.hidden = true;
     droneActif = false;
     btnDrone.classList.remove('on');
     controls.enabled = true;
@@ -10103,8 +10106,8 @@ function majDrone(dt, maintenant) {
 // lui, sous le réticule rouge ; un clic, ou un toucher, vise ce qu'il
 // désigne. Les valeurs ci-dessous sont des réglages de jeu, pas des mesures.
 const JEU_DEMANDE = PARAMS.has('jeu') && PARAMS.get('jeu') !== '0';
-// Le jeu du bouton « Jeu » : les incendies, sauf ?jeu=traque. Un objet, que
-// le tournage (outils/demo-video.mjs) règle pour filmer la traque.
+// Le jeu que lance ?jeu= : les incendies, sauf ?jeu=traque. En vol, chaque
+// jeu a son bouton (Feux, Traque).
 const choixJeu = { type: PARAMS.get('jeu') === 'traque' ? 'traque' : 'incendies' };
 const JEU_ECHELLE = 1.5;                    // 2,6 m : plus grand que nature, pour se voir du ciel
 const JEU_VITESSE = 3.2;                    // m/s, au petit trot
@@ -10135,12 +10138,13 @@ const JEU_SOUS_LE_DRONE_M = 20;             // plus près, l'indice ne dit plus 
 const CLE_RECORD_JEU = 'vue3d.jeu-record';
 const AIDE_JEU = AU_DOIGT
     ? `Traque : un indice toutes les ${JEU_INDICE_S} s, la flèche rouge en haut à gauche tout le temps · `
-      + 'TIR, ou toucher la vue, pour tirer · le bouton Jeu pour arrêter'
+      + 'TIR, ou toucher la vue, pour tirer · le bouton Traque pour arrêter'
     : `Traque : un indice toutes les ${JEU_INDICE_S} s, la flèche rouge en haut à gauche tout le temps · `
       + 'F tire sous le réticule, un clic là où il désigne · flèches, Q D, espace, Maj pour voler · '
       + 'Échap pour sortir';
 
-const btnJeu = document.getElementById('t-jeu');
+const btnJeu = document.getElementById('t-jeu');            // les incendies
+const btnTraque = document.getElementById('t-traque');
 const hudJeu = document.getElementById('hud-jeu');
 const messageJeu = document.getElementById('jeu-message');
 const indiceJeu = document.getElementById('jeu-indice');
@@ -10780,7 +10784,7 @@ function activerJeu() {
         return;
     }
     jeu.actif = true;
-    btnJeu.classList.add('on');
+    btnTraque.classList.add('on');
     groupeJeu.visible = true;
     hudJeu.hidden = false;
     padTir.hidden = !TACTILE;
@@ -10796,7 +10800,7 @@ function activerJeu() {
 function arreterJeu() {
     if (!jeu.actif) return;
     jeu.actif = false;
-    btnJeu.classList.remove('on');
+    btnTraque.classList.remove('on');
     groupeJeu.visible = false;
     for (const { balle } of jeu.tirs) groupeJeu.remove(balle);
     for (const { m } of jeu.effets) { groupeJeu.remove(m); m.material.dispose(); }
@@ -10807,13 +10811,16 @@ function arreterJeu() {
     if (droneActif) aideVue.textContent = AIDE_DRONE;
 }
 
+// Un bouton par jeu : il lance le sien, ou l'arrête ; pendant l'autre jeu, il
+// change de jeu.
 btnJeu.addEventListener('click', () => {
-    if (jeu.actif) arreterJeu();
-    else if (feux.actif) arreterIncendies();
-    else if (choixJeu.type === 'traque') activerJeu();
-    else activerIncendies();
+    if (feux.actif) arreterIncendies(); else { arreterJeu(); activerIncendies(); }
     // Comme le drone : l'espace, qui fait monter, presserait encore le bouton.
     btnJeu.blur();
+});
+btnTraque.addEventListener('click', () => {
+    if (jeu.actif) arreterJeu(); else { arreterIncendies(); activerJeu(); }
+    btnTraque.blur();
 });
 if (JEU_DEMANDE) Promise.allSettled([sceneConstruite, reliefCharge])
     .then(() => (choixJeu.type === 'traque' ? activerJeu() : activerIncendies()));
@@ -10924,7 +10931,7 @@ const PESANTEUR = 9.81;
 const CLE_RECORD_FEUX = 'vue3d.incendies-record';
 const AIDE_INCENDIES = AU_DOIGT
     ? `Incendies : un indice toutes les ${JEU_INDICE_S} s · EAU, ou toucher la vue, pour larguer · `
-      + 'remplir au ras de la base ou de l\'eau · le bouton Jeu pour arrêter'
+      + 'remplir au ras de la base ou de l\'eau · le bouton Feux pour arrêter'
     : `Incendies : un indice toutes les ${JEU_INDICE_S} s · F, ou un clic, largue l'eau, qui tombe sous `
       + 'le réticule bleu · remplir au ras de la base ou de l\'eau · flèches, Q D, espace, Maj '
       + 'pour voler · Échap pour sortir';

@@ -1099,9 +1099,7 @@ const SEQUENCES_SERIE = [
             await s.bouton('t-drone', true);
             // Plus de recul qu'au décollage (9 m) : le bonhomme se voit de plus loin.
             await page.evaluate(() => { window.__demo.drone.recul = 12; });
-            // Le bouton « Jeu » lance les incendies : ce film est celui de la traque.
-            await page.evaluate(() => { window.__demo.choixJeu.type = 'traque'; });
-            await s.bouton('t-jeu', true);
+            await s.bouton('t-traque', true);
             await s.planquer(NICE_PLANQUE);
             await s.lacher();
             await s.clavier(true);
@@ -1155,7 +1153,7 @@ const SEQUENCES_SERIE = [
             await s.cartouche('');
             await s.clavier(false);
             // La traque arrêtée : pas de nouvelle manche sous le carton.
-            await cliquer('t-jeu');
+            await cliquer('t-traque');
             await s.voler(s.duree, ['Space']);
         },
     },
@@ -1377,7 +1375,7 @@ page.on('request', async r => {
     html = html.replace(ancre, `window.__demo = { THREE, camera, controls, renderer, scene, ySol, majSoleil, DATE_SIMULEE,
             LON0, LAT0, M_PAR_DEGRE_LON, M_PAR_DEGRE_LAT, vegChargee: () => vegChargee,
             MAT_CIBLE, MAT_CONTOUR_CIBLE, MAT_VOISIN, jeu, drone, touchesDrone, groupeBatiments,
-            accesVehicules, seCacher, choixJeu };\n${ancre}`)
+            accesVehicules, seCacher };\n${ancre}`)
                .replace('</style>', STYLE_DEMO + '</style>')
                .replace('<div id="tip"></div>', '<div id="tip"></div>' + HTML_DEMO);
     r.respond({ status: rep.status, contentType: 'text/html; charset=utf-8', body: html });
