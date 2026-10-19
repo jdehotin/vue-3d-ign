@@ -32,6 +32,7 @@ def test_l_axe_fictif_d_une_riviere_a_surface_n_est_pas_dessine():
     ]}
     eau = eau_pour_emprise(*EMPRISE, None, cours)
     assert [c["largeur_m"] for c in eau["cours"]] == [2.5]
+    assert [c["source_largeur"] for c in eau["cours"]] == ["BD TOPO"]
 
 
 def test_un_cours_d_eau_souterrain_n_est_pas_dessine():
@@ -43,7 +44,10 @@ def test_un_cours_d_eau_souterrain_n_est_pas_dessine():
 def test_une_classe_de_largeur_inconnue_prend_la_plus_etroite():
     cours = {"features": [_f(_ligne((0.1, 0.2), (0.9, 0.2)), fictif=False,
                              classe_de_largeur="En attente de mise à jour")]}
-    assert eau_pour_emprise(*EMPRISE, None, cours)["cours"][0]["largeur_m"] == LARGEUR_PAR_DEFAUT_M
+    c = eau_pour_emprise(*EMPRISE, None, cours)["cours"][0]
+    assert c["largeur_m"] == LARGEUR_PAR_DEFAUT_M
+    # L'export le dit : la BD TOPO tait cette largeur, c'est une convention.
+    assert c["source_largeur"] == "convention"
 
 
 def test_un_simple_contact_avec_l_emprise_ne_laisse_rien():

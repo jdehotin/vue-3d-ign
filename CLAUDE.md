@@ -31,7 +31,7 @@ npm install puppeteer-core && node outils/essai-navigateur.mjs "http://localhost
 
 ```
 vue3d/
-  app.py        Flask : /, /api/scene, /api/ortho, /api/monuments, /api/ouvrages, /api/nuage, /api/piscines, /api/navires, /api/vehicules, /api/panneaux, /api/dpe, /api/dvf, /api/bornes, /api/avancement, /api/sante, /api/tuile, POST /api/reconstruire ; quota de scènes neuves par IP (VUE3D_QUOTA, VUE3D_PROXY derrière un proxy)
+  app.py        Flask : /, /api/scene, /api/ortho, /api/monuments, /api/ouvrages, /api/emprises, /api/nuage, /api/piscines, /api/navires, /api/vehicules, /api/panneaux, /api/dpe, /api/dvf, /api/bornes, /api/avancement, /api/sante, /api/tuile, POST /api/reconstruire ; quota de scènes neuves par IP (VUE3D_QUOTA, VUE3D_PROXY derrière un proxy)
   scene.py      assemblage d'une scène, cache disque par point arrondi
   couches.py    lecture WFS (bâtiments, végétation, BD Forêt, routes)
   batiments.py  bâtiments découpés sur l'emprise, en retrait du bord
@@ -46,6 +46,7 @@ vue3d/
   lignes.py     lignes à haute tension et hauteur de leurs supports
   monuments.py  parties de monuments OSM (building:part), seule source hors IGN
   ouvrages.py   murs, ponts, voies ferrées, terrains de sport : couche à part, chargée après la scène
+  emprises.py   cimetières, aérodromes et leurs pistes, postes de transformation, haies : couche à part, chargée après la scène
   nuage.py      bâti du nuage de points LiDAR HD (dalles COPC lues par plages, via geopf) ; ouvrages ajourés en points : couche à part, lue en deux temps (carré proche, puis zone entière)
   vehicules.py  véhicules, piscines et navires lus sur l'orthophoto par un réseau ONNX : couche à part, optionnelle (VUE3D_VEHICULES) ; les navires gardés sur l'eau, mer comprise (communes BD TOPO, RGE ALTI)
   releves.py    détections gardées par rectangle de terrain (cache/releves/) : un point décalé ne détecte que la bande nouvelle
@@ -112,6 +113,30 @@ l'étage `export` du Dockerfile.
   avec la couronne, hauteur décroissante du sommet au bord, dessous qui remonte
   vers le tronc, lobage partagé par tous les anneaux. Un défaut ici passe
   inaperçu à forte opacité et saute aux yeux à 30 %.
+- **La fenêtre d'enregistrement de l'export s'ouvre avant le calcul.**
+  `showSaveFilePicker` veut une activation utilisateur : appelée après les une
+  à deux secondes de `modeleExport`, Chromium la refuse. Elle n'existe que sur
+  Chromium et en contexte sûr (https, localhost) ; ailleurs le bouton
+  « Enregistrer sous… » est masqué, « Télécharger » va au dossier du navigateur.
+  Le repli doit rester : c'est le seul chemin des navigateurs sans l'API.
+- **Un interrupteur d'export suit la scène.** Une couche que la scène ne porte
+  pas s'éteint dans la fenêtre, et l'option effective est le cochage **et** la
+  présence (`COUCHES_PRESENTES` dans `modeleExport` de la page) : sans quoi la
+  note annoncerait « 0 cimetière » pour une couche absente. `demo-video.mjs`
+  et `essai-navigateur.mjs` cliquent les boutons d'export : garder `#btn-ifc`,
+  `#btn-citygml` et `#note-export` au panneau, et ouvrir la fenêtre avant d'y
+  cliquer un interrupteur.
+- **L'export relit la scène, il ne la reconstruit pas.** Un aplat drapé, un
+  ruban de route, un fût de pylône partent des mêmes triangles et du même
+  drapage que la vue : `routesPosees` et `eauPosee` gardent ceux de chaque
+  entité (la vue, elle, n'en dessine qu'un maillage par matériau pour les
+  routes), `facettesDrapes()` rejoue le drapage de `placerDrapes()` sans
+  exagération du relief, et les pylônes se lisent dans `groupeLignes` par
+  leur `userData`. Changer la construction d'un ruban ou d'un pylône sans
+  changer l'export ferait diverger le fichier et l'écran. En CityGML, les
+  réseaux passent par la branche générique (`ecrireCityGml` inchangé) ;
+  `outils/valider_citygml.py` ne demande un volume tourné vers l'extérieur
+  qu'aux surfaces fermées, un aplat ou un câble n'enfermant rien.
 
 ## Méthode de travail
 

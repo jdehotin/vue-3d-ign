@@ -998,8 +998,11 @@ const SEQUENCES_SERIE = [
             // Le curseur part du panneau : venu de la vue, il ouvrait au passage l'infobulle d'un arbre.
             await montrerCurseur({ x: 150, y: 600 });
             await page.mouse.move(150, 600);
+            // Les couches se cochent dans la fenêtre d'export, qui porte aussi le bouton.
+            await page.click('#btn-reglages-export');
             for (const id of ['x-relief', 'x-batiments', 'x-arbres']) { await s.curseurVers({ selecteur: '#' + id }, 0.6); await filmer(0.25); }
-            const { note } = await s.exporter('btn-ifc');
+            const { note } = await s.exporter('btn-export-telecharger');
+            await page.keyboard.press('Escape');
             await s.cartouche(cartoucheExport('IFC 4', note, 'Lambert-93, altitudes NGF'));
             await s.glisser(5.6, null, { ...NOTRE_DAME, hauteur: 20, distance: 420, azimut: 150, elevation: 30 });
         },

@@ -200,6 +200,46 @@ messages de commit et dans les commentaires des modules.
   - `outils/essai-navigateur.mjs` ne compte plus comme erreur un refus de
     l'IGN que le serveur a rattrapé, et dit combien de tuiles viennent du
     stock.
+- **Une fenêtre d'export, et dedans les emprises et les réseaux de la BD
+  TOPO.** « Couches et dossier… », au panneau, ouvre une fenêtre où l'on coche
+  les onze couches (relief, bâtiments, arbres, masses de sursol, routes et
+  chemins, hydrographie, lignes HT, cimetières, aérodromes et pistes, postes
+  de transformation, haies), où l'on choisit le format, et — sur Chromium —
+  l'emplacement du fichier par la fenêtre du système (`showSaveFilePicker`,
+  ouverte **avant** le calcul : sans activation utilisateur, Chromium la
+  refuse) ; « Télécharger » va au dossier du navigateur, seul chemin de
+  Firefox et Safari. Une couche que la scène ne porte pas s'éteint d'elle-même
+  dans la fenêtre, et la note finale ne compte que ce qui a été écrit.
+  - **Les emprises** : un aplat drapé pour un cimetière, un aérodrome, une
+    piste ou un poste de transformation, un volume fermé pour une haie, dont
+    la hauteur et l'épaisseur, que la donnée tait, sont celles de la
+    convention de la vue — 2,0 m sur 1,5 m — et le disent (`SourceHauteur`,
+    `SourceLargeur`).
+  - **Les routes et chemins, l'hydrographie, les lignes HT** : un objet par
+    tronçon de route, chemin ou sentier — 1 298 tronçons dans la zone de
+    2 000 m de Neuhof, 62 à la Meinau —, par étendue et par cours d'eau, et,
+    pour les réseaux électriques, un pylône par support (232 et 54) et un
+    objet par ligne (33 et 8), ses trois phases tendues en tubes de 20 cm de
+    rayon entre ses supports. La vue dessine un câble d'un trait d'un pixel
+    qu'aucun modeleur ne reprend ; la flèche des conducteurs, 3 % de la
+    portée, est la convention de la vue et le fichier le dit.
+  - **La géométrie part de la vue** : les triangles d'un ruban ou d'un aplat
+    sont gardés entité par entité à la construction (`routesPosees`,
+    `eauPosee`), et l'export les relit drapés sans exagération du relief ; les
+    pylônes sont lus dans la scène, fût et traverse, tels qu'elle les a posés.
+  - Un tronçon de route nommé, un cours d'eau, un pylône et une ligne sortent
+    en `IfcGeographicElement` sous leur type d'objet, avec leurs propriétés
+    (nature, importance, nombre de voies, sens de circulation, nom de voie ;
+    tension, gestionnaire, hauteur et son origine) ; en CityGML, la branche
+    générique les prend sans changement de schéma.
+  - L'IFC de la seule zone de 2 000 m de Neuhof passe de 107,8 à 116,4 Mo
+    ; les réseaux seuls de la Meinau, en zone de 800 m, en font 2,8 Mo.
+    Vérifié par `outils/verifier-export.mjs` (tubes de câbles, genres, styles
+    et propriétés des réseaux, 31 GlobalId distincts) et, géométrie comprise,
+    par `outils/valider_citygml.py` — qui juge désormais l'orientation
+    cohérente de tout objet générique et ne demande le volume tourné vers
+    l'extérieur qu'aux surfaces fermées, un aplat ou un câble n'enfermant
+    rien.
 
 ### Modifié
 

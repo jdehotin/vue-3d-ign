@@ -95,8 +95,11 @@ def eau_pour_emprise(west, south, east, north, surfaces, cours):
 
     Returns:
         dict(surfaces=[{nature, persistance, geometrie}],
-             cours=[{nature, persistance, largeur_m, geometrie}]) ; géométries
-        en GeoJSON 2D, découpées sur l'emprise.
+             cours=[{nature, persistance, largeur_m, source_largeur,
+                     geometrie}]) ; géométries en GeoJSON 2D, découpées sur
+        l'emprise. `source_largeur` dit d'où vient la largeur : « BD TOPO »
+        quand la classe de largeur de la donnée la donne, « convention » quand
+        elle la tait et qu'on prend LARGEUR_PAR_DEFAUT_M.
     """
     emprise = box(west, south, east, north)
     out = {"surfaces": [], "cours": []}
@@ -120,10 +123,11 @@ def eau_pour_emprise(west, south, east, north, surfaces, cours):
                         ("LineString", "MultiLineString"))
         if geom is None or geom.is_empty or geom.length == 0:
             continue
+        largeur = LARGEUR_PAR_CLASSE_M.get(props.get("classe_de_largeur"))
         out["cours"].append({
             "nature": props.get("nature"), "persistance": props.get("persistance"),
-            "largeur_m": LARGEUR_PAR_CLASSE_M.get(props.get("classe_de_largeur"),
-                                                  LARGEUR_PAR_DEFAUT_M),
+            "largeur_m": LARGEUR_PAR_DEFAUT_M if largeur is None else largeur,
+            "source_largeur": "convention" if largeur is None else "BD TOPO",
             "geometrie": _arrondir(geom),
         })
     return out

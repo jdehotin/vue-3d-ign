@@ -18,8 +18,13 @@
 //   sont fermés et tournés vers l'extérieur, le houppier avec sa lisière même
 //   sur un profil qui remonte vers le bord ;
 // - fichier IFC (ecrireIfc) d'un petit modèle : chaque référence #n est
-//   définie, chaque GlobalId unique. Écrit dans le premier fichier donné en
-//   argument, il se valide ensuite avec ifcopenshell (outils/valider_ifc.py) ;
+//   définie, chaque GlobalId unique, un objet géographique par genre (route,
+//   cours d'eau, pylône, ligne) sous son type d'objet. Écrit dans le premier
+//   fichier donné en argument, il se valide ensuite avec ifcopenshell
+//   (outils/valider_ifc.py) ;
+// - tube des conducteurs (tubeCable) : quatre pans par segment, ouvert aux deux
+//   bouts, 20 cm de rayon, un segment nul ignoré et un segment vertical sans
+//   coordonnée non finie ;
 // - polygones plans du CityGML (polygonesPlans) : un cube en six
 //   quadrilatères ; une emprise en L trouée d'une cour, extrudée par
 //   three.js comme dans la page, en murs, sol et dessus troués de leur cour,
@@ -58,13 +63,13 @@ function extraireConst(nom) {
   }
 }
 const NOMS = ['versLambert93', 'hachage128', 'guidIfc', 'idGml', 'chaineIfc', 'angleIfc', 'facettesIfc',
-              'trianglesRelief', 'trianglesTronc', 'ecrireIfc', 'alea', 'portDe', 'portMesure', 'aUnTronc',
-              'gabaritTronc', 'gabaritHouppier', 'ajouterHouppierSimple', 'polygonesPlans', 'contoursRegion', 'solsOuverts',
-              'ecrireCityGml'];
+              'trianglesRelief', 'trianglesTronc', 'tubeCable', 'ecrireIfc', 'alea', 'portDe', 'portMesure',
+              'aUnTronc', 'gabaritTronc', 'gabaritHouppier', 'ajouterHouppierSimple', 'polygonesPlans',
+              'contoursRegion', 'solsOuverts', 'ecrireCityGml'];
 const CONSTS = ['L93', 'ALPHABET_IFC', 'ENTITES_IFC', 'reelIfc', 'STYLES_IFC', 'PORTS', 'EMPRISE_HOUPPIER', 'ENFONCEMENT',
                 'HAUTEUR_MIN_TRONC', 'SEGMENTS_SIMPLE', 'PLAN_COS', 'PLAN_ECART_M', 'texteXml', 'ESPACES_CITYGML'];
 const { versLambert93, guidIfc, idGml, chaineIfc, angleIfc, facettesIfc, trianglesRelief, trianglesTronc,
-        ecrireIfc, aUnTronc, portDe, ajouterHouppierSimple, polygonesPlans, solsOuverts, ecrireCityGml,
+        tubeCable, ecrireIfc, aUnTronc, portDe, ajouterHouppierSimple, polygonesPlans, solsOuverts, ecrireCityGml,
         ALPHABET_IFC, STYLES_IFC, ENFONCEMENT } =
   new Function('THREE', CONSTS.map(extraireConst).join('\n') + '\n' + NOMS.map(extraire).join('\n')
     + `\nreturn { ${[...NOMS, ...CONSTS].join(', ')} };`)(THREE);
@@ -204,6 +209,25 @@ function volume({ points: P, faces: F }) {
   }
 }
 
+// --- Câbles haute tension ------------------------------------------------------------
+{
+  // Une portée horizontale de 10 m, trois phases à ±5 m de la traverse : chacune
+  // un tube de 20 cm, la même suite de couples de points que les LineSegments
+  // de la page.
+  const portee = (y, z) => [0, y, z, 10, y, z];
+  const f = facettesIfc(tubeCable([...portee(30, -5), ...portee(30, 0), ...portee(30, 5)], 0.2));
+  const ecart = k => Math.max(...Array.from({ length: f.points.length / 3 }, (_, i) => Math.abs(f.points[3 * i + k])));
+  verifier(f.points.length === 72 && f.faces.length === 72 && !f.ferme,
+           `tube de câble : ${f.points.length / 3} sommets, ${f.faces.length / 3} triangles, ouvert aux deux bouts`);
+  verifier(ecart(0) === 10 && Math.abs(ecart(1) - 30.2) < 1e-6 && Math.abs(ecart(2) - 5.2) < 1e-6,
+           `tube de câble : 10 m de long, 20 cm de rayon, trois phases à ±5 m`);
+  // Un segment nul ne donne rien, un segment vertical sort des coordonnées
+  // finies (le repère du pan ne s'y déduit pas de l'horizontale).
+  verifier(!facettesIfc(tubeCable([1, 2, 3, 1, 2, 3], 0.2)).faces.length, 'tube de câble : segment nul ignoré');
+  const vertical = tubeCable([0, 0, 0, 0, 10, 0], 0.2);
+  verifier(vertical.length === 72 && vertical.every(Number.isFinite), 'tube de câble vertical : coordonnées finies');
+}
+
 // --- Polygones plans (CityGML) -----------------------------------------------------
 /** Aire vectorielle d'un anneau (Newell). */
 function aireVecteur(P, anneau) {
@@ -314,6 +338,21 @@ const classerMurs = nz => nz < -0.5 ? 'GroundSurface' : nz <= 0.5 ? 'WallSurface
                             0, 5, 6, 0, 2.5, 8.5, 8, 2.5, 8.5, 0, 5, 6, 8, 2.5, 8.5, 8, 5, 6,
                             0, 0, 6, 0, 2.5, 8.5, 0, 5, 6, 8, 0, 6, 8, 5, 6, 8, 2.5, 8.5]);
   const terrain = facettesIfc(trianglesRelief(4, 4, (i, j) => [-20 + 10 * i, 20 - 10 * j, -0.3 + 0.05 * i], 1));
+  // Le fût d'un pylône, tel que la scène le pose : un volume fermé de
+  // 2 × 35,2 × 2 m, tourné vers l'extérieur (la page y met un cylindre de
+  // quatre pans et sa traverse).
+  const pavePylone = (() => {
+    const anneau = h => [[0, 0], [2, 0], [2, 2], [0, 2]].map(([x, z]) => [x, h, z]);
+    const [bas, haut] = [anneau(0), anneau(35.2)];
+    const tri = [], face = q => tri.push(...q[0], ...q[1], ...q[2], ...q[0], ...q[2], ...q[3]);
+    face([bas[0], bas[1], bas[2], bas[3]]);                     // dessous, vers la terre
+    face([haut[3], haut[2], haut[1], haut[0]]);                 // dessus, vers le ciel
+    for (let i = 0; i < 4; i++) {
+      const j = (i + 1) % 4;
+      face([bas[i], haut[i], haut[j], bas[j]]);
+    }
+    return facettesIfc(tri);
+  })();
   const versIfc = (x, y, z) => [x, -z, y];
   const arbre = { lon: 5.2003, lat: 43.9117, x: -12, y: 9, h: 9.5, r: 2.2, profil: [0.97, 0.9, 0.82, 0.74, 0.66, 0.6],
                   allongement: 1.2, axe_deg: 10, classe: 'vegetation' };
@@ -362,6 +401,34 @@ const classerMurs = nz => nz < -0.5 ? 'GroundSurface' : nz <= 0.5 ? 'WallSurface
       { cle: 'masse|5.2004|43.9115', genre: 'masse', nom: 'Sursol non bâti',
         proprietes: { nom: 'VueIGN_Sursol', valeurs: [['Hauteur', 'IFCLENGTHMEASURE', 2.4]] },
         maillages: vegetal(masse) },
+      // Un tronçon de route, une étendue d'eau, un pylône et une ligne à haute
+      // tension : les rubans et tubes de la page, dans le repère IFC.
+      { cle: 'route|ESSAI', genre: 'route', nom: 'Route à 1 chaussée', tag: 'ESSAI',
+        description: '4 m de large (BD TOPO), R DE BENFELD',
+        proprietes: { nom: 'VueIGN_Route', valeurs: [['IdentifiantBDTOPO', 'IFCIDENTIFIER', 'ESSAI'],
+                                                     ['Nature', 'IFCLABEL', 'Route à 1 chaussée'],
+                                                     ['Largeur', 'IFCLENGTHMEASURE', 4],
+                                                     ['SourceLargeur', 'IFCLABEL', 'BD TOPO']] },
+        maillages: [{ style: 'route', facettes: facettesIfc([-6, 0, -2, -2, 0, -2, -2, 0, 2,
+                                                            -6, 0, -2, -2, 0, 2, -6, 0, 2]) }] },
+      { cle: 'cours_d_eau|Canal', genre: 'cours_d_eau', nom: 'Canal',
+        description: 'Canal (BD TOPO, permanent), 2.5 m de large (convention)',
+        proprietes: { nom: 'VueIGN_CoursDEau', valeurs: [['Nature', 'IFCLABEL', 'Canal'],
+                                                         ['Largeur', 'IFCLENGTHMEASURE', 2.5],
+                                                         ['SourceLargeur', 'IFCLABEL', 'convention']] },
+        maillages: [{ style: 'eau', facettes: facettesIfc([4, 0.15, -4, 8, 0.15, -4, 8, 0.15, 4,
+                                                          4, 0.15, -4, 8, 0.15, 4, 4, 0.15, 4]) }] },
+      { cle: 'pylone|225 kV', genre: 'pylone', nom: 'Pylône 225 kV',
+        description: '35,2 m de haut (BD TOPO)',
+        proprietes: { nom: 'VueIGN_Pylone', valeurs: [['Tension', 'IFCLABEL', '225 kV'],
+                                                      ['Hauteur', 'IFCLENGTHMEASURE', 35.2]] },
+        // Le fût et sa traverse, lus dans la scène : ici le pavé fermé ci-dessus.
+        maillages: [{ style: 'pylone', facettes: pavePylone }] },
+      { cle: 'ligne_ht|225 kV', genre: 'ligne_ht', nom: 'Ligne 225 kV',
+        description: 'Trois phases sur 4 support(s), flèche de 3 % de la portée (convention)',
+        proprietes: { nom: 'VueIGN_LigneHT', valeurs: [['Tension', 'IFCLABEL', '225 kV'],
+                                                       ['NombreDeSupports', 'IFCINTEGER', 4]] },
+        maillages: [{ style: 'cable', facettes: facettesIfc(tubeCable([-20, 30, -5, 20, 28, -5], 0.2)) }] },
       { cle: 'terrain', genre: 'terrain', nom: 'Terrain naturel',
         proprietes: { nom: 'VueIGN_Terrain', valeurs: [['Source', 'IFCLABEL', 'RGE ALTI (IGN)']] },
         maillages: [{ style: 'terrain', facettes: terrain }] },
@@ -374,13 +441,19 @@ const classerMurs = nz => nz < -0.5 ? 'GroundSurface' : nz <= 0.5 ? 'WallSurface
   const manquants = [...references].filter(r => !definis.has(r));
   verifier(!manquants.length, `IFC : ${definis.size} entités, toute référence définie${manquants.length ? ' — manquent ' + manquants.join(', ') : ''}`);
   const guids = [...texte.matchAll(/^#\d+=IFC\w+\('([0-9A-Za-z_$]{22})'/gm)].map(m => m[1]);
-  verifier(guids.length === 19 && new Set(guids).size === guids.length, `IFC : ${guids.length} GlobalId, tous distincts`);
+  verifier(guids.length === 31 && new Set(guids).size === guids.length, `IFC : ${guids.length} GlobalId, tous distincts`);
   verifier(!/Vide/.test(texte), 'IFC : un élément sans triangle est omis');
   verifier(texte.startsWith('ISO-10303-21;\nHEADER;') && texte.endsWith('END-ISO-10303-21;\n'), 'IFC : en-tête et fin ISO 10303-21');
   verifier(/IFCTRIANGULATEDFACESET\(#\d+,\$,\.T\./.test(texte) && /IFCTRIANGULATEDFACESET\(#\d+,\$,\.F\./.test(texte),
            'IFC : murs fermés, toit et terrain ouverts');
   verifier(/IFCGEOGRAPHICELEMENT\('[^']+',\$,'Arbre',\$,'Arbre',.*\.USERDEFINED\.\)/.test(texte)
            && /IFCGEOGRAPHICELEMENT\([^;]*\.TERRAIN\.\)/.test(texte), 'IFC : arbre et terrain en éléments géographiques');
+  for (const type of ['Tronçon de route', "Cours d'eau", 'Pylône électrique', 'Ligne à haute tension']) {
+    // Le type d'objet, échappé comme l'écrit le fichier (accents à part).
+    verifier(texte.includes(`,${chaineIfc(type)},#`), `IFC : « ${type} » en élément géographique`);
+  }
+  verifier(['route', 'chemin', 'eau', 'eauIntermittente', 'pylone', 'cable']
+    .every(s => (STYLES_IFC[s] || []).length === 3), 'IFC : chaque style des réseaux a sa teinte');
   if (process.argv[2]) {
     fs.writeFileSync(process.argv[2], texte);
     console.log(`écrit : ${process.argv[2]} (${texte.length} octets)`);
@@ -405,15 +478,16 @@ const classerMurs = nz => nz < -0.5 ? 'GroundSurface' : nz <= 0.5 ? 'WallSurface
   const compte = nom => (gml.match(new RegExp(`<${nom}[ >]`, 'g')) || []).length;
   verifier(compte('bldg:Building') === 2 && compte('bldg:RoofSurface') === 4 && compte('bldg:WallSurface') === 14
            && compte('bldg:GroundSurface') === 3 && compte('veg:SolitaryVegetationObject') === 1
-           && compte('gen:GenericCityObject') === 1 && compte('gml:Triangle') === 32,
+           && compte('gen:GenericCityObject') === 5 && compte('gml:Triangle') === 32,
            `CityGML : 2 bâtiments (${compte('bldg:RoofSurface')} toits, ${compte('bldg:WallSurface')} murs dont 2 pignons, `
-           + `${compte('bldg:GroundSurface')} sols, dessus des murs omis sous un toit), 1 arbre, 1 masse, `
+           + `${compte('bldg:GroundSurface')} sols, dessus des murs omis sous un toit), 1 arbre, `
+           + `${compte('gen:GenericCityObject')} objets génériques (masse, route, cours d'eau, pylône, ligne), `
            + `${compte('gml:Triangle')} triangles de relief`);
   verifier(compte('bldg:BuildingPart') === 2 && /<bldg:BuildingPart gml:id="PARTIES_p1"><gml:name>Nef<\/gml:name><bldg:measuredHeight uom="m">3\.000</.test(gml)
            && /<bldg:BuildingPart gml:id="PARTIES_p2"><gml:name>Tour<\/gml:name><bldg:measuredHeight uom="m">5\.000</.test(gml),
            'CityGML : deux parties nommées, chacune à sa hauteur');
   verifier(/srsName="urn:ogc:def:crs,crs:EPSG::2154,crs:EPSG::5720"/.test(gml)
-           && /<gml:lowerCorner>876709\.000 6314953\.000 /.test(gml)
+           && /<gml:lowerCorner>876708\.990 6314953\.000 /.test(gml)
            && /&amp; « tests »/.test(gml) && /<bldg:measuredHeight uom="m">8\.500<\/bldg:measuredHeight><bldg:storeysAboveGround>2</.test(gml),
            'CityGML : système, enveloppe absolue, texte échappé, hauteur et étages en attributs CityGML');
   if (process.argv[3]) {

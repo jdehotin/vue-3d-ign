@@ -16,6 +16,11 @@ dépendance (val3dity n'a pas de paquet Python publié) :
   murs à moins de 60° de la verticale ;
 - arbres et masses : surfaces fermées — chaque arête portée par deux
   polygones, en sens opposés — et tournées vers l'extérieur ;
+- objets génériques (masse, pylône, mais aussi l'aplat d'un tronçon de route
+  ou d'une étendue d'eau, ou le tube d'un conducteur) : orientation cohérente —
+  aucune arête portée deux fois du même côté ; et, quand la surface est fermée,
+  volume tourné vers l'extérieur. Une surface ouverte (aplat, tube) n'enferme
+  rien : son volume signé ne veut rien dire et n'est pas jugé ;
 - relief : triangles tournés vers le ciel ;
 - gml:id uniques, et chaque coordonnée dans l'enveloppe du modèle.
 
@@ -171,10 +176,16 @@ def valider(chemin):
                     a, p = newell(r), r[0]
                     volume += (p[0] * a[0] + p[1] * a[1] + p[2] * a[2]) / 3
             ouvertes = sum(1 for (p, q), c in aretes.items() if c != 1 or aretes.get((q, p)) != 1)
+            doubles = sum(1 for c in aretes.values() if c != 1)
+            if doubles:
+                erreurs.append(f"{ou} : {doubles} arête(s) portée(s) deux fois du même côté, orientation incohérente")
             if ouvertes:
-                erreurs.append(f"{ou} : surface ouverte, {ouvertes} arête(s) sans vis-à-vis")
-            if volume <= 0:
-                erreurs.append(f"{ou} : surface tournée vers l'intérieur ({volume:.3f} m³)")
+                # Un arbre est un volume : ses facettes se referment. Un aplat
+                # de route ou d'eau, un tube de conducteur, non.
+                if genre == "SolitaryVegetationObject":
+                    erreurs.append(f"{ou} : surface ouverte, {ouvertes} arête(s) sans vis-à-vis")
+            elif volume <= 0:
+                erreurs.append(f"{ou} : surface fermée tournée vers l'intérieur ({volume:.3f} m³)")
         elif genre == "ReliefFeature":
             for t in objet.iter(f"{GML}Triangle"):
                 nb_triangles += 1

@@ -75,6 +75,7 @@ from .dpe import DPE_VERSION, dpe_pour_emprise, fetch_dpe
 from .dvf import DVF_VERSION, dvf_pour_emprise, fetch_dvf
 from .eau import (COUCHE_COURS_EAU, COUCHE_SURFACES_EAU, eau_pour_emprise,
                   masque_eau)
+from .emprises import EMPRISES_VERSION, emprises_pour_emprise, fetch_emprises
 from .geopf import Groupe
 from .lignes import COUCHE_LIGNES, COUCHE_PYLONES, lignes_pour_emprise
 from .houppiers import houppiers_pour_emprise
@@ -174,6 +175,7 @@ NOM_ORTHO = "ortho.jpg"
 NOM_MONUMENTS = "monuments.json.gz"
 # La version de la couche est dans son nom : la changer ne refait qu'elle.
 NOM_OUVRAGES = f"ouvrages-v{OUVRAGES_VERSION}.json.gz"
+NOM_EMPRISES = f"emprises-v{EMPRISES_VERSION}.json.gz"
 
 
 # Les panneaux solaires ont une seule source : le registre, à sa version.
@@ -263,6 +265,11 @@ class NuageIndisponible(RuntimeError):
 class OuvragesIndisponibles(RuntimeError):
     """Une couche d'ouvrages de l'IGN n'a pas répondu : rien n'est mis en
     cache, la scène reste affichée sans eux, réessayer plus tard."""
+
+
+class EmprisesIndisponibles(RuntimeError):
+    """Une couche d'emprises de l'IGN n'a pas répondu : rien n'est mis en
+    cache, la scène reste affichée sans elles, réessayer plus tard."""
 
 
 class ReconstructionRefusee(RuntimeError):
@@ -756,6 +763,7 @@ class Cache:
     GRANDES_ZONES_ENSEMBLE = 1
 
     def __init__(self, dossier, lire_monuments=fetch_monuments, lire_ouvrages=fetch_ouvrages,
+                 lire_emprises=fetch_emprises,
                  lire_vehicules=None, lire_panneaux=None, lire_nuage=fetch_nuage,
                  lire_dpe=fetch_dpe, lire_dvf=fetch_dvf, lire_mer=fetch_mer,
                  lire_bornes=fetch_bornes):
@@ -789,6 +797,7 @@ class Cache:
         # plus de 100 s, l'IGN n'a pas à attendre derrière lui.
         self.lire_monuments = lire_monuments
         self.lire_ouvrages = lire_ouvrages
+        self.lire_emprises = lire_emprises
         self.lire_vehicules = self._qui_cede(lire_vehicules)
         self.mode_vehicules = lire_vehicules.mode if lire_vehicules else None
         self.lire_panneaux = lire_panneaux
@@ -803,6 +812,9 @@ class Cache:
                 max_workers=2, thread_name_prefix="overpass"),
             NOM_OUVRAGES: concurrent.futures.ThreadPoolExecutor(
                 max_workers=2, thread_name_prefix="ouvrages"),
+            # Cinq petites lectures WFS, comme les ouvrages.
+            NOM_EMPRISES: concurrent.futures.ThreadPoolExecutor(
+                max_workers=2, thread_name_prefix="emprises"),
             # Une lecture SQLite de quelques millisecondes.
             NOM_PANNEAUX: concurrent.futures.ThreadPoolExecutor(
                 max_workers=1, thread_name_prefix="panneaux"),
@@ -1124,6 +1136,26 @@ class Cache:
             lambda message: OuvragesIndisponibles(f"ouvrages illisibles : {message}"),
             lambda bbox, brut, scene: ouvrages_pour_emprise(
                 *bbox, brut, scene.get("relief"), scene.get("masses"), scene.get("routes")), zone=zone)
+
+    def prelire_emprises(self, lat, lon, zone=None):
+        """Lance la lecture des couches d'emprises en tâche de fond : cinq
+        petites lectures WFS, finies bien avant la scène."""
+        self._prelire(NOM_EMPRISES, lat, lon, self.lire_emprises, zone)
+
+    def obtenir_emprises(self, lat, lon, construire=construire, zone=None):
+        """Chemin du dossier où la couche des emprises du point est écrite.
+
+        La couche ne lit rien de la scène : ses aplats sont drapés par la vue
+        sur le relief, et une haie se dresse depuis le sol.
+
+        Raises:
+            EmprisesIndisponibles si une couche de l'IGN n'a pas répondu :
+            rien n'est écrit, la demande suivante réessaie.
+        """
+        return self._obtenir_couche(
+            NOM_EMPRISES, lat, lon, construire, self.lire_emprises,
+            lambda message: EmprisesIndisponibles(f"emprises illisibles : {message}"),
+            lambda bbox, brut, scene: emprises_pour_emprise(*bbox, brut), zone=zone)
 
     def obtenir_nuage(self, lat, lon, construire=construire, zone=None):
         """Chemin du dossier où la couche du nuage LiDAR HD du point est écrite.

@@ -389,9 +389,19 @@ recherche indexer ces données : la page ne les publie nulle part.
 
 ### Export BIM et SIG, en IFC 4 et CityGML 2.0
 
-Deux boutons du panneau écrivent le contexte du lieu : le relief de
-l'emprise, les bâtiments, les arbres et, si on les allume, les masses de
-sursol. Le navigateur écrit le fichier lui-même, en une à quelques secondes.
+Les deux boutons du panneau écrivent le contexte du lieu d'un clic, avec
+les couches cochées. « Couches et dossier… » ouvre la fenêtre d'export :
+on y coche les couches, on y choisit le format, et — sur Chromium — on y
+choisit l'emplacement du fichier par la fenêtre du système
+(`showSaveFilePicker`) ; ailleurs, « Enregistrer sous… » n'est pas proposé
+et « Télécharger » va au dossier de téléchargement du navigateur. Le
+navigateur écrit le fichier lui-même, en une à quelques secondes.
+
+Se cochent : le relief de l'emprise, les bâtiments, les arbres, les masses
+de sursol, les routes et chemins, l'hydrographie, les lignes à haute tension,
+et les emprises de la BD TOPO — cimetières, aérodromes et leurs pistes,
+postes de transformation, haies. Une couche que la scène ne porte pas
+s'éteint d'elle-même dans la fenêtre.
 
 - **IFC 4**, pour un logiciel de conception — Revit, ArchiCAD, Vectorworks,
   Allplan, Bonsai : des maillages, autour d'une origine au point visé. 5 à
@@ -413,6 +423,34 @@ Pour l'un comme pour l'autre :
 - **Les arbres en forme simple**, houppier et tronc, à la hauteur et à
   l'emprise mesurées au LiDAR HD, avec l'essence dominante de leur massif
   quand la BD Forêt la donne ; le relief à 2 m, 4 m en zone de 1 000 m.
+- **Les emprises de la BD TOPO**, telles que la vue les drape ou les
+  dresse : un aplat pour un cimetière, un aérodrome, une piste ou un poste
+  de transformation, un volume fermé pour une haie. Un objet par entité,
+  nommé, avec sa nature, sa catégorie et son code OACI quand la donnée les
+  porte. La hauteur et l'épaisseur d'une haie, que la BD TOPO tait, sont
+  celles de la convention de la vue — 2,0 m sur 1,5 m — et le disent, en
+  IFC par `SourceHauteur` et `SourceLargeur`, en CityGML par deux attributs
+  génériques de même nom. En CityGML elles sortent en `gen:GenericCityObject`.
+- **Les routes, chemins et sentiers** : leur ruban drapé, un objet par tronçon
+  de la BD TOPO, avec sa nature, son importance, son nombre de voies, son sens
+  de circulation et le nom de la voie quand la donnée le porte. La largeur est
+  celle de la BD TOPO quand elle la donne (`largeur_de_chaussee`), sinon la
+  convention de la vue ; `SourceLargeur` dit laquelle. En CityGML, un
+  `gen:GenericCityObject` comme les emprises.
+- **Les étendues et cours d'eau**, tels que la vue les drape : un objet par
+  étendue — lac, bassin, canal assez large pour avoir son emprise — et par
+  cours d'eau, ruisseau, fossé ou canal étroit. L'axe d'une rivière qui a sa
+  surface est fictif et n'est pas dessiné, pas plus qu'un cours sous le sol.
+  Nature et persistance ; pour un cours, sa largeur et d'où elle vient
+  (`SourceLargeur`) : la classe de largeur de la BD TOPO, ou la convention de
+  la vue.
+- **Les lignes à haute tension** : un objet par pylône — son fût et sa
+  traverse, tels que la vue les dresse — avec sa tension, son gestionnaire, sa
+  hauteur et d'où elle vient (le pylône BD TOPO quand il est rattaché, sinon la
+  médiane de sa tension) ; et un objet par ligne, ses trois phases tendues
+  entre ses supports, en tubes de 20 cm de rayon. La vue les dessine d'un trait
+  d'un pixel, qu'aucun logiciel ne reprend ; la flèche des conducteurs est
+  celle de la convention de la vue, 3 % de la portée, et le fichier le dit.
 - **En Lambert-93, altitudes NGF.** Les longueurs sont celles de la carte :
   de −1 à +2,2 mm/m selon la latitude. L'IFC rapporte ses coordonnées à une
   origine entière au point visé (IfcMapConversion) et renseigne le nord vrai
@@ -422,9 +460,18 @@ Pour l'un comme pour l'autre :
   OSM, il est aussi sous ODbL.
 
 C'est une maquette de contexte, pas un relevé : les emprises de la BD TOPO
-sont à un mètre près, un toit résumé n'a que deux pans ou une pyramide, et
-réservoirs, murs, ponts, eau, routes et ouvrages dessinés en points (la tour
-Eiffel) ne sont pas encore exportés.
+sont à un mètre près, un toit résumé n'a que deux pans ou une pyramide, et les
+ouvrages — réservoirs, murs, ponts, voies ferrées, terrains de sport — comme
+ceux dessinés en points (la tour Eiffel) ne sont pas encore exportés. Les
+réseaux exportés sont ceux de la vue : la BD TOPO n'en donne que l'axe, un
+câble y fait 20 cm de rayon.
+
+Un aplat est drapé sur le relief de la vue, qui est fin ; le relief exporté,
+lui, est rééchantillonné — la note d'export dit sa maille, 2 m dans l'emprise
+par défaut, jusqu'à 8 m en zone de 2 000 m. Sur un terrain accidenté, un
+cimetière ou une piste peut donc affleurer localement le TIN, quelques
+décimètres au plus. Les haies, elles, sont des volumes : elles se voient
+toujours.
 
 ## Lieux à essayer
 
@@ -565,6 +612,7 @@ Toutes servies sans clé par la Géoplateforme de l'IGN, sous
 | BD TOPO, réseau électrique | WFS `ligne_electrique`, `pylone` | Lignes à haute tension et hauteur des pylônes |
 | BD TOPO, réservoirs et constructions ponctuelles | WFS `reservoir`, `construction_ponctuelle` | Citernes et châteaux d'eau ; torchères, cheminées, antennes, mâts |
 | BD TOPO, ouvrages | WFS `construction_lineaire`, `construction_surfacique`, `troncon_de_voie_ferree`, `terrain_de_sport` | Murs et ponts, par l'altitude de leurs sommets ; voies ferrées ; terrains de sport |
+| BD TOPO, emprises | WFS `cimetiere`, `aerodrome`, `piste_d_aerodrome`, `poste_de_transformation`, `haie` | Cimetières civils et militaires, aérodromes et leurs pistes, postes de transformation, en aplats drapés sur le relief ; haies, dressées en volume |
 | LiDAR HD, MNH | WMS, grille BIL à 0,5 m | Hauteur de tout ce qui dépasse du sol : toits et arbres |
 | LiDAR HD, nuage de points | Téléchargement, dalles COPC de 1 km² lues par plages | Le bâti en points ; les ouvrages ajourés (tour Eiffel, verrières) tels qu'ils sont mesurés |
 | MNS − MNT | WMS, repli photogrammétrique | Le même, hors couverture LiDAR HD, en moins net |
@@ -794,6 +842,7 @@ principales :
 | `GET /api/ortho?lat=…&lon=…` | L'orthophoto de la scène, en JPEG |
 | `GET /api/monuments?lat=…&lon=…` | La couche des monuments OSM, en JSON gzippé (`null` sans partie), que la page demande une fois la scène affichée |
 | `GET /api/ouvrages?lat=…&lon=…` | La couche des murs, ponts, voies ferrées et terrains de sport, en JSON gzippé (`null` sans ouvrage), demandée elle aussi après la scène |
+| `GET /api/emprises?lat=…&lon=…` | La couche des cimetières, aérodromes et leurs pistes, postes de transformation et haies, en JSON gzippé (`null` sans emprise), demandée elle aussi après la scène |
 | `GET /api/nuage?lat=…&lon=…` | Le bâti du nuage de points LiDAR HD, en JSON gzippé (`null` hors couverture), demandé après la scène : 10 à 90 s à la première demande. Avec `&proche=1`, d'abord un carré de 400 m autour du point, que la page affiche avant la zone entière (en zone de 800 m et plus) ; au-delà de 1 000 m, le kilomètre central seulement |
 | `GET /api/piscines?lat=…&lon=…` | Les piscines de l'orthophoto, en JSON gzippé, demandées après la scène ; `{"mode": "aucun", "piscines": []}` si le service n'a pas de détecteur |
 | `GET /api/navires?lat=…&lon=…` | Les bateaux de l'orthophoto, sur l'eau, en JSON gzippé, demandés après les piscines ; `{"mode": "aucun", "navires": []}` si le service n'a pas de détecteur, une liste vide loin de l'eau |

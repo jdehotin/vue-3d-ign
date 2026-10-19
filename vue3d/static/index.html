@@ -36,6 +36,9 @@
                   padding:5px 10px; border-radius:5px; font-size:11px; cursor:pointer; }
         .toggle:hover { border-color:var(--muted); }
         .toggle.on { background:var(--accent); border-color:var(--accent); color:#fff; }
+        /* Une couche que la scène ne porte pas : éteinte, et pour de bon. */
+        .toggle:disabled { cursor:default; opacity:.4; }
+        .toggle:disabled:hover { border-color:var(--line); }
         .row { display:flex; align-items:center; gap:8px; margin-top:10px; }
         .row label { font-size:10px; color:var(--muted); white-space:nowrap; }
         .row input[type=range] { flex:1; accent-color:var(--accent); height:3px; }
@@ -237,6 +240,33 @@
         #tuto .tuto-ok { flex:none; padding:9px 18px; border:0; border-radius:8px; background:var(--accent); color:#fff;
                          font:inherit; font-size:14px; font-weight:600; cursor:pointer; }
         #tuto .tuto-ok:focus-visible, .tuto-mode button:focus-visible { outline:2px solid var(--text); outline-offset:2px; }
+        /* Exporter : ce que le fichier contient, son format, et où l'écrire.
+           Même cadre que la prise en main, le corps seul défilant. */
+        #export-dialogue { width:min(520px, calc(100vw - 24px)); max-height:min(86vh, 760px); padding:0;
+                border:1px solid var(--line); border-radius:12px; background:var(--panel); color:var(--text);
+                box-shadow:0 12px 40px rgba(0,0,0,.55); }
+        #export-dialogue::backdrop { background:rgba(0,0,0,.45); }
+        #export-dialogue form { display:flex; flex-direction:column; max-height:inherit; }
+        #export-dialogue form > * { flex:none; }
+        #export-dialogue .corps { flex:1 1 auto; min-height:0; overflow-y:auto; padding:0 18px 4px; }
+        #export-dialogue header { display:flex; align-items:center; justify-content:space-between; padding:16px 18px 4px; }
+        #export-dialogue h2 { margin:0; font-size:18px; }
+        #export-dialogue .fermer { width:36px; height:36px; margin:-6px -8px 0 0; border:0; background:none; color:var(--muted);
+                        font-size:26px; line-height:1; cursor:pointer; }
+        #export-dialogue .sous-titre { margin:12px 0 6px; }
+        #export-dialogue .choix-format { display:flex; gap:6px; }
+        #export-dialogue .choix-format button { flex:1; padding:8px 6px; border:1px solid var(--line); border-radius:6px;
+                background:var(--panel-soft); color:var(--text); font:inherit; font-size:12px; cursor:pointer; }
+        #export-dialogue .choix-format button span { color:var(--muted); }
+        #export-dialogue .choix-format button.on { background:var(--accent); border-color:var(--accent); color:#fff; }
+        #export-dialogue .choix-format button.on span { color:rgba(255,255,255,.75); }
+        #export-dialogue footer { display:flex; align-items:center; justify-content:flex-end; gap:8px;
+                        padding:12px 18px 16px; border-top:1px solid var(--line); }
+        #export-dialogue footer button { padding:9px 16px; border-radius:8px; font:inherit; font-size:13px; cursor:pointer;
+                border:1px solid var(--line); background:var(--panel-soft); color:var(--text); }
+        #export-dialogue footer button.principal { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; }
+        #export-dialogue footer button:disabled { cursor:wait; opacity:.6; }
+        #export-dialogue footer button:focus-visible { outline:2px solid var(--text); outline-offset:2px; }
         #btn-plein-ecran .sortir, html.plein-ecran #btn-plein-ecran .entrer { display:none; }
         html.plein-ecran #btn-plein-ecran .sortir { display:inline; }
         /* Le drone au doigt : deux croix de touches, au-dessus des crédits. */
@@ -360,6 +390,10 @@
                 <button class="toggle on" id="t-lignes">Lignes HT</button>
                 <button class="toggle on" id="t-constructions" hidden title="Réservoirs, torchères, cheminées, antennes et mâts de la BD TOPO">Réservoirs, mâts</button>
                 <button class="toggle on" id="t-ouvrages" hidden title="Murs, ponts, voies ferrées et terrains de sport de la BD TOPO">Murs, ponts, rails</button>
+                <button class="toggle on" id="t-cimetieres" hidden title="Cimetières civils et militaires de la BD TOPO">Cimetières</button>
+                <button class="toggle on" id="t-aerodromes" hidden title="Aérodromes, héliports et leurs pistes, de la BD TOPO">Aéroports</button>
+                <button class="toggle on" id="t-postes" hidden title="Postes de transformation électrique de la BD TOPO">Postes élec.</button>
+                <button class="toggle on" id="t-haies" hidden title="Haies de la BD TOPO, dressées sur le relief">Haies</button>
                 <button class="toggle" id="t-nuage" hidden title="Tout le bâti en points du nuage LiDAR HD ; les ouvrages ajourés, comme la tour Eiffel, y sont toujours">Nuage LiDAR</button>
                 <button class="toggle on" id="t-vehicules" hidden title="Véhicules vus sur l'orthophoto, le jour de la prise de vue">Véhicules</button>
                 <button class="toggle on" id="t-piscines" hidden title="Piscines vues sur l'orthophoto">Piscines</button>
@@ -406,21 +440,19 @@
 
         <div class="section">
             <h2>Export BIM</h2>
-            <div class="toggles">
-                <button class="toggle on" id="x-relief">Relief</button>
-                <button class="toggle on" id="x-batiments">Bâtiments</button>
-                <button class="toggle on" id="x-arbres">Arbres</button>
-                <button class="toggle" id="x-masses" title="Sursol ni bâti ni végétal : murs, abris, véhicules…">Masses de sursol</button>
-            </div>
+            <button type="button" class="lien-ext" id="btn-reglages-export"
+                    title="Cocher les couches du fichier, choisir son format et son dossier.">⚙ Couches et dossier…</button>
             <button type="button" class="lien-ext" id="btn-ifc" data-format="ifc"
-                    title="Pour Revit, ArchiCAD, Vectorworks, Allplan…">⬇ IFC 4</button>
+                    title="Pour Revit, ArchiCAD, Vectorworks, Allplan… Écrit tout de suite, avec les couches cochées.">⬇ IFC 4</button>
             <button type="button" class="lien-ext" id="btn-citygml" data-format="citygml"
-                    title="Pour les SIG et les maquettes urbaines : FME, 3DCityDB, FZKViewer…">⬇ CityGML 2.0</button>
+                    title="Pour les SIG et les maquettes urbaines : FME, 3DCityDB, FZKViewer… Écrit tout de suite, avec les couches cochées.">⬇ CityGML 2.0</button>
             <div class="note" id="note-export">
                 IFC pour la conception (Revit, ArchiCAD…), CityGML pour les SIG.
                 Les bâtiments tels qu'affichés (toits en pente, mesurés, monuments
                 OSM), à l'échelle, en Lambert-93 et altitudes NGF. Une maquette de
-                contexte, pas un relevé.
+                contexte, pas un relevé. Les deux liens écrivent d'un coup ;
+                « Couches et dossier… » laisse cocher les couches et choisir
+                l'emplacement du fichier.
             </div>
         </div>
 
@@ -507,6 +539,7 @@
             <div id="hud-jeu" class="etat-couche" hidden></div>
             <div id="etat-monuments" class="etat-couche" role="status" hidden><i class="roue"></i><span></span></div>
             <div id="etat-ouvrages" class="etat-couche" role="status" hidden><i class="roue"></i><span></span></div>
+        <div id="etat-emprises" class="etat-couche" role="status" hidden><i class="roue"></i><span></span></div>
             <div id="etat-nuage" class="etat-couche" role="status" hidden><i class="roue"></i><span></span></div>
             <div id="etat-vehicules" class="etat-couche" role="status" hidden><i class="roue"></i><span></span></div>
             <div id="etat-foncier" class="etat-couche" role="status" hidden><i class="roue"></i><span></span></div>
@@ -608,6 +641,50 @@
                 <footer>
                     <span>Ce guide se rouvre par le bouton <b>?</b> à droite de la vue.</span>
                     <button class="tuto-ok" value="ok">C'est parti</button>
+                </footer>
+            </form>
+        </dialog>
+        <!-- L'export BIM : ce que le fichier contient, son format, et où
+             l'écrire. Le relief porte les altitudes — sans lui, un aplat, un
+             bâtiment ou un arbre n'a plus de sol où se poser ; la fenêtre le
+             dit, et éteint les couches que la scène ne porte pas. -->
+        <dialog id="export-dialogue" aria-labelledby="export-titre">
+            <form method="dialog">
+                <header>
+                    <h2 id="export-titre">Exporter la scène</h2>
+                    <button class="fermer" value="fermer" aria-label="Fermer">×</button>
+                </header>
+                <div class="corps">
+                    <p class="note">Le relief porte les altitudes : sans lui, plus rien
+                        n'est posé. Une couche que la scène ne porte pas s'éteint ici.</p>
+                    <div class="sous-titre">Couches</div>
+                    <div class="toggles">
+                        <button class="toggle on" id="x-relief">Relief</button>
+                        <button class="toggle on" id="x-batiments">Bâtiments</button>
+                        <button class="toggle on" id="x-arbres">Arbres</button>
+                        <button class="toggle" id="x-masses" title="Sursol ni bâti ni végétal : murs, abris, véhicules…">Masses de sursol</button>
+                        <button class="toggle on" id="x-cimetieres" title="Emprises de cimetière de la BD TOPO, drapées sur le relief.">Cimetières</button>
+                        <button class="toggle on" id="x-aerodromes" title="Aérodromes de la BD TOPO et leurs pistes, drapés sur le relief.">Aérodromes et pistes</button>
+                        <button class="toggle on" id="x-postes" title="Postes de transformation de la BD TOPO, drapés sur le relief.">Postes élec.</button>
+                        <button class="toggle on" id="x-haies" title="Haies de la BD TOPO, dressées : 2 m de haut et 1,5 m d'épaisseur de convention, la donnée les taisant.">Haies</button>
+                        <button class="toggle on" id="x-routes" title="Tronçons de route, chemins et sentiers de la BD TOPO, drapés sur le relief.">Routes et chemins</button>
+                        <button class="toggle on" id="x-eau" title="Étendues et cours d'eau de la BD TOPO, drapés sur le relief.">Hydrographie</button>
+                        <button class="toggle on" id="x-lignes" title="Lignes à haute tension de la BD TOPO : pylônes dressés et conducteurs tendus.">Lignes HT</button>
+                    </div>
+                    <div class="sous-titre">Format</div>
+                    <div class="choix-format" role="radiogroup" aria-label="Format du fichier">
+                        <button type="button" role="radio" class="on" aria-checked="true"
+                                data-export-format="ifc">IFC 4 <span>· conception</span></button>
+                        <button type="button" role="radio" aria-checked="false"
+                                data-export-format="citygml">CityGML 2.0 <span>· SIG</span></button>
+                    </div>
+                    <div class="note" id="export-note">Un à quelques Mo, écrit par le
+                        navigateur en une à deux secondes.</div>
+                </div>
+                <footer>
+                    <button type="button" id="btn-export-telecharger">Télécharger</button>
+                    <button type="button" class="principal" id="btn-export-enregistrer"
+                            title="La fenêtre du système, pour choisir le dossier et le nom — Chromium seulement.">Enregistrer sous…</button>
                 </footer>
             </form>
         </dialog>
@@ -2412,6 +2489,10 @@ function majCiblesSurvol() {
     if (groupeLignes && groupeLignes.visible) ciblesSurvol.push(...pylonesSurvol);
     if (groupeConstructions && groupeConstructions.visible) ciblesSurvol.push(...constructionsSurvol);
     if (groupeOuvrages && groupeOuvrages.visible) ciblesSurvol.push(...ouvragesSurvol);
+    // Les emprises ont une visibilité par sous-couche : seul ce qui est
+    // affiché répond au survol.
+    if (groupeEmprises && groupeEmprises.visible) ciblesSurvol.push(
+        ...emprisesSurvol.filter(m => m.parent.visible));
     if (groupeVehicules && groupeVehicules.visible) ciblesSurvol.push(...groupeVehicules.children);
     if (groupePiscines && groupePiscines.visible) ciblesSurvol.push(...groupePiscines.children);
     if (groupeNavires && groupeNavires.visible) ciblesSurvol.push(...groupeNavires.children);
@@ -3150,6 +3231,7 @@ const sceneConstruite = chargerScene()
         activerVegetation();
         chargerMonuments();
         chargerOuvrages();
+        chargerEmprises();
         chargerNuage();
         chargerDetections();
         chargerPanneaux();
@@ -3927,6 +4009,7 @@ function appliquerExageration() {
     if (lignesElec.length) placerLignes();
     if (constructionsPosees && constructionsPosees.length) placerConstructions();
     if (ouvragesPoses && ouvragesPoses.length) placerOuvrages();
+    if (emprisesPosees && emprisesPosees.length) placerEmprises();
     if (pointsNuage) placerNuage();
     if (vehiculesPoses && vehiculesPoses.length) placerVehicules();
     if (piscinesPosees) placerPiscines();
@@ -4033,6 +4116,7 @@ async function chargerRelief() {
         construireConstructions();
         reliefRegle = true;
         construireOuvrages();
+        construireEmprises();
         construireNuage();
         construireVehicules();
         construirePiscines();
@@ -4093,6 +4177,7 @@ async function chargerRelief() {
     construireConstructions();
     reliefRegle = true;
     construireOuvrages();
+    construireEmprises();
     construireNuage();
     construireVehicules();
     construirePiscines();
@@ -4908,6 +4993,10 @@ scene.add(groupeEau);
 // `var` : appliquerExageration() le lit avant que cette ligne soit évaluée.
 // Eau et routes : maillages drapés sur le sol, replacés à chaque exagération.
 var drapes = [];            // { mesh, alts, decalage } — altitude du sol sous chaque sommet
+// Les mêmes triangles, gardés entité par entité : la scène n'en dessine qu'un
+// maillage par matériau (routes) ou un par entité (eau), mais le fichier exporté
+// veut un objet par entité de la BD TOPO (facettesDrapes les relit).
+const eauPosee = [];        // { couche: 'surface'|'cours', donnees, tris }
 
 /** Coupe au milieu de leur plus long côté les triangles plus grands que `maille`. */
 function subdiviser(tris, maille) {
@@ -4965,11 +5054,32 @@ function trianglesRuban(ligne, largeur) {
     return tris;
 }
 
+/**
+ * Altitude du sol sous chaque sommet de `tris` (triangles en mètres locaux),
+ * dans l'ordre des sommets ; NaN quand il n'y a pas de relief là. Ramenés dans
+ * l'emprise : le bord d'un ruban la déborde de sa demi-largeur, et un sommet
+ * sans altitude filait jusqu'au zéro de la scène — un trait bleu tiré vers le
+ * ciel au Mont-Saint-Michel.
+ */
+function altitudesSousTris(tris) {
+    const alts = new Float64Array(tris.length * 3);
+    let k = 0;
+    for (const t of tris) {
+        for (const [x, y] of t) {
+            const [lo, la] = toLonLat(x, y);
+            const a = terrain ? terrain.alt(Math.min(Math.max(lo, BORNES.o), BORNES.e),
+                                            Math.min(Math.max(la, BORNES.s), BORNES.n)) : null;
+            alts[k++] = a == null ? NaN : a;
+        }
+    }
+    return alts;
+}
+
 /** Un maillage drapé à partir de triangles locaux ; les hauteurs viennent de placerDrapes(). */
 function maillageDrape(tris, materiau, groupe, decalage) {
     const positions = new Float32Array(tris.length * 9);
     const normales = new Float32Array(tris.length * 9);
-    const alts = new Float64Array(tris.length * 3);
+    const alts = altitudesSousTris(tris);
     let k = 0;
     for (const t of tris) {
         for (const [x, y] of t) {
@@ -4978,13 +5088,7 @@ function maillageDrape(tris, materiau, groupe, decalage) {
             // même là où elle suit la pente d'une rivière, et une route ne se
             // moire pas des facettes du relief.
             normales[k * 3 + 1] = 1;
-            // Ramené dans l'emprise : le bord d'un ruban la déborde de sa
-            // demi-largeur, et un sommet sans altitude filait jusqu'au zéro de
-            // la scène — un trait bleu tiré vers le ciel au Mont-Saint-Michel.
-            const [lo, la] = toLonLat(x, y);
-            const a = terrain ? terrain.alt(Math.min(Math.max(lo, BORNES.o), BORNES.e),
-                                            Math.min(Math.max(la, BORNES.s), BORNES.n)) : null;
-            alts[k++] = a == null ? NaN : a;
+            k++;
         }
     }
     const geo = new THREE.BufferGeometry();
@@ -5007,23 +5111,48 @@ function construireEau() {
     const materiau = e => e.persistance === 'Intermittent' ? MAT_EAU_INTERMITTENTE : MAT_EAU;
     for (const s of eau.surfaces) {
         const tris = polygones(s.geometrie).flatMap(p => subdiviser(trianglesPolygone(p), EAU_MAILLE));
-        if (tris.length) maillageDrape(tris, materiau(s), groupeEau, EAU_DECALAGE);
+        if (!tris.length) continue;
+        maillageDrape(tris, materiau(s), groupeEau, EAU_DECALAGE);
+        eauPosee.push({ couche: 'surface', donnees: s, tris });
     }
     for (const c of eau.cours) {
         const tris = lignes(c.geometrie).flatMap(l => trianglesRuban(l, c.largeur_m));
-        if (tris.length) maillageDrape(tris, materiau(c), groupeEau, EAU_DECALAGE);
+        if (!tris.length) continue;
+        maillageDrape(tris, materiau(c), groupeEau, EAU_DECALAGE);
+        eauPosee.push({ couche: 'cours', donnees: c, tris });
     }
     placerDrapes();
 }
 
-/** Même règle que le terrain : l'altitude suit l'exagération, un peu au-dessus. */
+/**
+ * Triangles d'un maillage drapé en coordonnées IFC, à partir des mêmes
+ * triangles locaux que la scène : l'altitude du sol y est celle de
+ * placerDrapes() sans exagération du relief. `versIfc` vient de modeleExport,
+ * qui seul connaît l'origine du fichier.
+ */
+function facettesDrapes(tris, decalage, versIfc) {
+    const alts = altitudesSousTris(tris), tri = [];
+    let k = 0;
+    for (const t of tris) {
+        for (const [x, y] of t) {
+            tri.push(...versIfc(x, hauteurDrapee(alts[k++], decalage), -y));
+        }
+    }
+    return facettesIfc(tri);
+}
+
+/**
+ * La hauteur d'un sommet drapé — la même règle que le terrain, l'exagération
+ * comprise : la vue (`placerDrapes`) et l'export (`facettesDrapes`) la
+ * partagent, sans quoi le fichier et l'écran divergeraient.
+ */
+const hauteurDrapee = (a, decalage) =>
+    (relief && terrain && !Number.isNaN(a) ? (a - altitudeRef) * exagVert : 0) + decalage;
+
 function placerDrapes() {
     for (const { mesh, alts, decalage } of drapes) {
         const pos = mesh.geometry.attributes.position;
-        for (let k = 0; k < pos.count; k++) {
-            const a = alts[k];
-            pos.setY(k, (relief && terrain && !Number.isNaN(a) ? (a - altitudeRef) * exagVert : 0) + decalage);
-        }
+        for (let k = 0; k < pos.count; k++) pos.setY(k, hauteurDrapee(alts[k], decalage));
         pos.needsUpdate = true;
         mesh.geometry.computeBoundingSphere();
     }
@@ -5053,6 +5182,16 @@ MAT_CHEMIN.color.set(0x9c8a6e);
 MAT_CHEMIN.opacity = 0.75;
 const groupeRoutes = new THREE.Group();
 scene.add(groupeRoutes);
+// Les mêmes triangles que le maillage dessiné, gardés tronçon par tronçon :
+// l'export en fait un objet par tronçon de la BD TOPO (facettesDrapes).
+const routesPosees = [];    // { donnees, tris }
+
+/** La largeur de chaussée dessinée d'un tronçon : celle de la donnée quand
+ *  elle la donne, sinon la convention par nature ci-dessus. */
+function largeurRoute(p) {
+    return p.largeur_de_chaussee > 0 ? p.largeur_de_chaussee
+                                    : (LARGEUR_ROUTE_PAR_NATURE[p.nature] || 3);
+}
 
 function construireRoutes() {
     const routes = ARTEFACT && ARTEFACT.routes;
@@ -5064,10 +5203,11 @@ function construireRoutes() {
         const g = f.geometry || {};
         const lignes = g.type === 'LineString' ? [g.coordinates]
                      : g.type === 'MultiLineString' ? g.coordinates : [];
-        const largeur = p.largeur_de_chaussee > 0 ? p.largeur_de_chaussee
-                      : (LARGEUR_ROUTE_PAR_NATURE[p.nature] || 3);
-        const tris = parMateriau.get(NATURES_TERRE.has(p.nature) ? MAT_CHEMIN : MAT_ROUTE);
-        for (const l of lignes) tris.push(...trianglesRuban(l, largeur));
+        const largeur = largeurRoute(p);
+        const propres = lignes.flatMap(l => trianglesRuban(l, largeur));
+        if (!propres.length) continue;
+        parMateriau.get(NATURES_TERRE.has(p.nature) ? MAT_CHEMIN : MAT_ROUTE).push(...propres);
+        routesPosees.push({ donnees: p, tris: propres });
     }
     // Un maillage par matériau plutôt que par tronçon : quelques centaines de
     // tronçons feraient autant d'appels de dessin.
@@ -5099,6 +5239,11 @@ const FLECHE_PART = 0.03;
 const DEGAGEMENT_M = 8;
 // Demi-longueur de la traverse : les phases s'écartent avec la tension.
 const BRAS_PAR_TENSION = { '63 kV': 2.5, '90 kV': 3, '150 kV': 4, '225 kV': 5, '400 kV': 8 };
+// Rayon des conducteurs exportés : la vue les dessine d'un trait d'un pixel,
+// qu'aucun modeleur ne reprend. 20 cm, l'ordre de grandeur d'un faisceau de
+// phases aux tensions ici représentées — un conducteur réel fait 3 cm et
+// disparaîtrait du fichier.
+const RAYON_CABLE = 0.2;
 const MAT_PYLONE = new THREE.MeshStandardMaterial({ color: 0x9aa0a6, metalness: 0.5, roughness: 0.55 });
 const MAT_CABLE = new THREE.LineBasicMaterial({ color: 0x23272c });
 var groupeLignes = new THREE.Group();
@@ -5121,7 +5266,7 @@ function construireLignes() {
         const bras = BRAS_PAR_TENSION[l.tension] || 3;
         const s = l.supports.map(([lon, lat, h, mesuree]) => {
             const [x, y] = toLocal(lon, lat);
-            return { x, y, h, mesuree, alt: altSolEtendu(lon, lat) };
+            return { x, y, lon, lat, h, mesuree, alt: altSolEtendu(lon, lat) };
         });
         // Un support hors de tout relief (au-delà de l'anneau, ou en mer)
         // prend le sol de son voisin : le câble va jusqu'au bord sans plonger.
@@ -5142,12 +5287,17 @@ function construireLignes() {
             g.add(fut, traverse);
             g.position.set(p.x, 0, -p.y);
             g.rotation.y = p.ang;          // +X local le long de la ligne, la traverse en Z
+            // Ce qu'il faut pour l'exporter : la scène relira ses maillages
+            // (fût et traverse) tels qu'elle les a posés.
+            g.userData.pylone = { tension: l.tension, gestionnaire: l.gestionnaire,
+                                  h: p.h, mesuree: p.mesuree, lon: p.lon, lat: p.lat };
             fut.castShadow = traverse.castShadow = true;
             groupeLignes.add(g);
             pylonesSurvol.push(fut);
             p.groupe = g;
         });
         const cables = new THREE.LineSegments(new THREE.BufferGeometry(), MAT_CABLE);
+        cables.userData.cable = { tension: l.tension, gestionnaire: l.gestionnaire, ligne: lignesElec.length };
         groupeLignes.add(cables);
         lignesElec.push({ tension: l.tension, bras, supports: s, cables });
     }
@@ -5188,6 +5338,43 @@ function placerLignes() {
         l.cables.geometry.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
         l.cables.geometry.computeBoundingSphere();
     }
+}
+
+/**
+ * Un tube à quatre pans du rayon donné le long des segments d'un câble :
+ * `positions` est une suite de couples de points (x vers l'est, y vers le
+ * haut, z vers le sud, celui des LineSegments de la scène), et le retour une
+ * suite de triangles dans le même repère. Le pan est horizontal ou vertical
+ * selon le segment ; les extrémités restent ouvertes — un câble n'est pas un
+ * solide.
+ */
+function tubeCable(positions, rayon) {
+    const tri = [];
+    for (let i = 0; i + 5 < positions.length; i += 6) {
+        const a = [positions[i], positions[i + 1], positions[i + 2]];
+        const b = [positions[i + 3], positions[i + 4], positions[i + 5]];
+        const d = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+        const l = Math.hypot(...d);
+        if (l < 1e-6) continue;
+        const k = d.map(v => v / l);
+        // u, perpendiculaire à l'axe et horizontale ; v, perpendiculaire aux
+        // deux. Un segment vertical (jamais vu, mais rien ne l'interdit) n'a
+        // pas d'horizontale : u prend l'est.
+        let u = [k[2], 0, -k[0]];
+        const lu = Math.hypot(...u);
+        u = lu < 1e-6 ? [1, 0, 0] : [u[0] / lu, 0, u[2] / lu];
+        const v = [u[1] * k[2] - u[2] * k[1], u[2] * k[0] - u[0] * k[2], u[0] * k[1] - u[1] * k[0]];
+        const coins = p => [0, 1, 2, 3].map(s => {
+            const n = s % 2 ? v : u, signe = s < 2 ? rayon : -rayon;
+            return [p[0] + signe * n[0], p[1] + signe * n[1], p[2] + signe * n[2]];
+        });
+        const [A, B] = [coins(a), coins(b)];
+        for (let s = 0; s < 4; s++) {
+            const t = (s + 1) % 4;
+            tri.push(...A[s], ...B[s], ...B[t], ...A[s], ...B[t], ...A[t]);
+        }
+    }
+    return tri;
 }
 
 document.getElementById('t-lignes').addEventListener('click', e => {
@@ -5503,10 +5690,13 @@ function altSolBorne(x, y) {
 /**
  * Un volume posé sur le relief, à partir de triangles de sommets
  * { x, y, z, dz }. Sa hauteur au-dessus du sol est fixée ici, une fois : z − sol
- * (au moins `plancher`), ou 0 si z est null, plus dz. placerOuvrages() n'a plus
+ * (au moins `plancher`), ou 0 si z est null, plus dz. `placerPoses()` n'a plus
  * qu'à suivre l'exagération du relief.
+ *
+ * `groupe` et `poses` reçoivent le maillage : les ouvrages dans leur groupe, les
+ * haies dans le leur, chaque groupe ayant son bouton dans le panneau.
  */
-function maillagePose(tris, materiau, plancher) {
+function maillagePose(tris, materiau, plancher, groupe = groupeOuvrages, poses = ouvragesPoses) {
     const n = tris.length * 3;
     const positions = new Float32Array(n * 3);
     const alts = new Float64Array(n), hauts = new Float32Array(n);
@@ -5524,14 +5714,14 @@ function maillagePose(tris, materiau, plancher) {
     geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     const mesh = new THREE.Mesh(geo, materiau);
     mesh.castShadow = true; mesh.receiveShadow = true;
-    groupeOuvrages.add(mesh);
-    ouvragesPoses.push({ mesh, alts, hauts });
+    groupe.add(mesh);
+    poses.push({ mesh, alts, hauts });
     return mesh;
 }
 
 /** Même règle que le terrain : le sol suit l'exagération, les hauteurs restent vraies. */
-function placerOuvrages() {
-    for (const { mesh, alts, hauts } of ouvragesPoses) {
+function placerPoses(poses) {
+    for (const { mesh, alts, hauts } of poses) {
         const pos = mesh.geometry.attributes.position;
         for (let k = 0; k < pos.count; k++) {
             const a = alts[k];
@@ -5542,6 +5732,8 @@ function placerOuvrages() {
         mesh.geometry.computeBoundingSphere();
     }
 }
+
+function placerOuvrages() { placerPoses(ouvragesPoses); }
 
 function construireOuvrages() {
     if (!OUVRAGES || !reliefRegle || ouvragesConstruits) return;
@@ -5645,6 +5837,167 @@ document.getElementById('t-ouvrages').addEventListener('click', e => {
     majCiblesSurvol();
     if (ouvragesEnVolume && vegPrete) construireVegetation();
 });
+
+// --- Emprises : cimetières, aéroports, postes, haies ---------------------------
+// Une couche à part (/api/emprises, vue3d/emprises.py), demandée une fois la
+// scène affichée comme les ouvrages : rien de ce qu'elle décrit n'entre dans un
+// calcul de la scène.
+//
+// Cimetières, aérodromes et leurs pistes, postes de transformation sont des
+// aplats drapés sur le relief, comme les terrains de sport : l'altitude des
+// sommets de la BD TOPO n'est pas lue, c'est le relief qui commande. Chaque
+// emprise est un maillage à elle, pour porter son nom au survol — elles sont
+// peu nombreuses (13 cimetières, 3 aérodromes et 45 haies sur les 33 km² d'une
+// emprise strasbourgeoise de 6 × 5,5 km), et les regrouper par matériau, comme
+// les terrains, ferait perdre l'infobulle.
+//
+// Une haie, elle, est un volume dressé depuis le sol. La BD TOPO ne lui donne
+// ni hauteur ni largeur — vérifié sur 785 haies : géométrie en deux dimensions,
+// deux colonnes vides partout — et les deux valeurs viennent du serveur, avec
+// de quoi dire au survol si elles sont mesurées ou de convention.
+const URL_EMPRISES = `api/emprises?${REQUETE}`;
+// Sous les routes (ROUTE_DECALAGE) : un chemin qui longe un cimetière reste
+// visible, et l'aplat ne couvre pas les bâtiments. Une piste se pose au-dessus
+// de l'aplat de son aérodrome, qui la contient.
+const EMPRISE_DECALAGE = 0.03;
+const PISTE_DECALAGE = 0.05;
+// L'orthophoto montre déjà le terrain : l'aplat s'y superpose, translucide, et
+// le dit encore sur le Plan IGN. La piste, elle, est opaque à 0,75 : c'est du
+// revêtement, pas de la teinte de terrain.
+const MAT_CIMETIERE = new THREE.MeshStandardMaterial({
+    color: 0x76866f, roughness: 1, transparent: true, opacity: 0.45,
+    polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+const MAT_CIMETIERE_MILITAIRE = new THREE.MeshStandardMaterial({
+    color: 0x8d8168, roughness: 1, transparent: true, opacity: 0.5,
+    polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+const MAT_AERODROME = new THREE.MeshStandardMaterial({
+    color: 0x9aa38b, roughness: 1, transparent: true, opacity: 0.4,
+    polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+const MAT_PISTE = new THREE.MeshStandardMaterial({
+    color: 0x4d5157, roughness: 0.95, transparent: true, opacity: 0.75,
+    polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+const MAT_POSTE = new THREE.MeshStandardMaterial({
+    color: 0xa08a63, roughness: 1, transparent: true, opacity: 0.5,
+    polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+const MAT_HAIE = new THREE.MeshStandardMaterial({
+    color: 0x3e6b33, roughness: 1, flatShading: true });
+
+const groupeCimetieres = new THREE.Group();
+const groupeAerodromes = new THREE.Group();
+const groupePostes = new THREE.Group();
+const groupeHaies = new THREE.Group();
+// `var` : majCiblesSurvol() le lit avant que cette ligne soit évaluée.
+var groupeEmprises = new THREE.Group();
+groupeEmprises.add(groupeCimetieres, groupeAerodromes, groupePostes, groupeHaies);
+scene.add(groupeEmprises);
+var emprisesSurvol = [];
+var emprisesPosees = [];            // haies : volumes { mesh, alts, hauts }
+let EMPRISES = null;
+let emprisesConstruites = false;
+
+function placerEmprises() { placerPoses(emprisesPosees); }
+
+function construireEmprises() {
+    if (!EMPRISES || !reliefRegle || emprisesConstruites) return;
+    emprisesConstruites = true;
+    const polygones = g => g.type === 'Polygon' ? [g.coordinates]
+                         : g.type === 'MultiPolygon' ? g.coordinates : [];
+    const poser = (couche, e, groupe, materiau, decalage, infobulle) => {
+        const tris = polygones(e.geometrie).flatMap(p => subdiviser(trianglesPolygone(p), EAU_MAILLE));
+        if (!tris.length) return;
+        const mesh = maillageDrape(tris, materiau, groupe, decalage);
+        // `couche` et la donnée brute : les exports IFC et CityGML relisent ces
+        // maillages (modeleExport) et y prennent le nom, la nature, les codes.
+        mesh.userData = { infobulle, emprise: { couche, donnees: e } };
+        emprisesSurvol.push(mesh);
+    };
+
+    for (const c of EMPRISES.cimetieres) {
+        poser('cimetiere', c, groupeCimetieres,
+              c.nature === 'Militaire' ? MAT_CIMETIERE_MILITAIRE : MAT_CIMETIERE,
+              EMPRISE_DECALAGE,
+              `<b>${c.nom || 'Cimetière'}</b>`
+              + `<br>${c.nature || 'Civil'} <i>(BD TOPO)</i>`);
+    }
+    for (const a of EMPRISES.aerodromes) {
+        poser('aerodrome', a, groupeAerodromes, MAT_AERODROME, EMPRISE_DECALAGE,
+              `<b>${a.nom || 'Aérodrome'}</b>`
+              + (a.nature ? `<br>${a.nature}` : '')
+              + (a.categorie ? ` <i>(${[a.categorie, a.usage].filter(Boolean).join(', ')})</i>` : '')
+              + (a.oaci || a.iata ? `<br>${[a.oaci, a.iata].filter(Boolean).join(' · ')}` : ''));
+    }
+    for (const p of EMPRISES.pistes) {
+        poser('piste', p, groupeAerodromes, MAT_PISTE, PISTE_DECALAGE,
+              `<b>${p.nature || 'Piste d\'aérodrome'}</b>`
+              + (p.fonction ? `<br>${p.fonction}` : '') + '<br><i>BD TOPO</i>');
+    }
+    for (const p of EMPRISES.postes) {
+        poser('poste', p, groupePostes, MAT_POSTE, EMPRISE_DECALAGE,
+              `<b>${p.nom || 'Poste de transformation'}</b><br><i>BD TOPO</i>`);
+    }
+    // Comme l'eau, les routes et les ouvrages : les aplats restent à plat tant
+    // que le relief n'est pas appliqué aux sommets qu'on vient d'ajouter.
+    placerDrapes();
+
+    // Les haies : un volume depuis le sol, à leur hauteur et sur leur largeur.
+    if (terrain) {
+        const auSol = () => ({ z: null, dz: -ENFONCEMENT });
+        for (const h of EMPRISES.haies) {
+            const stations = stationsLeLong(h.ligne.map(([lo, la]) => [lo, la, 0]), OUVRAGE_PAS);
+            if (stations.length < 2) continue;
+            const mesh = maillagePose(
+                prismeLeLong(stations, h.largeur_m, () => ({ z: null, dz: h.h }), auSol),
+                MAT_HAIE, 0, groupeHaies, emprisesPosees);
+            mesh.userData = { infobulle: `<b>Haie</b>`
+                + `<br>${enMetres(h.h)} de haut (${h.h_mesuree ? 'BD TOPO' : 'convention'}), `
+                + `${enMetres(h.largeur_m)} d'épaisseur (${h.largeur_mesuree ? 'BD TOPO' : 'convention'})`,
+                emprise: { couche: 'haie', donnees: h } };
+            emprisesSurvol.push(mesh);
+        }
+        placerEmprises();
+    }
+
+    // Un bouton par sous-couche, comme les autres calques : il n'apparaît que si
+    // la scène en contient.
+    for (const [id, groupe] of [['t-cimetieres', groupeCimetieres],
+                                ['t-aerodromes', groupeAerodromes],
+                                ['t-postes', groupePostes], ['t-haies', groupeHaies]]) {
+        const bouton = document.getElementById(id);
+        bouton.hidden = !groupe.children.length;
+        bouton.addEventListener('click', e => {
+            groupe.visible = !groupe.visible;
+            e.currentTarget.classList.toggle('on', groupe.visible);
+            majCiblesSurvol();
+        });
+    }
+    majCiblesSurvol();
+}
+
+async function chargerEmprises(essai = 1) {
+    const retard = setTimeout(
+        () => etatCouche('etat-emprises', 'Emprises BD TOPO : chargement…', true),
+        essai === 1 ? RETARD_ETAT_MONUMENTS_MS : 0);
+    try {
+        const r = await requete(URL_EMPRISES);
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const e = await r.json();
+        clearTimeout(retard);
+        etatCouche('etat-emprises', null);
+        if (!e) return;                       // aucune emprise sur l'emprise
+        EMPRISES = e;
+        construireEmprises();
+    } catch (err) {
+        clearTimeout(retard);
+        if (essai >= ESSAIS_MONUMENTS) {
+            etatCouche('etat-emprises',
+                       'Emprises BD TOPO indisponibles : recharger la page pour réessayer.');
+            return;
+        }
+        etatCouche('etat-emprises',
+                   `Emprises BD TOPO indisponibles : nouvel essai dans ${ATTENTE_MONUMENTS_S} s.`, true);
+        setTimeout(() => chargerEmprises(essai + 1), ATTENTE_MONUMENTS_S * 1000);
+    }
+}
 
 // --- Nuage LiDAR HD ------------------------------------------------------------
 // Le bâti du nuage de points LiDAR HD (/api/nuage, vue3d/nuage.py), lu après la
@@ -8754,6 +9107,20 @@ const ENTITES_IFC = {
     arbre: ['IFCGEOGRAPHICELEMENT', 'USERDEFINED', 'Arbre'],
     masse: ['IFCGEOGRAPHICELEMENT', 'USERDEFINED', 'Masse de sursol'],
     terrain: ['IFCGEOGRAPHICELEMENT', 'TERRAIN', null],
+    // Les emprises du sol de la BD TOPO, un objet par entité : l'aplat drapé,
+    // surface ouverte, ou la haie, volume fermé.
+    cimetiere: ['IFCGEOGRAPHICELEMENT', 'USERDEFINED', 'Cimetière'],
+    aerodrome: ['IFCGEOGRAPHICELEMENT', 'USERDEFINED', 'Aérodrome'],
+    piste: ['IFCGEOGRAPHICELEMENT', 'USERDEFINED', "Piste d'aérodrome"],
+    poste: ['IFCGEOGRAPHICELEMENT', 'USERDEFINED', 'Poste de transformation'],
+    haie: ['IFCGEOGRAPHICELEMENT', 'USERDEFINED', 'Haie'],
+    // Les réseaux : le ruban d'un tronçon de route ou d'un cours d'eau, le
+    // volume d'un pylône, le tube des conducteurs d'une ligne.
+    route: ['IFCGEOGRAPHICELEMENT', 'USERDEFINED', 'Tronçon de route'],
+    surface_eau: ['IFCGEOGRAPHICELEMENT', 'USERDEFINED', "Surface d'eau"],
+    cours_d_eau: ['IFCGEOGRAPHICELEMENT', 'USERDEFINED', "Cours d'eau"],
+    pylone: ['IFCGEOGRAPHICELEMENT', 'USERDEFINED', 'Pylône électrique'],
+    ligne_ht: ['IFCGEOGRAPHICELEMENT', 'USERDEFINED', 'Ligne à haute tension'],
 };
 
 /**
@@ -9181,6 +9548,15 @@ function ecrireCityGml(m) {
 const STYLES_IFC = {
     murs: [0.85, 0.84, 0.81], toit: [0.62, 0.58, 0.55], terrain: [0.76, 0.78, 0.68],
     feuillage: [0.49, 0.63, 0.36], masse: [0.55, 0.56, 0.50], tronc: [0.42, 0.32, 0.25],
+    // Les emprises BD TOPO, aux teintes de la vue rendues opaques.
+    cimetiere: [0.46, 0.53, 0.44], cimetiereMilitaire: [0.55, 0.51, 0.41],
+    aerodrome: [0.60, 0.64, 0.55], piste: [0.30, 0.32, 0.34],
+    poste: [0.63, 0.54, 0.39], haie: [0.24, 0.42, 0.20],
+    // Les réseaux de la BD TOPO : chaussée, chemin, eau et lignes, aux mêmes
+    // teintes que la vue (MAT_ROUTE, MAT_CHEMIN, MAT_EAU, MAT_CABLE…).
+    route: [0.37, 0.39, 0.42], chemin: [0.61, 0.54, 0.43],
+    eau: [0.18, 0.44, 0.62], eauIntermittente: [0.34, 0.55, 0.68],
+    pylone: [0.60, 0.63, 0.65], cable: [0.14, 0.15, 0.17],
 };
 // Mailles du relief exporté, par côté, au plus : 178 dans l'emprise par
 // défaut, la maille de la vue (2 m) ; en zone de 1 000 m, 500 mailles
@@ -9204,8 +9580,176 @@ function toitDessine(ud) {
  * plats, mesurés ou résumés, parties OSM — chacun en un élément ; les arbres
  * et les masses en forme simple, 36 faces et un tronc, au lieu des 180 faces
  * de la forme détaillée (11 000 éléments au Trocadéro en zone de 1 000 m) ;
- * le relief de l'emprise. `options` : { relief, batiments, arbres, masses }.
+ * les emprises BD TOPO, telles que la vue les a drapées ou dressées, un élément
+ * par entité ; les tronçons de route et les étendues d'eau, drapés comme eux ;
+ * les pylônes et les conducteurs des lignes à haute tension ; le relief de
+ * l'emprise. `options` : { relief, batiments, arbres, masses, routes, eau,
+ * lignes, cimetieres, aerodromes, postes, haies }.
  */
+
+/** Le libellé et le jeu de propriétés de chaque sous-couche d'emprises. */
+const LIBELLES_EMPRISE = {
+    cimetiere: ['VueIGN_Cimetiere', 'Cimetière'],
+    aerodrome: ['VueIGN_Aerodrome', 'Aérodrome'],
+    piste: ['VueIGN_Piste', "Piste d'aérodrome"],
+    poste: ['VueIGN_Poste', 'Poste de transformation'],
+    haie: ['VueIGN_Haie', 'Haie'],
+};
+/** L'interrupteur d'export que suit chaque sous-couche : les pistes vont avec
+ *  les aérodromes, comme leur bouton dans le panneau. */
+const OPTION_EMPRISE = { cimetiere: 'cimetieres', aerodrome: 'aerodromes',
+                         piste: 'aerodromes', poste: 'postes', haie: 'haies' };
+
+/**
+ * Un élément d'export pour une emprise BD TOPO lue dans la scène
+ * (construireEmprises) : le nom, la description et les propriétés viennent de
+ * la donnée, le maillage du relief drapé ou du volume dressé. La hauteur et
+ * l'épaisseur d'une haie, absentes de la BD TOPO, sont celles de la convention
+ * du serveur : la propriété `Source…` dit laquelle, « BD TOPO » ou « convention ».
+ * `i` départage deux entités sans nom ni identifiant.
+ */
+function elementEmprise(meta, facettes, i) {
+    const d = meta.donnees, genre = meta.couche;
+    const [nomPset, libelle] = LIBELLES_EMPRISE[genre];
+    let nom = libelle, description = 'BD TOPO', valeurs, style = genre;
+    if (genre === 'cimetiere') {
+        nom = d.nom || libelle;
+        description = `${d.nature || 'Civil'} (BD TOPO)`;
+        valeurs = [['Nature', 'IFCLABEL', d.nature]];
+        if (d.nature === 'Militaire') style = 'cimetiereMilitaire';
+    } else if (genre === 'aerodrome') {
+        nom = d.nom || libelle;
+        description = [d.nature, d.categorie, d.usage].filter(Boolean).join(', ') + ' (BD TOPO)';
+        valeurs = [['Nature', 'IFCLABEL', d.nature], ['Categorie', 'IFCLABEL', d.categorie],
+                   ['Usage', 'IFCLABEL', d.usage], ['CodeOACI', 'IFCLABEL', d.oaci],
+                   ['CodeIATA', 'IFCLABEL', d.iata]];
+    } else if (genre === 'piste') {
+        nom = d.nature || libelle;
+        description = [d.fonction, 'BD TOPO'].filter(Boolean).join(', ');
+        valeurs = [['Nature', 'IFCLABEL', d.nature], ['Fonction', 'IFCLABEL', d.fonction]];
+    } else if (genre === 'poste') {
+        nom = d.nom || libelle;
+        valeurs = [['Importance', 'IFCLABEL', d.importance]];
+    } else {
+        description = `${d.h.toFixed(1)} m de haut (${d.h_mesuree ? 'BD TOPO' : 'convention'}), `
+            + `${d.largeur_m.toFixed(1)} m d'épaisseur (${d.largeur_mesuree ? 'BD TOPO' : 'convention'})`;
+        valeurs = [['Hauteur', 'IFCLENGTHMEASURE', d.h],
+                   ['SourceHauteur', 'IFCLABEL', d.h_mesuree ? 'BD TOPO' : 'convention'],
+                   ['Largeur', 'IFCLENGTHMEASURE', d.largeur_m],
+                   ['SourceLargeur', 'IFCLABEL', d.largeur_mesuree ? 'BD TOPO' : 'convention']];
+    }
+    return {
+        cle: `${genre}|${d.cleabs || d.oaci || d.nom || d.nature || ''}|${i}`,
+        genre, nom, description, tag: null,
+        proprietes: { nom: nomPset, valeurs },
+        maillages: [{ style, facettes }],
+    };
+}
+
+/**
+ * Un tronçon de route, de chemin ou de sentier (construireRoutes) : le ruban
+ * drapé, tel que la vue le dessine. La largeur est celle de la BD TOPO quand
+ * elle la donne (`largeur_de_chaussee`), sinon la convention de la vue ; la
+ * propriété `SourceLargeur` dit laquelle.
+ */
+function elementRoute(d, facettes, i) {
+    const largeur = largeurRoute(d), mesuree = d.largeur_de_chaussee > 0;
+    const nomRue = d.nom_collaboratif_gauche || d.nom_collaboratif_droite || null;
+    return {
+        cle: `route|${d.cleabs || nomRue || d.nature || ''}|${i}`,
+        genre: 'route',
+        nom: d.nature || 'Tronçon de route',
+        description: `${largeur} m de large (${mesuree ? 'BD TOPO' : 'convention'})`
+            + (nomRue ? `, ${nomRue}` : ''),
+        tag: d.cleabs || null,
+        proprietes: { nom: 'VueIGN_Route', valeurs: [
+            ['IdentifiantBDTOPO', 'IFCIDENTIFIER', d.cleabs],
+            ['Nature', 'IFCLABEL', d.nature],
+            ['Nom', 'IFCLABEL', nomRue],
+            ['Importance', 'IFCLABEL', d.importance],
+            ['NombreDeVoies', 'IFCINTEGER', d.nombre_de_voies > 0 ? d.nombre_de_voies : null],
+            ['Largeur', 'IFCLENGTHMEASURE', largeur],
+            ['SourceLargeur', 'IFCLABEL', mesuree ? 'BD TOPO' : 'convention'],
+            ['SensDeCirculation', 'IFCLABEL', d.sens_de_circulation],
+        ] },
+        maillages: [{ style: NATURES_TERRE.has(d.nature) ? 'chemin' : 'route', facettes }],
+    };
+}
+
+/**
+ * Une étendue ou un cours d'eau (construireEau), tel que la vue le drape : un
+ * aplat sur le relief. La largeur d'un cours n'est celle de la donnée que si
+ * sa classe de largeur la porte (`source_largeur`, vue3d/eau.py) ; l'axe d'une
+ * rivière assez large pour avoir son emprise est fictif et n'arrive pas ici.
+ */
+function elementEau(couche, d, facettes, i) {
+    const eau = couche === 'surface';
+    const valeurs = [['Nature', 'IFCLABEL', d.nature],
+                     ['Persistance', 'IFCLABEL', d.persistance]];
+    if (!eau) {
+        valeurs.push(['Largeur', 'IFCLENGTHMEASURE', d.largeur_m],
+                     ['SourceLargeur', 'IFCLABEL', d.source_largeur]);
+    }
+    const nom = d.nature || (eau ? "Surface d'eau" : "Cours d'eau");
+    return {
+        cle: `${eau ? 'surface_eau' : 'cours_d_eau'}|${d.nature || ''}|${i}`,
+        genre: eau ? 'surface_eau' : 'cours_d_eau',
+        nom,
+        description: `${nom} (BD TOPO, ${String(d.persistance || 'n.c.').toLowerCase()})`
+            + (eau ? '' : `, ${d.largeur_m} m de large (${d.source_largeur})`),
+        tag: null,
+        proprietes: { nom: eau ? 'VueIGN_SurfaceEau' : 'VueIGN_CoursDEau', valeurs },
+        maillages: [{ style: d.persistance === 'Intermittent' ? 'eauIntermittente' : 'eau', facettes }],
+    };
+}
+
+/**
+ * Un pylône d'une ligne à haute tension, tel que la vue le dresse : son fût et
+ * sa traverse, lus dans la scène. Sa hauteur vient du pylône BD TOPO quand il
+ * est rattaché à la ligne, sinon de la médiane de sa tension (vue3d/lignes.py).
+ */
+function elementPylone(d, facettes, i) {
+    const source = d.mesuree ? 'BD TOPO' : 'médiane de la tension';
+    return {
+        cle: `pylone|${d.lon}|${d.lat}|${i}`,
+        genre: 'pylone',
+        nom: `Pylône ${d.tension}`,
+        description: `${d.h.toFixed(1)} m de haut (${source}), ${d.gestionnaire || 'gestionnaire inconnu'}`,
+        tag: null,
+        proprietes: { nom: 'VueIGN_Pylone', valeurs: [
+            ['Tension', 'IFCLABEL', d.tension],
+            ['Gestionnaire', 'IFCLABEL', d.gestionnaire],
+            ['Hauteur', 'IFCLENGTHMEASURE', d.h],
+            ['SourceHauteur', 'IFCLABEL', source],
+        ] },
+        maillages: [{ style: 'pylone', facettes }],
+    };
+}
+
+/**
+ * Une ligne à haute tension : ses trois phases, les mêmes que la vue tend
+ * entre ses pylônes, à la flèche de convention de FLECHE_PART. Un tube de
+ * RAYON_CABLE les rend visibles — la vue, elle, les dessine d'un trait.
+ */
+function elementLigne(l, facettes) {
+    const d = l.supports[0] || {};
+    return {
+        cle: `ligne_ht|${l.tension}|${d.lon}|${d.lat}|${l.supports.length}`,
+        genre: 'ligne_ht',
+        nom: `Ligne ${l.tension}`,
+        description: `Trois phases sur ${l.supports.length} support(s), flèche de `
+            + `${(FLECHE_PART * 100).toFixed(0)} % de la portée (convention)`,
+        tag: null,
+        proprietes: { nom: 'VueIGN_LigneHT', valeurs: [
+            ['Tension', 'IFCLABEL', l.tension],
+            ['Gestionnaire', 'IFCLABEL', l.gestionnaire],
+            ['NombreDeSupports', 'IFCINTEGER', l.supports.length],
+            ['Fleche', 'IFCLABEL', `${FLECHE_PART * 100} % de la portée (convention)`],
+        ] },
+        maillages: [{ style: 'cable', facettes }],
+    };
+}
+
 function modeleExport(options) {
     const [lx, ly] = versLambert93(CENTER[0], CENTER[1]);
     const origine = { x: Math.round(lx), y: Math.round(ly), z: Math.round(altitudeRef) };
@@ -9217,7 +9761,9 @@ function modeleExport(options) {
         return [e - origine.x, n - origine.y, y + altitudeRef - origine.z];
     };
     const elements = [];
-    const compte = { batiments: 0, arbres: 0, masses: 0, maille: null, osm: false };
+    const compte = { batiments: 0, arbres: 0, masses: 0, maille: null, osm: false,
+                     routes: 0, surfacesEau: 0, coursEau: 0, pylones: 0, lignes: 0,
+                     cimetieres: 0, aerodromes: 0, postes: 0, haies: 0 };
 
     if (options.batiments) {
         // Remis sans exagération le temps de la lecture : rebaserBatiments ne
@@ -9353,6 +9899,95 @@ function modeleExport(options) {
         }
     }
 
+    // Les couches BD TOPO drapées ou dressées : emprises (aplats et haies),
+    // tronçons de route, étendues et cours d'eau, pylônes et conducteurs.
+    // Comme les bâtiments, la scène est relue sans exagération du relief — les
+    // maillages sont replacés le temps de la lecture, puis remis : un aplat
+    // suit la pente du sol, un toit ne l'a jamais suivie.
+    if (options.cimetieres || options.aerodromes || options.postes || options.haies
+        || options.routes || options.eau || options.lignes) {
+        const exagEmp = exagVert, reliefEmp = relief;
+        exagVert = 1; relief = true;
+        try {
+            placerDrapes();
+            placerEmprises();
+            placerLignes();
+            groupeEmprises.updateMatrixWorld(true);
+            groupeLignes.updateMatrixWorld(true);
+            const v = new THREE.Vector3();
+            for (const groupe of [groupeCimetieres, groupeAerodromes, groupePostes, groupeHaies]) {
+                for (const o of groupe.children) {
+                    const meta = o.userData.emprise;
+                    if (!meta || !options[OPTION_EMPRISE[meta.couche]]) continue;
+                    const pos = o.geometry.attributes.position, idx = o.geometry.index;
+                    const nb = idx ? idx.count : pos.count;
+                    const tri = [];
+                    for (let i = 0; i < nb; i++) {
+                        v.fromBufferAttribute(pos, idx ? idx.getX(i) : i).applyMatrix4(o.matrixWorld);
+                        tri.push(...versIfc(v.x, v.y, v.z));
+                    }
+                    const facettes = facettesIfc(tri);
+                    if (!facettes.faces.length) continue;
+                    elements.push(elementEmprise(meta, facettes, elements.length));
+                    compte[OPTION_EMPRISE[meta.couche]]++;
+                }
+            }
+            if (options.routes) {
+                for (const { donnees, tris } of routesPosees) {
+                    const facettes = facettesDrapes(tris, ROUTE_DECALAGE, versIfc);
+                    if (!facettes.faces.length) continue;
+                    elements.push(elementRoute(donnees, facettes, elements.length));
+                    compte.routes++;
+                }
+            }
+            if (options.eau) {
+                for (const { couche, donnees, tris } of eauPosee) {
+                    const facettes = facettesDrapes(tris, EAU_DECALAGE, versIfc);
+                    if (!facettes.faces.length) continue;
+                    elements.push(elementEau(couche, donnees, facettes, elements.length));
+                    if (couche === 'surface') compte.surfacesEau++; else compte.coursEau++;
+                }
+            }
+            if (options.lignes) {
+                for (const o of groupeLignes.children) {
+                    const pylone = o.userData.pylone, cable = o.userData.cable;
+                    if (!pylone && !cable) continue;
+                    const tri = [];
+                    if (pylone) {
+                        // Le fût et la traverse, tels que la vue les a posés.
+                        for (const m of o.children) {
+                            if (!m.isMesh) continue;
+                            const pos = m.geometry.attributes.position, idx = m.geometry.index;
+                            const nb = idx ? idx.count : pos.count;
+                            for (let i = 0; i < nb; i++) {
+                                v.fromBufferAttribute(pos, idx ? idx.getX(i) : i).applyMatrix4(m.matrixWorld);
+                                tri.push(...versIfc(v.x, v.y, v.z));
+                            }
+                        }
+                    } else {
+                        tri.push(...tubeCable(o.geometry.attributes.position.array, RAYON_CABLE));
+                    }
+                    const facettes = facettesIfc(tri);
+                    if (!facettes.faces.length) continue;
+                    if (pylone) {
+                        elements.push(elementPylone(pylone, facettes, elements.length));
+                        compte.pylones++;
+                    } else {
+                        elements.push(elementLigne(lignesElec[cable.ligne], facettes));
+                        compte.lignes++;
+                    }
+                }
+            }
+        } finally {
+            exagVert = exagEmp; relief = reliefEmp;
+            placerDrapes();
+            placerEmprises();
+            placerLignes();
+            groupeEmprises.updateMatrixWorld(true);
+            groupeLignes.updateMatrixWorld(true);
+        }
+    }
+
     if (options.relief) {
         const geo = terrain.mesh.geometry, { widthSegments: sx, heightSegments: sz } = geo.parameters;
         const pas = Math.ceil(Math.max(sx, sz) / RELIEF_IFC_MAILLES);
@@ -9397,10 +10032,20 @@ function modeleExport(options) {
     };
 }
 
-const optionsExport = { relief: true, batiments: true, arbres: true, masses: false };
-for (const [cle, id] of [['relief', 'x-relief'], ['batiments', 'x-batiments'],
-                         ['arbres', 'x-arbres'], ['masses', 'x-masses']]) {
+// Les interrupteurs de la fenêtre d'export : `masses` et les réseaux se
+// cochent à part des quatre autres. Les réseaux, légers, sont cochés d'office ;
+// les masses pèsent lourd (11 000 éléments au Trocadéro).
+const optionsExport = { relief: true, batiments: true, arbres: true, masses: false,
+                        routes: true, eau: true, lignes: true,
+                        cimetieres: true, aerodromes: true, postes: true, haies: true };
+const COUCHES_EXPORT = [['relief', 'x-relief'], ['batiments', 'x-batiments'],
+                        ['arbres', 'x-arbres'], ['masses', 'x-masses'],
+                        ['routes', 'x-routes'], ['eau', 'x-eau'], ['lignes', 'x-lignes'],
+                        ['cimetieres', 'x-cimetieres'], ['aerodromes', 'x-aerodromes'],
+                        ['postes', 'x-postes'], ['haies', 'x-haies']];
+for (const [cle, id] of COUCHES_EXPORT) {
     const bouton = document.getElementById(id);
+    bouton.dataset.titre = bouton.title;          // etatCouchesExport() le remplace
     bouton.addEventListener('click', () => {
         optionsExport[cle] = !optionsExport[cle];
         bouton.classList.toggle('on', optionsExport[cle]);
@@ -9413,48 +10058,174 @@ const FORMATS_EXPORT = {
                reperes: m => `Lambert-93${m.crs.datumVertical ? ` et ${m.crs.datumVertical}` : ''}, coordonnées absolues.` },
 };
 const noteExport = document.getElementById('note-export');
+const noteExportFenetre = document.getElementById('export-note');
 const boutonsExport = [...document.querySelectorAll('[data-format]')];
 
-async function exporter(format) {
+/** La même note au panneau et dans la fenêtre : l'une se lit sans l'autre. */
+function noterExport(texte) {
+    noteExport.textContent = texte;
+    noteExportFenetre.textContent = texte;
+}
+
+/** Ce que la scène porte, couche par couche : un interrupteur n'a de sens que
+ *  si le fichier peut en tirer quelque chose. */
+const COUCHES_PRESENTES = {
+    relief: () => !!terrain,
+    batiments: () => groupeBatiments.children.length > 0,
+    arbres: () => vegPrete,
+    masses: () => vegPrete,
+    routes: () => routesPosees.length > 0,
+    eau: () => eauPosee.length > 0,
+    lignes: () => lignesElec.length > 0,
+    cimetieres: () => groupeCimetieres.children.length > 0,
+    aerodromes: () => groupeAerodromes.children.length > 0,
+    postes: () => groupePostes.children.length > 0,
+    haies: () => groupeHaies.children.length > 0,
+};
+
+/** Éteint, dans la fenêtre, les couches que la scène ne porte pas. */
+function etatCouchesExport() {
+    for (const [cle, id] of COUCHES_EXPORT) {
+        const bouton = document.getElementById(id);
+        const presente = COUCHES_PRESENTES[cle]();
+        bouton.disabled = !presente;
+        bouton.title = presente ? (bouton.dataset.titre || '') : 'Rien de cette couche dans la scène.';
+        bouton.classList.toggle('on', presente && optionsExport[cle]);
+    }
+}
+
+// --- La fenêtre d'export -------------------------------------------------------
+const fenetreExport = document.getElementById('export-dialogue');
+const boutonsFenetre = ['btn-export-telecharger', 'btn-export-enregistrer']
+    .map(id => document.getElementById(id));
+// La fenêtre d'enregistrement du système n'existe que sur Chromium, et en
+// contexte sûr (https ou localhost) : ailleurs, « Enregistrer sous… » disparaît
+// plutôt que de promettre un choix qu'il ne fait pas — le reste y supplée.
+if (!window.showSaveFilePicker) document.getElementById('btn-export-enregistrer').hidden = true;
+
+document.getElementById('btn-reglages-export').addEventListener('click', () => {
+    etatCouchesExport();
+    fenetreExport.showModal();
+});
+
+let formatExport = 'ifc';
+const boutonsFormat = [...fenetreExport.querySelectorAll('[data-export-format]')];
+for (const b of boutonsFormat) {
+    b.addEventListener('click', () => {
+        formatExport = b.dataset.exportFormat;
+        for (const x of boutonsFormat) {
+            x.classList.toggle('on', x === b);
+            x.setAttribute('aria-checked', String(x === b));
+        }
+    });
+}
+
+/** Ce que le fichier vient de recevoir, en une ligne : les couches écrites et
+ *  leurs comptes, puis la maille du relief. `choix` : les options effectives. */
+function resumeExport(modele, choix) {
+    const c = modele.compte;
+    const nombre = (n, mot) => `${n.toLocaleString('fr-FR')} ${mot}${n > 1 ? 's' : ''}`;
+    // « 3 surface(s) d'eau » : un mot composé prend son « s » où il faut.
+    const nombreDe = (n, mot) => `${n.toLocaleString('fr-FR')} ${mot}(s)`;
+    return [choix.batiments && nombre(c.batiments, 'bâtiment'),
+            choix.arbres && (vegPrete ? nombre(c.arbres, 'arbre') : 'pas d\'arbres (hors LiDAR HD)'),
+            choix.masses && vegPrete && nombre(c.masses, 'masse'),
+            choix.routes && nombre(c.routes, 'tronçon'),
+            choix.eau && nombreDe(c.surfacesEau, "surface d'eau"),
+            choix.eau && nombreDe(c.coursEau, "cours d'eau"),
+            choix.cimetieres && nombre(c.cimetieres, 'cimetière'),
+            choix.aerodromes && `${c.aerodromes.toLocaleString('fr-FR')} aérodrome(s) ou piste(s)`,
+            choix.postes && nombre(c.postes, 'poste'),
+            choix.haies && nombre(c.haies, 'haie'),
+            choix.lignes && nombre(c.pylones, 'pylône'),
+            choix.lignes && nombreDe(c.lignes, 'ligne'),
+            c.maille && `relief à ${c.maille.toFixed(1).replace('.', ',')} m`].filter(Boolean).join(', ');
+}
+
+/** Le nom du fichier, avant même de bâtir le modèle : la fenêtre du système
+ *  doit le proposer avant le calcul. Même formule que `modeleExport().base`,
+ *  que reprend outils/essai-navigateur.mjs. */
+const nomFichierExport = () => `vue3d-${LAT0}-${LON0}-z${ZONE}`;
+
+/**
+ * Écrit le fichier du format demandé, avec les couches cochées. `mode` :
+ * 'telecharger' (le dossier de téléchargement du navigateur) ou 'enregistrer'
+ * (la fenêtre du système). Celle-ci s'ouvre AVANT le calcul, qui tient la main
+ * une à deux secondes en zone de 1 000 m : l'activation du clic serait sinon
+ * perdue, et le navigateur refuserait la fenêtre.
+ */
+async function exporter(format, mode = 'telecharger') {
     const { nom, ecrire, extension, type, reperes } = FORMATS_EXPORT[format];
-    // Les bâtiments sont posés sur le relief : sans lui, pas d'altitudes.
+    // Le relief porte les altitudes : sans lui, rien n'est posé.
     if (!terrain || !vegChargee) {
-        noteExport.textContent = ERREUR_SCENE ? `Scène indisponible : ${ERREUR_SCENE}`
+        noterExport(ERREUR_SCENE ? `Scène indisponible : ${ERREUR_SCENE}`
             : !terrain && reliefRegle ? 'Relief indisponible : pas d\'altitudes à exporter.'
-            : 'La scène n\'est pas encore prête.';
+            : 'La scène n\'est pas encore prête.');
         return;
     }
-    for (const b of boutonsExport) b.disabled = true;
-    noteExport.textContent = `Écriture du fichier ${nom}…`;
+    // Les options effectives : le cochage, moins ce que la scène ne porte pas —
+    // un interrupteur éteint faute de matière ne doit pas grossir la note.
+    const choix = Object.fromEntries(COUCHES_EXPORT.map(([cle]) =>
+        [cle, !!optionsExport[cle] && COUCHES_PRESENTES[cle]()]));
+    if (!COUCHES_EXPORT.some(([cle]) => choix[cle])) {
+        noterExport('Aucune couche cochée : rien à écrire.');
+        return;
+    }
+    const nomFichier = `${nomFichierExport()}.${extension}`;
+    let poignee = null;
+    if (mode === 'enregistrer' && window.showSaveFilePicker) {
+        try {
+            poignee = await window.showSaveFilePicker({
+                suggestedName: nomFichier,
+                types: [{ description: `Fichier ${nom}`, accept: { [type]: [`.${extension}`] } }],
+            });
+        } catch (err) {
+            if (err.name === 'AbortError') return;      // l'utilisateur a renoncé
+            console.warn('Fenêtre d\'enregistrement indisponible, téléchargement direct :', err);
+        }
+    }
+    const boutons = [...boutonsExport, ...boutonsFenetre];
+    for (const b of boutons) b.disabled = true;
+    noterExport(`Écriture du fichier ${nom}…`);
     // La note s'affiche avant le calcul, qui tient la main une à deux secondes en zone de 1 000 m.
     await new Promise(ok => requestAnimationFrame(() => setTimeout(ok)));
     try {
-        const modele = modeleExport(optionsExport);
+        const modele = modeleExport(choix);
+        if (!modele.elements.length) {
+            noterExport('Rien à écrire : les couches cochées sont vides dans cette scène.');
+            return;
+        }
         const texte = ecrire(modele);
         const fichier = new Blob(Array.isArray(texte) ? texte : [texte], { type });
-        const lien = document.createElement('a');
-        lien.href = URL.createObjectURL(fichier);
-        lien.download = `${modele.base}.${extension}`;
-        document.body.append(lien);
-        lien.click();
-        lien.remove();
-        setTimeout(() => URL.revokeObjectURL(lien.href), 60000);
-        const c = modele.compte;
-        const nombre = (n, mot) => `${n.toLocaleString('fr-FR')} ${mot}${n > 1 ? 's' : ''}`;
-        noteExport.textContent = `${lien.download} : ${(fichier.size / 1e6).toFixed(1).replace('.', ',')} Mo, `
-            + [optionsExport.batiments && nombre(c.batiments, 'bâtiment'),
-               optionsExport.arbres && (vegPrete ? nombre(c.arbres, 'arbre') : 'pas d\'arbres (hors LiDAR HD)'),
-               optionsExport.masses && vegPrete && nombre(c.masses, 'masse'),
-               c.maille && `relief à ${c.maille.toFixed(1).replace('.', ',')} m`].filter(Boolean).join(', ')
-            + '. ' + reperes(modele);
+        let ecrit = nomFichier;
+        if (poignee) {
+            const flux = await poignee.createWritable();
+            await flux.write(fichier);
+            await flux.close();
+            ecrit = poignee.name;
+        } else {
+            const lien = document.createElement('a');
+            lien.href = URL.createObjectURL(fichier);
+            lien.download = nomFichier;
+            document.body.append(lien);
+            lien.click();
+            lien.remove();
+            setTimeout(() => URL.revokeObjectURL(lien.href), 60000);
+        }
+        noterExport(`${ecrit} : ${(fichier.size / 1e6).toFixed(1).replace('.', ',')} Mo, `
+            + resumeExport(modele, choix) + '. ' + reperes(modele));
     } catch (err) {
-        noteExport.textContent = 'Export impossible : ' + err.message;
+        noterExport('Export impossible : ' + err.message);
         console.error(err);
     } finally {
-        for (const b of boutonsExport) b.disabled = false;
+        for (const b of boutons) b.disabled = false;
     }
 }
 for (const b of boutonsExport) b.addEventListener('click', () => exporter(b.dataset.format));
+document.getElementById('btn-export-telecharger')
+    .addEventListener('click', () => exporter(formatExport, 'telecharger'));
+document.getElementById('btn-export-enregistrer')
+    .addEventListener('click', () => exporter(formatExport, 'enregistrer'));
 
 // --- Interactions --------------------------------------------------------
 const raycaster = new THREE.Raycaster();
