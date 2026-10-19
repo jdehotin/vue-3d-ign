@@ -88,20 +88,23 @@ const FORMATS = {
 //   node outils/demo-video.mjs bornes carre      # docs/demo/demo-bornes-carre.mp4
 //   node outils/demo-video.mjs bornes paysage    # docs/demo/demo-bornes-paysage.mp4
 //   GRAINE=3 node outils/demo-video.mjs jeu carre   # la traque, une autre partie
-//   node outils/demo-video.mjs feux carre        # les incendies, à Bordeaux
-//   node outils/demo-video.mjs cortege carre     # le cortège, de la République au canal Saint-Martin
+//   node outils/demo-video.mjs cortege carre     # le cortège, de la République au canal Saint-Martin, avec le son du jeu
 //
-// Les films `jeu` (la traque) et `feux` (les incendies) sont de vraies
-// parties : un pilote (piloter, piloterFeu) tient les touches
+// Le film `jeu` (la traque) est une vraie
+// partie : un pilote (piloter) tient les touches
 // du drone d'après l'indice et la position du bonhomme, et tire quand le
 // réticule est sur lui ; les touches tenues s'allument sur un clavier
 // incrusté. Le hasard de la page (ses choix de route, son point de départ)
 // est tiré d'une graine (GRAINE), pour qu'un tournage refasse la même partie.
-// Le film `cortege` aussi, mis en scène le long du chemin (un cordon, un
-// groupe, des casseurs) ; son pilote (piloterCortege) prend les carrefours,
-// et les longueurs de la marche sont coupées entre deux séquences.
-const SERIE = ['lidar', 'recherche', 'dpe-dvf', 'drone', 'bornes', 'vehicules', 'soleil', 'export', 'jeu', 'feux', 'cortege'];
-const FILM_JEU = FORMAT === 'jeu' || FORMAT === 'feux' || FORMAT === 'cortege';
+// Le film `cortege` aussi, mis en scène le long du chemin (des passants, un
+// cordon sur le parcours, un groupe, des casseurs) ; son pilote
+// (piloterCortege) prend les carrefours, lance les slogans, négocie, et les
+// longueurs de la marche sont coupées entre deux séquences. Lui seul a du
+// son : celui du jeu, slogans et brouhaha compris (voir AVEC_SON_JEU) ;
+// SON=0 le rend muet comme les autres.
+const SERIE = ['lidar', 'recherche', 'dpe-dvf', 'drone', 'bornes', 'vehicules', 'soleil', 'export', 'jeu', 'cortege'];
+const FILM_JEU = FORMAT === 'jeu' || FORMAT === 'cortege';
+const AVEC_SON_JEU = FORMAT === 'cortege' && process.env.SON !== '0';
 const GRAINE = Number(process.env.GRAINE || 1);
 const DANS_SERIE = SERIE.includes(FORMAT);
 const ASPECT = DANS_SERIE ? (process.argv[3] || 'carre') : null;
@@ -208,17 +211,6 @@ const NICE = { lat: 43.6947, lon: 7.2655, zone: 1000 };
 // branches qui l'en éloignent, la promenade, à découvert.
 const NICE_DECOLLAGE = { lat: 43.694882, lon: 7.265490 };
 const NICE_PLANQUE = { lat: 43.694831, lon: 7.262392 };
-// Bordeaux, pour les incendies : la place de la Bourse et l'esplanade des
-// Quinconces, dégagées (60 et 64 places libres sur 64 à 7-17 m autour,
-// d'après les emprises BD TOPO), et la Garonne, à 138 m de la Bourse, pour
-// remplir la réserve. Mise en scène du départ, seulement : les deux premiers
-// foyers y sont posés, et le drone décolle d'un point dégagé à 238 m de la
-// Bourse ; tirés au hasard, ils partaient aux carrefours des rues étroites.
-// Ensuite, la partie est celle de la page.
-const BORDEAUX = { lat: 44.8430, lon: -0.5715, zone: 1000 };
-const BORDEAUX_BASE = { lat: 44.8424, lon: -0.5721 };
-const BORDEAUX_FOYERS = [{ lat: 44.8411, lon: -0.5697 }, { lat: 44.8447, lon: -0.5733 }];
-const BORDEAUX_EAU = { lat: 44.8408, lon: -0.5680 };
 // La place de la République, pour le cortège : le départ est le point de la
 // scène, sur la place ; l'arrivée, cliquée, au bord du canal Saint-Martin,
 // quai de Valmy, à 448 m par la place, la rue Léon-Jouhaux et la rue
@@ -1183,96 +1175,19 @@ const SEQUENCES_SERIE = [
         },
     },
 
-    // --- Les incendies : Bordeaux, de la place de la Bourse à la Garonne -----------------
-    // Une vraie partie, jouée par le pilote (piloterFeu), départ mis en scène
-    // (BORDEAUX_FOYERS) : le décollage, l'indice, le foyer de la Bourse et sa
-    // manifestation, les largages, le pompage dans la Garonne.
-    {
-        id: 'f-titre', lieu: BORDEAUX, duree: 6, formats: ['feux'],
-        court: 'Bordeaux, de la place de la Bourse aux Quinconces, en 3D depuis les données ouvertes de l’IGN',
-        carte: { titre: 'Les incendies', sous: 'Vue 3D IGN · un jeu en drone : éteindre les feux de la ville' }, carteDifferee: true,
-        async jouer(s) {
-            await s.chauffer({ ...BORDEAUX, hauteur: 20, distance: 850, azimut: 215, elevation: 26 }, 25);
-            await s.glisser(s.duree, { ...BORDEAUX, hauteur: 20, distance: 850, azimut: 215, elevation: 26 },
-                                     { ...BORDEAUX, hauteur: 20, distance: 640, azimut: 205, elevation: 22 }, t => apparaitre(s, t, 2));
-        },
-    },
-    {
-        id: 'f-depart', lieu: BORDEAUX, duree: 7, formats: ['feux'],
-        court: 'En drone, le bouton « Feux » : des incendies se déclarent dans la ville',
-        async jouer(s) {
-            // La caméra au sud-ouest du décollage : le drone part vers le nord-est, la Bourse sur sa droite.
-            await s.glisser(1.5, null, { ...BORDEAUX_BASE, hauteur: 15, distance: 170, azimut: 220, elevation: 18 });
-            await s.vitesse(8);
-            await s.bouton('t-drone', true);
-            await page.evaluate(() => { window.__demo.drone.recul = 12; });
-            await s.bouton('t-jeu', true);
-            await s.allumerFoyers(BORDEAUX_FOYERS);
-            await s.lacher();
-            await s.clavier(true);
-        },
-    },
-    {
-        id: 'f-indice', lieu: BORDEAUX, duree: 8, formats: ['feux'],
-        court: 'Toutes les 15 s, un indice : de quel côté tourner, à quelle distance',
-        async jouer(s) { await s.piloterFeu(s.duree, { apresIndice: true, hauteur: 35 }); },
-    },
-    {
-        id: 'f-approche', lieu: BORDEAUX, duree: 6, formats: ['feux'],
-        court: 'Une manifestation autour de chaque foyer, pancartes levées',
-        // À 30 m du foyer et 16 m de haut : à 22 m, au-dessus de lui, la foule n'était que des points.
-        async jouer(s) { await s.piloterFeu(s.duree, { hauteur: 16, arret: 30 }); },
-    },
-    {
-        // Durée minimale : jusqu'au foyer éteint, plus 3,5 s.
-        id: 'f-largage', lieu: BORDEAUX, duree: 6, formats: ['feux'],
-        court: 'F largue l’eau, qui tombe sous le réticule bleu',
-        async jouer(s) {
-            // Les passes à 12 m/s : à 24 m/s, le drone passait au-dessus du foyer avant d'avoir freiné.
-            await s.vitesse(4);
-            const e = await s.piloterFeu(16, { hauteur: 18, larguer: true, jusqua: 'eteint' });
-            console.log('    largage :', e);
-            await s.legende('Éteint ! La foule applaudit', 3.5);
-            await s.piloterFeu(3.5, { vers: BORDEAUX_FOYERS[0], hauteur: 16, arret: 30 });
-            await s.vitesse(8);
-        },
-    },
-    {
-        // Durée minimale : jusqu'à la réserve pleine.
-        id: 'f-reserve', lieu: BORDEAUX, duree: 6, formats: ['feux'],
-        court: 'La réserve se remplit au ras de l’eau, ou à la base',
-        async jouer(s) {
-            // La légende tenue jusqu'à la réserve pleine : à sa durée prévue (6 s), elle
-            // s'éteignait pendant le vol jusqu'au fleuve.
-            await s.legende('La réserve se remplit au ras de l’eau, ou à la base', 30);
-            const e = await s.piloterFeu(16, { vers: BORDEAUX_EAU, hauteur: 6, jusqua: 'plein',
-                legende: n => `La réserve se remplit au ras de l’eau, ou à la base · eau ${n}/12` });
-            console.log('    réserve :', e);
-            await s.piloterFeu(1, { vers: BORDEAUX_EAU, hauteur: 6 });
-        },
-    },
-    {
-        ...finSerie('feux', BORDEAUX, null, 'Routes, eau et orthophotos © IGN (BD TOPO, BD ORTHO)'),
-        async jouer(s) {
-            await s.cartouche('');
-            await s.clavier(false);
-            // Les incendies arrêtés : pas de nouvelle partie sous le carton.
-            await cliquer('t-jeu');
-            await s.voler(s.duree, ['Space']);
-        },
-    },
-
     // --- Le cortège : de la place de la République au canal Saint-Martin -------------------
-    // Une vraie partie, mise en scène le long du chemin (mettreEnSceneCortege)
-    // et prise aux carrefours par le pilote (piloterCortege) ; entre deux
-    // séquences, la marche avance sans être filmée (couperCortege). Le soleil
-    // du 21 juin à 16 h : des rues à l'ombre, d'autres au soleil.
+    // Une vraie partie, mise en scène le long du chemin (mettreEnSceneCortege),
+    // menée par le pilote (piloterCortege) : les carrefours, les slogans, la
+    // négociation, le service d'ordre ; entre deux séquences, la marche avance
+    // sans être filmée (couperCortege), le pilote chantant pour tenir l'élan.
+    // Le 21 juin à 18 h : un soleil assez haut pour peser, des rues à l'ombre.
+    // Avec le son du jeu (AVEC_SON_JEU).
     {
         id: 'c-titre', lieu: REPUBLIQUE, duree: 6, formats: ['cortege'],
         court: 'La place de la République, à Paris, en 3D depuis les données ouvertes de l’IGN',
-        carte: { titre: 'Le cortège', sous: 'Vue 3D IGN · un jeu : mener une marche pacifique, sans les casseurs' }, carteDifferee: true,
+        carte: { titre: 'Le cortège', sous: 'Vue 3D IGN · un jeu : mener une marche pacifique, au son de ses slogans' }, carteDifferee: true,
         async jouer(s) {
-            await page.evaluate(() => { Object.assign(window.__demo.DATE_SIMULEE, { mois: 6, jour: 21 }); window.__demo.majSoleil(16); });
+            await page.evaluate(() => { Object.assign(window.__demo.DATE_SIMULEE, { mois: 6, jour: 21 }); window.__demo.majSoleil(18); });
             await s.chauffer({ ...REPUBLIQUE, hauteur: 20, distance: 820, azimut: 200, elevation: 32 }, 25);
             await s.glisser(s.duree, { ...REPUBLIQUE, hauteur: 20, distance: 820, azimut: 200, elevation: 32 },
                                      { ...REPUBLIQUE, hauteur: 20, distance: 620, azimut: 190, elevation: 30 }, t => apparaitre(s, t, 2));
@@ -1280,7 +1195,7 @@ const SEQUENCES_SERIE = [
     },
     {
         id: 'c-arrivee', lieu: REPUBLIQUE, duree: 8, formats: ['cortege'],
-        court: 'En drone, le bouton « Cortège » : on clique son arrivée, ici le canal Saint-Martin',
+        court: 'En drone, le bouton « Cortège » : on clique l’arrivée, le parcours déclaré se trace en vert',
         async jouer(s) {
             await s.bouton('t-drone', true);
             await s.bouton('t-cortege', true);
@@ -1290,38 +1205,57 @@ const SEQUENCES_SERIE = [
             await s.cacherCurseur();
             const pose = await s.mettreEnSceneCortege();
             console.log('    mise en scène :', pose);
-            // Le message de la page comptait les groupes qu'elle avait tirés, retirés depuis.
-            await page.evaluate(l => window.__demo.annoncer(`Le cortège se forme<small>arrivée à ${Math.round(l / 10) * 10} m `
-                + 'par les rues · un groupe attend qu’on passe le prendre</small>', 3.5), pose.longueur);
+            // Le message de la page comptait les groupes et les cordons qu'elle avait tirés, retirés depuis.
+            await page.evaluate(l => window.__demo.annoncer(`Le cortège se forme<small>parcours déclaré : ${Math.round(l / 10) * 10} m, `
+                + 'en vert au sol · un groupe attend qu’on passe le prendre</small>', 3.5), pose.longueur);
             await s.clavier(true);
         },
     },
     {
-        id: 'c-depart', lieu: REPUBLIQUE, duree: 7, formats: ['cortege'],
-        court: 'Il se forme dans la rue et s’élance : à l’ombre, il tient ; au soleil de 16 h, il se fatigue',
-        async jouer(s) { console.log('    départ :', await s.piloterCortege(s.duree, { cadence: 3 })); },
+        // L'ambiance d'abord : à 60 d'élan au départ, la ville suit aussitôt.
+        id: 'c-slogans', lieu: REPUBLIQUE, duree: 13, formats: ['cortege'],
+        court: 'Il s’élance. 1 à 4 : un slogan au mégaphone, que la foule reprend',
+        async jouer(s) {
+            await s.slogans([1, 4]);
+            console.log('    slogans :', await s.piloterCortege(s.duree, { cadence: 2 }));
+        },
     },
     {
-        // La flèche au sol d'abord tout droit, vers le cordon, puis l'autre
-        // branche : la tête à 52 m du cordon (18 m au-delà du carrefour), le
-        // choix à 22 m du carrefour, la caméra reculée pour voir le cordon.
-        id: 'c-cordon', lieu: REPUBLIQUE, duree: 9, formats: ['cortege'],
-        court: 'Un cordon de police ferme le boulevard : ← → pour prendre une autre rue',
+        id: 'c-passants', lieu: REPUBLIQUE, duree: 8, formats: ['cortege'],
+        court: 'Des passants sur les trottoirs : « Ne nous regardez pas, rejoignez-nous ! »',
         async jouer(s) {
-            await s.couperCortege({ cadence: 3, choixA: 22, jusqua: { cordon: 52 }, max: 60 });
-            await page.evaluate(() => { window.__demo.drone.recul = 13; });
-            console.log('    cordon :', await s.piloterCortege(s.duree, { cadence: 3, choixA: 22 }));
+            await s.couperCortege({ cadence: 2, entretenir: true, jusqua: { passants: 40 }, max: 40 });
+            await s.slogans([2]);
+            console.log('    passants :', await s.piloterCortege(s.duree, { cadence: 1 }));
+        },
+    },
+    {
+        id: 'c-ralliement', lieu: REPUBLIQUE, duree: 7, formats: ['cortege'],
+        court: 'Des groupes attendent à quelques rues : on passe les prendre',
+        async jouer(s) {
+            await s.couperCortege({ cadence: 2, entretenir: true, envoyer: true, jusqua: { groupe: 40 }, max: 90 });
+            console.log('    ralliement :', await s.piloterCortege(12, { cadence: 2, jusqua: 'rallie', apres: 2.5 }));
+        },
+    },
+    {
+        // Le sit-in entier, filmé : 9 s à tension basse, « Calme » compris,
+        // lancé une fois la négociation ouverte (avant, il ne l'avançait pas).
+        id: 'c-cordon', lieu: REPUBLIQUE, duree: 17, formats: ['cortege'],
+        court: 'Un cordon ferme la rue : N, un sit-in, « Calme », et la préfecture laisse passer',
+        async jouer(s) {
+            await s.couperCortege({ cadence: 2, entretenir: true, jusqua: { cordon: 25 }, max: 60 });
+            await page.evaluate(() => { window.__demo.drone.recul = 12; });
+            await s.piloterCortege(10, { cadence: 2, jusqua: 'negociation', apres: 1.2 });
+            await s.slogans([3]);
+            console.log('    cordon :', await s.piloterCortege(16, { jusqua: 'ouvert', apres: 2.5 }));
             await page.evaluate(() => { window.__demo.drone.recul = 9; });
         },
     },
     {
-        // Avant le groupe et l'arrivée : le chemin entier n'a que 430 m, et la
-        // coupe qui attend l'infiltration, placée après eux, menait le
-        // cortège à l'arrivée, puis à une autre manifestation.
         id: 'c-casseurs', lieu: REPUBLIQUE, duree: 8, formats: ['cortege'],
         court: 'Des casseurs approchent pour s’infiltrer : F, et le service d’ordre les escorte dehors',
         async jouer(s) {
-            await s.couperCortege({ cadence: 1, max: 2 });
+            await s.couperCortege({ cadence: 1, entretenir: true, max: 3 });
             // Au plus près : lancés à 82 m, ils n'étaient qu'un point en haut de l'image.
             let distances = await s.lancerCasseurs(2, 35, 0, 25);
             if (distances.length < 2) distances = await s.lancerCasseurs(2 - distances.length, 35, 0, 40);
@@ -1332,48 +1266,55 @@ const SEQUENCES_SERIE = [
         },
     },
     {
-        id: 'c-gaz', lieu: REPUBLIQUE, duree: 7, formats: ['cortege'],
-        court: 'Un casseur laissé faire : un feu, le gaz, et le cortège perd du monde',
+        id: 'c-incident', lieu: REPUBLIQUE, duree: 9, formats: ['cortege'],
+        court: 'Un casseur laissé faire : le feu, le gaz, la tension monte. À 100, la préfecture interrompt le cortège',
         async jouer(s) {
-            await s.couperCortege({ cadence: 1, max: 2 });
+            await s.couperCortege({ cadence: 1, entretenir: true, max: 2 });
             // Devant la tête, comme les autres : lancé derrière elle, à plus de 25 m
             // de la trace, il n'en trouvait pas, ou ne rejoignait pas le cortège à temps.
             let distances = await s.lancerCasseurs(1, 35, 0, 25);
             if (!distances.length) distances = await s.lancerCasseurs(1, 35, 0, 45);
+            if (!distances.length) distances = await s.lancerCasseurs(1, 50, 0, 70);
             const e = await s.couperCortege({ cadence: 1, jusqua: 'infiltre', max: 25 });
             console.log('    casseur à', distances, 'm, puis', e.casseurs);
             await page.evaluate(() => {
                 const d = window.__demo, cs = d.cortege.casseurs.find(x => x.etat === 'infiltre');
                 if (cs) d.incident(cs);
             });
-            console.log('    gaz :', await s.piloterCortege(s.duree, { cadence: 2 }));
+            await s.piloterCortege(3, { cadence: 2 });
+            await s.slogans([3]);
+            console.log('    incident :', await s.piloterCortege(s.duree - 3, { cadence: 2 }));
             await page.evaluate(() => { window.__demo.drone.recul = 9; });
         },
     },
     {
-        id: 'c-ralliement', lieu: REPUBLIQUE, duree: 6, formats: ['cortege'],
-        court: 'Des groupes attendent à quelques rues : on passe les prendre',
+        id: 'c-rassemblement', lieu: REPUBLIQUE, duree: 12, formats: ['cortege'],
+        court: 'À l’arrivée, le rassemblement : une prise de parole, des applaudissements, des fumigènes',
         async jouer(s) {
-            await s.couperCortege({ cadence: 3, envoyer: true, jusqua: { groupe: 55 }, max: 90 });
-            console.log('    ralliement :', await s.piloterCortege(12, { cadence: 3, jusqua: 'rallie', apres: 2.5 }));
+            await s.couperCortege({ cadence: 2, entretenir: true, envoyer: true, jusqua: { reste: 30 }, max: 120, tolerant: true });
+            console.log('    arrivée :', await s.piloterCortege(16, { cadence: 2, jusqua: 'rassemblement', apres: 8.5 }));
         },
     },
     {
         id: 'c-bilan', lieu: REPUBLIQUE, duree: 7, formats: ['cortege'],
-        court: 'À l’arrivée, le score : les participants gardés, les casseurs écartés, le temps',
+        court: 'Puis le bilan : le monde arrivé, l’élan, le calme',
         async jouer(s) {
-            await s.couperCortege({ cadence: 3, envoyer: true, jusqua: { reste: 45 }, max: 120 });
-            console.log('    arrivée :', await s.piloterCortege(14, { cadence: 3, jusqua: 'fin', apres: 4.5 }));
+            await s.couperCortege({ jusqua: 'fin', max: 20 });
+            console.log('    bilan :', await s.piloterCortege(s.duree, {}));
         },
     },
     {
-        ...finSerie('cortege', REPUBLIQUE, null, 'Rues BD TOPO, bâtiments, arbres et orthophotos © IGN'),
+        ...finSerie('cortege', REPUBLIQUE, null, 'Rues et bâtiments BD TOPO, arbres et orthophotos © IGN'),
         async jouer(s) {
             await s.cartouche('');
             await s.clavier(false);
-            // Le cortège arrêté : pas de nouvelle manifestation sous le carton.
-            await cliquer('t-cortege');
-            await s.voler(s.duree, ['Space']);
+            // Pas de nouvelle manifestation sous le carton : la foule reste, son
+            // brouhaha sous la fin ; le bilan, affiché 14 s, transparaissait dessous.
+            await page.evaluate(() => {
+                window.__demo.cortege.relance = null;
+                document.getElementById('jeu-message').hidden = document.getElementById('jeu-indice').hidden = true;
+            });
+            await filmer(s.duree);
         },
     },
 ];
@@ -1388,7 +1329,7 @@ function cartoucheExport(format, note, repere) {
 // filmé trouve alors sa couche en cache, sans attente à l'image.
 // La traque ne montre pas le nuage, mais la page le demande : en
 // construction, le serveur répond 503, une erreur pour le tournage.
-const PRELECTURES = { lidar: ['nuage'], 'dpe-dvf': ['dpe', 'dvf'], bornes: ['bornes'], jeu: ['nuage'], feux: ['nuage'],
+const PRELECTURES = { lidar: ['nuage'], 'dpe-dvf': ['dpe', 'dvf'], bornes: ['bornes'], jeu: ['nuage'],
                       cortege: ['nuage'] };
 
 // --- Voix -------------------------------------------------------------------
@@ -1427,6 +1368,8 @@ const navigateur = await puppeteer.launch({
     // Le rendu doit passer par la carte graphique : SwiftShader rend 4 images
     // par seconde à Gordes, Metal 60.
     args: ['--ignore-gpu-blocklist', '--use-angle=metal', `--window-size=${fmt.largeur},${fmt.hauteur}`],
+    // Le rendu de la piste du cortège (des milliers de voix, 1 min 30) dépasse les 3 min par défaut.
+    protocolTimeout: 10 * 60 * 1000,
 });
 const page = await navigateur.newPage();
 await page.setViewport({ width: fmt.largeur, height: fmt.hauteur, deviceScaleFactor: 1 });
@@ -1458,6 +1401,37 @@ if (FILM_JEU) {
             return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
         };
     }, GRAINE);
+}
+
+// Le son du cortège : la page le synthétise sur un AudioContext. Capturé à
+// horloge figée, le film ne peut pas l'enregistrer en direct : la page reçoit
+// à la place un OfflineAudioContext, dont l'heure est celle du film
+// (__tempsFilm, posée avant chaque image capturée). Tout ce qu'elle joue s'y
+// inscrit à l'instant de l'image ; la piste est rendue à la fin, puis montée
+// sous la vidéo. Pendant une coupe (horsPiste), l'heure passe à 10 000 s : ce
+// qui s'y joue tombe hors de la piste.
+const DUREE_PISTE_S = sequences.reduce((a, q) => a + q.duree, 0) * 1.6 + 60;
+if (AVEC_SON_JEU) {
+    await page.evaluateOnNewDocument(duree => {
+        let proxy = null;
+        window.__tempsFilm = 0;
+        window.AudioContext = function () {
+            if (!proxy) {
+                const hors = new OfflineAudioContext(2, Math.ceil(duree * 48000), 48000);
+                window.__sonFilm = hors;
+                proxy = new Proxy(hors, { get(t, k) {
+                    if (k === 'currentTime') return window.__tempsFilm;
+                    if (k === 'state') return 'running';
+                    if (k === 'resume') return () => Promise.resolve();
+                    const v = t[k];
+                    return typeof v === 'function' ? v.bind(t) : v;
+                } });
+            }
+            return proxy;
+        };
+        // Les clics du film passent par le DOM : pas de geste aux yeux de la page.
+        Object.defineProperty(navigator, 'userActivation', { value: { hasBeenActive: true, isActive: true } });
+    }, DUREE_PISTE_S);
 }
 
 // La page est servie telle quelle, à deux ajouts près : les objets de la
@@ -1533,14 +1507,18 @@ const STYLE_DEMO = `
     #demo-clavier kbd.appui { background:#ffb347; border-color:#ffb347; color:#1b1b1b; }
     #demo-clavier kbd.tir { border-color:#ff8a7a; }
     #demo-clavier kbd.tir.appui { background:#ff4a3a; border-color:#ff4a3a; color:#fff; }
-    #demo-clavier kbd.eau { border-color:#7cc4ff; }
-    #demo-clavier kbd.eau.appui { background:#3aa8ff; border-color:#3aa8ff; color:#fff; }
     #demo-clavier kbd.so { border-color:#ff9a3a; }
     #demo-clavier kbd.so.appui { background:#ff7a00; border-color:#ff7a00; color:#fff; }
     ${FORMAT === 'cortege' ? `
-    /* Le cortège : le cartouche (participants, soleil, fatigue) en bas à
-       gauche, au-dessus du clavier ; en haut, il couvrait la légende. */
-    #demo-cartouche { top:auto !important; bottom:13% !important; }` : ''}
+    /* Le cortège : le cartouche (participants, élan, tension) en bas à
+       gauche, au-dessus du clavier ; en haut, il couvrait la légende. Le
+       clavier incrusté dit les slogans : la barre de la page est masquée. */
+    #demo-cartouche { top:auto !important; bottom:13% !important; }
+    #demo-cartouche .jauge { display:inline-block; width:${fmt.police * 3}px; height:${Math.round(fmt.police * 0.3)}px;
+        margin:0 ${Math.round(fmt.police * 0.15)}px; border-radius:${Math.round(fmt.police * 0.15)}px;
+        background:rgba(255,255,255,.2); vertical-align:middle; overflow:hidden; }
+    #demo-cartouche .jauge i { display:block; height:100%; }
+    #barre-cortege { display:none !important; }` : ''}
     ${FILM_JEU ? `
     /* La traque : la légende en haut, le clavier en bas ; le titre d'une
        manche et l'indice de la page, grandis pour un téléphone, entre les deux. */
@@ -1580,11 +1558,13 @@ const HTML_DEMO = '<div id="demo-carte"><h1></h1><p></p></div><div id="demo-lege
     // Q et D : les touches KeyA et KeyD d'un clavier français, que la page écoute.
     + (FORMAT === 'cortege' ? '<div id="demo-clavier">'
         + '<div class="bloc"><div class="touches"><kbd data-code="ArrowLeft">←</kbd><kbd data-code="ArrowRight">→</kbd></div>'
-        + '<span>prochain carrefour</span></div>'
+        + '<span>carrefour</span></div>'
         + '<div class="bloc"><div class="touches"><kbd data-code="ArrowUp">↑</kbd><kbd data-code="ArrowDown">↓</kbd></div>'
-        + '<span>cadence, demi-tour</span></div>'
+        + '<span>cadence</span></div>'
+        + '<div class="bloc"><div class="touches"><kbd data-code="Digit1">1</kbd><kbd data-code="Digit2">2</kbd>'
+        + '<kbd data-code="Digit3">3</kbd><kbd data-code="Digit4">4</kbd></div><span>slogans</span></div>'
+        + '<div class="bloc"><div class="touches"><kbd data-code="KeyN">N</kbd></div><span>négocier</span></div>'
         + '<div class="bloc"><div class="touches"><kbd data-code="KeyF" class="so">F</kbd></div><span>service d’ordre</span></div>'
-        + '<div class="bloc"><div class="touches"><kbd data-code="clic" class="large">clic</kbd></div><span>sur un casseur</span></div>'
         + '</div>'
     : FILM_JEU ? '<div id="demo-clavier">'
         + '<div class="bloc"><div class="touches"><kbd data-code="ArrowLeft">←</kbd><kbd data-code="ArrowUp">↑</kbd>'
@@ -1592,10 +1572,8 @@ const HTML_DEMO = '<div id="demo-carte"><h1></h1><p></p></div><div id="demo-lege
         + '<div class="bloc"><div class="touches"><kbd data-code="KeyA">Q</kbd><kbd data-code="KeyD">D</kbd></div><span>glisser</span></div>'
         + '<div class="bloc"><div class="touches"><kbd data-code="Space" class="large">espace</kbd></div><span>monter</span></div>'
         + '<div class="bloc"><div class="touches"><kbd data-code="ShiftLeft" class="large">maj</kbd></div><span>descendre</span></div>'
-        + `<div class="bloc"><div class="touches"><kbd data-code="KeyF" class="${FORMAT === 'feux' ? 'eau' : 'tir'}">F</kbd></div>`
-        + `<span>${FORMAT === 'feux' ? 'larguer' : 'tirer'}</span></div>`
-        + '<div class="bloc"><div class="touches"><kbd data-code="clic" class="large">clic</kbd></div>'
-        + `<span>${FORMAT === 'feux' ? 'larguer' : 'tirer là'}</span></div>`
+        + '<div class="bloc"><div class="touches"><kbd data-code="KeyF" class="tir">F</kbd></div><span>tirer</span></div>'
+        + '<div class="bloc"><div class="touches"><kbd data-code="clic" class="large">clic</kbd></div><span>tirer là</span></div>'
         + '</div>' : '');
 await page.setRequestInterception(true);
 page.on('request', async r => {
@@ -1613,9 +1591,9 @@ page.on('request', async r => {
     html = html.replace(ancre, `window.__demo = { THREE, camera, controls, renderer, scene, ySol, majSoleil, DATE_SIMULEE,
             LON0, LAT0, M_PAR_DEGRE_LON, M_PAR_DEGRE_LAT, vegChargee: () => vegChargee,
             MAT_CIBLE, MAT_CONTOUR_CIBLE, MAT_VOISIN, jeu, drone, touchesDrone, groupeBatiments,
-            accesVehicules, seCacher, feux, chutePrevue, rayonFeu, creerFoyer, libererPersonne, groupeFeux,
+            accesVehicules, seCacher,
             cortege, cheminCortege, brancheCortege, projeterSurRoute, pointArete, creerCordon, creerGroupe, GROUPES_CORTEGE,
-            vagueCasseurs, incident, retirerPersonne, groupeCortege, annoncer };\n${ancre}`)
+            vagueCasseurs, incident, retirerPersonne, groupeCortege, annoncer, sonCortege, surChemin, creerPassants, placeLibre };\n${ancre}`)
                .replace('</style>', STYLE_DEMO + '</style>')
                .replace('<div id="tip"></div>', '<div id="tip"></div>' + HTML_DEMO);
     r.respond({ status: rep.status, contentType: 'text/html; charset=utf-8', body: html });
@@ -1833,9 +1811,26 @@ async function filmer(secondes, fn) {
     const n = Math.max(1, Math.round(secondes * FPS));
     for (let i = 0; i < n; i++) {
         if (fn) await fn(n > 1 ? i / (n - 1) : 1);
-        await page.evaluate(dt => window.__pas(dt), 1000 / FPS);
+        await page.evaluate((dt, t) => { window.__tempsFilm = t; window.__pas(dt); }, 1000 / FPS, images / FPS);
         await habiller();
         await capturer();
+    }
+}
+
+/**
+ * `fn`, la page tournant sans être filmée (une coupe, un préchauffage) : ce
+ * qu'elle joue tombe hors de la piste du cortège ; ensuite, ses horloges de
+ * son repartent de l'heure du film.
+ */
+async function horsPiste(fn) {
+    if (!AVEC_SON_JEU) return fn();
+    await page.evaluate(() => { window.__tempsFilm = 1e4; });
+    try { return await fn(); } finally {
+        await page.evaluate(t => {
+            window.__tempsFilm = t;
+            const S = window.__demo && window.__demo.sonCortege;
+            if (S) S.prochainTemps = S.prochainMurmure = S.prochainSifflet = S.prochaineHoule = 0;
+        }, images / FPS);
     }
 }
 
@@ -1849,28 +1844,43 @@ function piloteCortege(o) {
     const montrees = window.__montrees = window.__montrees || {};
     for (const [code, fin] of Object.entries(montrees)) if (maintenant > fin) { k.delete(code); delete montrees[code]; }
     const appuyer = code => { c.appuis.push(code); k.add(code); montrees[code] = maintenant + 300; };
+    const file = window.__slogansFilm = window.__slogansFilm || [];
     const attend = c.groupes.find(g => g.etat === 'attend');
-    const e = { phase: c.phase, participants: Math.round(c.participants), soleil: Math.round(c.partSoleil * 100),
-                fatigue: Math.round(c.fatigue), chaleur: c.chaleur, ecartes: c.ecartes, incidents: c.incidents,
-                groupes: c.groupes.map(g => g.etat), casseurs: c.casseurs.map(x => x.etat), cadence: c.cadence,
-                parcouru: Math.round(c.parcouru), reste: c.arrivee ? Math.round(Math.hypot(c.arrivee.x - c.tete.x, c.arrivee.y - c.tete.y)) : null,
-                groupe: attend ? Math.round(Math.hypot(attend.x - c.tete.x, attend.y - c.tete.y)) : null,
-                bloque: c.tete && c.tete.bloque ? c.tete.bloque.type : null,
-                cordon: c.cordons.length ? Math.round(Math.hypot(c.cordons[0].x - c.tete.x, c.cordons[0].y - c.tete.y)) : null };
+    const fermes = c.cordons.filter(x => !x.ouvert);
+    const passants = c.passants.filter(g => g.etat !== 'rallie');
+    const t = c.tete, loin = (x, y) => Math.round(Math.hypot(x - t.x, y - t.y));
+    const e = { phase: c.phase, participants: Math.round(c.participants), elan: Math.round(c.elan), tension: Math.round(c.tension),
+                ecartes: c.ecartes, incidents: c.incidents, groupes: c.groupes.map(g => g.etat),
+                casseurs: c.casseurs.map(x => x.etat), cadence: c.cadence, parcouru: Math.round(c.parcouru),
+                reste: c.arrivee ? loin(c.arrivee.x, c.arrivee.y) : null, groupe: attend ? loin(attend.x, attend.y) : null,
+                bloque: t && t.bloque ? t.bloque.type : null, cordon: fermes.length ? Math.min(...fermes.map(x => loin(x.x, x.y))) : null,
+                ouvert: c.cordons.some(x => x.ouvert), negociation: c.negociation ? Math.round(c.negociation.progres * 100) : null,
+                passants: passants.length ? Math.min(...passants.map(g => loin(g.x, g.y))) : null,
+                rallies: c.rallies, passantsRallies: c.passantsRallies, chant: c.chant ? c.chant.texte : null, file: file.length };
     if (c.phase !== 'marche') return e;
     c.prochaineVague = Infinity;
     if (c.appuis.length) return e;
-    if (o.cadence != null && c.cadence !== o.cadence) { appuyer(c.cadence < o.cadence ? 'ArrowUp' : 'ArrowDown'); return e; }
+    if (o.cadence != null && c.cadence !== o.cadence && !t.bloque) { appuyer(c.cadence < o.cadence ? 'ArrowUp' : 'ArrowDown'); return e; }
+    if (t.bloque && t.bloque.type === 'cordon' && !t.bloque.ouvert && !t.bloque.refuse && !c.negociation) { appuyer('KeyN'); return e; }
     if (o.envoyer && c.equipes.some(q => q.etat === 'libre')
         && c.casseurs.some(x => (x.etat === 'approche' || x.etat === 'infiltre') && !x.equipe)) { appuyer('KeyF'); return e; }
+    // Les slogans que le film a mis en file, à leur tour ; en coupe
+    // (entretenir), l'ambiance, l'appel et le calme, pour tenir l'élan.
+    if (!c.chant) {
+        const libre = n => maintenant >= c.recharges[n - 1] && !(n === 4 && c.elan < 60);
+        if (file.length && libre(file[0])) { appuyer('Digit' + file.shift()); return e; }
+        if (!file.length && o.entretenir) {
+            const n = [1, 2, 3].find(n => libre(n) && n - 1 !== c.dernierSlot);
+            if (n && (c.elan < 75 || (n === 3 && c.tension > 20))) { appuyer('Digit' + n); return e; }
+        }
+    }
     const p = c.prochain;
     if (!p) return e;
-    const q = attend ? d.projeterSurRoute(c.graphe, attend.x, attend.y, 40) : c.arrivee;
-    const ch = q && d.cheminCortege(c.tete, q, new Set(c.cordons.map(x => x.arete)));
+    const ch = c.arrivee && d.cheminCortege(t, c.arrivee, new Set(c.cordons.filter(x => x.refuse).map(x => x.arete)));
     const m = ch && ch.morceaux.find((m, i) => i > 0 && (m.de < m.a ? m.arete.a : m.arete.b) === p.n);
     if (!m) return e;
     let voulu = null;
-    for (const choix of [0, -1, 1]) {
+    for (const choix of [0, -1, 1, -2, 2, -3, 3]) {
         const b = d.brancheCortege(p.n, p.venue, p.sens, choix);
         if (b && b.arete === m.arete) { voulu = choix; break; }
     }
@@ -1880,14 +1890,19 @@ function piloteCortege(o) {
 /** La condition d'arrêt d'un pilotage ou d'une coupe, d'après l'état rendu par le pilote. */
 function arretCortege(e, j) {
     if (j === 'marche') return e.phase === 'marche';
+    if (j === 'rassemblement') return e.phase === 'rassemblement';
     if (j === 'fin') return e.phase === 'fin';
     if (j === 'rallie') return e.groupes.includes('rallie');
     if (j === 'infiltre') return e.casseurs.includes('infiltre');
     if (j === 'escortes') return e.ecartes > 0 && !e.casseurs.some(x => x === 'approche' || x === 'infiltre');
+    if (j === 'negociation') return e.negociation !== null;
+    if (j === 'ouvert') return e.ouvert;
+    if (j === 'silence') return e.chant === null && e.file === 0;
     if (j.parcouru != null) return e.parcouru >= j.parcouru;
     if (j.reste != null) return e.reste != null && e.reste <= j.reste;
     if (j.groupe != null) return e.groupe != null && e.groupe <= j.groupe;
     if (j.cordon != null) return e.cordon != null && e.cordon <= j.cordon;
+    if (j.passants != null) return e.passants != null && e.passants <= j.passants;
     return false;
 }
 async function installerPiloteCortege() {
@@ -1897,12 +1912,12 @@ async function installerPiloteCortege() {
         window.__arretCortege = (0, eval)(`(${a})`);
     }, piloteCortege.toString(), arretCortege.toString());
 }
-/** Le cartouche du cortège : ce que la page met dans son bandeau, que le film masque. */
+/** Le cartouche du cortège : la foule et ses deux jauges, que le bandeau de la page, masqué, porte aussi. */
 function cartoucheCortege(e) {
     if (!e) return '';
+    const jauge = (v, teinte) => `<span class="jauge"><i style="width:${v}%;background:${teinte}"></i></span>`;
     return `<b>${e.participants.toLocaleString('fr-FR')} participants</b><br>`
-        + (e.chaleur > 0 ? `☀ ${e.soleil} % au soleil · fatigue ${e.fatigue} %` : 'soleil couché')
-        + (e.ecartes ? `<br>${e.ecartes} casseur${e.ecartes > 1 ? 's' : ''} écarté${e.ecartes > 1 ? 's' : ''}` : '');
+        + `élan ${jauge(e.elan, '#f1c40f')} ${e.elan}<br>tension ${jauge(e.tension, '#e74c3c')} ${e.tension}`;
 }
 
 const outils = {
@@ -2307,144 +2322,87 @@ const outils = {
             return !rayon.intersectObjects(d.groupeBatiments.children, true).length;
         });
     },
-    /** Les foyers de la partie remplacés par des foyers posés en `points` (mise en scène du départ). */
-    async allumerFoyers(points) {
-        await page.evaluate(points => {
-            const d = window.__demo, F = d.feux;
-            for (const f of F.foyers) {
-                d.groupeFeux.remove(f.groupe);
-                for (const b of f.fumee) { d.groupeFeux.remove(b.m); b.m.material.dispose(); }
-                for (const p of f.gens) d.libererPersonne(p);
-            }
-            F.foyers = points.map(p => d.creerFoyer((p.lon - d.LON0) * d.M_PAR_DEGRE_LON, (p.lat - d.LAT0) * d.M_PAR_DEGRE_LAT));
-            F.declares = F.foyers.length;
-        }, points);
-    },
-    /**
-     * Le pilote des incendies, `secondes` au plus : vers `vers` ({lat, lon}), ou
-     * vers le foyer en feu le plus proche ; une fois le premier indice donné
-     * (`apresIndice`). Il tourne vers la cible, avance tant qu'elle est plus
-     * loin que `arret` m plus ce que l'inertie (0,6 s) lui fait encore
-     * parcourir, recule s'il en est à moins de `arret` − 6 m, et tient `hauteur`
-     * m au-dessus du sol de la cible, à 2 m près. Avec `larguer`, il fait des
-     * passes : il fonce vers le foyer depuis 30 m, largue (F) quand l'eau
-     * lâchée tomberait dedans, et repart en arrière à 10 m — l'eau part en
-     * cloche devant lui, et il reste hors du panache : au-dessus du foyer, la
-     * fumée puis la vapeur noyaient toute l'image. S'arrête au foyer éteint
-     * (`jusqua: 'eteint'`) ou à la réserve pleine (`'plein'`) ;
-     * `legende(reserve)`, si elle est donnée, réécrit la légende quand la
-     * réserve change. Rend l'état de la partie.
-     */
-    async piloterFeu(secondes, o) {
-        const n = Math.round(secondes * FPS);
-        let e = null, eteints0 = null, reserve = null;
-        for (let i = 0; i < n; i++) {
-            e = await page.evaluate(o => {
-                const d = window.__demo, F = d.feux, dr = d.drone, k = d.touchesDrone;
-                k.clear();
-                let tx, ty, foyer = null;
-                if (o.vers) {
-                    tx = (o.vers.lon - d.LON0) * d.M_PAR_DEGRE_LON; ty = (o.vers.lat - d.LAT0) * d.M_PAR_DEGRE_LAT;
-                } else {
-                    let loin = Infinity;
-                    for (const f of F.foyers) {
-                        const l = f.etat === 'brule' && Math.hypot(f.x - dr.position.x, -f.y - dr.position.z);
-                        if (l !== false && l < loin) { loin = l; foyer = f; }
-                    }
-                    if (!foyer) return { eteints: F.eteints, reserve: F.reserve };
-                    tx = foyer.x; ty = foyer.y;
-                }
-                const etat = { eteints: F.eteints, reserve: F.reserve };
-                if (o.apresIndice && document.getElementById('jeu-indice').hidden && F.prochainIndice - F.debut < 6000) return etat;
-                const dx = tx - dr.position.x, dz = -ty - dr.position.z, dist = Math.hypot(dx, dz);
-                const rel = ((Math.atan2(dx, -dz) - dr.cap) * 180 / Math.PI % 360 + 540) % 360 - 180;
-                const v = Math.hypot(dr.vitesse.x, dr.vitesse.z), arret = o.arret || 3;
-                if (dist > 3) { if (rel > 6) k.add('ArrowRight'); else if (rel < -6) k.add('ArrowLeft'); }
-                if (o.larguer) {
-                    const passe = window.__passe = (window.__passe ?? true) ? dist > 10 : dist > 30;
-                    if (Math.abs(rel) < 45) k.add(passe ? 'ArrowUp' : 'ArrowDown');
-                } else if (Math.abs(rel) < 45 && dist > arret + v * 0.7) k.add('ArrowUp');
-                else if (dist < arret - 6 || (Math.abs(rel) > 135 && dist > 3)) k.add('ArrowDown');
-                const h = dr.position.y - d.ySol(d.LON0 + tx / d.M_PAR_DEGRE_LON, d.LAT0 + ty / d.M_PAR_DEGRE_LAT);
-                if (o.hauteur) { if (h < o.hauteur - 2) k.add('Space'); else if (h > o.hauteur + 2) k.add('ShiftLeft'); }
-                if (o.larguer && foyer) {
-                    const p = d.chutePrevue();
-                    if (p && Math.hypot(p.x - foyer.x, p.z + foyer.y) < d.rayonFeu(foyer)) k.add('KeyF');
-                }
-                return etat;
-            }, o);
-            if (eteints0 === null) eteints0 = e.eteints;
-            if (o.legende && e.reserve !== reserve) {
-                reserve = e.reserve;
-                await page.evaluate(t => { document.getElementById('demo-legende').textContent = t; }, o.legende(reserve));
-            }
-            await filmer(1 / FPS);
-            if (o.jusqua === 'eteint' && e.eteints > eteints0) break;
-            if (o.jusqua === 'plein' && e.reserve >= 12) break;
-        }
-        await page.evaluate(() => window.__demo.touchesDrone.clear());
-        return e;
-    },
     // --- Cortège : la mise en scène, le pilote, les coupes ---------------------------
     /**
      * Le chemin de la manifestation mis en scène, l'arrivée cliquée : les
-     * obstacles tirés par la page retirés ; un cordon sur la branche tout droit
-     * du premier virage du plus court chemin — le cortège tourne devant lui ;
-     * un groupe au carrefour du chemin le plus près des deux tiers, dans la rue
-     * de côté, qui attend tout le film ; ni déviation ni vague de casseurs
+     * cordons et les groupes tirés par la page retirés ; un groupe vers le
+     * tiers du chemin, qui attend tout le film ; un cordon sur le parcours
+     * après lui, que le cortège négociera ; une grappe de passants vers 70 m,
+     * si la page n'en a pas mis là ; ni déviation ni vague de casseurs
      * d'elles-mêmes, le film les lance. Rend où chacun est, en mètres de chemin.
      */
     async mettreEnSceneCortege() {
         return page.evaluate(() => {
             const d = window.__demo, c = d.cortege;
             for (const o of c.cordons) { d.groupeCortege.remove(o.objet); o.policiers.forEach(d.retirerPersonne); }
-            for (const b of c.barricades) d.groupeCortege.remove(b.objet);
             for (const g of c.groupes) { d.groupeCortege.remove(g.objet); g.membres.forEach(d.retirerPersonne); }
             c.cordons = [];
-            c.barricades = [];
             c.groupes = [];
             c.deviations = Infinity;
             const ch = d.cheminCortege(c.tete, c.arrivee);
-            // Les nœuds du chemin, dans l'ordre : l'arête par laquelle on y arrive, celle par laquelle on en part.
-            const etapes = [];
-            let avance = Math.abs(ch.morceaux[0].a - ch.morceaux[0].de);
-            for (let i = 1; i < ch.morceaux.length; i++) {
-                const m = ch.morceaux[i], p = ch.morceaux[i - 1];
-                etapes.push({ n: m.de < m.a ? m.arete.a : m.arete.b, venue: p.arete, sens: p.a > p.de ? 1 : -1,
-                              sortie: m.arete, avance });
-                avance += Math.abs(m.a - m.de);
-            }
+            // Les morceaux du chemin et leur début, en mètres ; les nœuds, avec l'arête d'arrivée et de départ.
+            let avance = 0;
+            const morceaux = ch.morceaux.map(m => { const r = { m, debut: avance, l: Math.abs(m.a - m.de) }; avance += r.l; return r; });
+            const etapes = morceaux.slice(1).map((r, i) => ({ n: r.m.de < r.m.a ? r.m.arete.a : r.m.arete.b,
+                venue: morceaux[i].m.arete, sens: morceaux[i].m.a > morceaux[i].m.de ? 1 : -1, sortie: r.m.arete, avance: r.debut }));
             const pose = { longueur: Math.round(ch.longueur) };
-            for (const e of etapes) {
-                if (e.n.aretes.length < 3) continue;
-                const droit = d.brancheCortege(e.n, e.venue, e.sens, 0);
-                if (!droit || droit.arete === e.sortie || droit.arete.longueur < 20) continue;
-                const s = droit.arete.a === e.n ? Math.min(18, droit.arete.longueur / 2)
-                                                : Math.max(droit.arete.longueur - 18, droit.arete.longueur / 2);
-                d.creerCordon(droit.arete, s);
-                pose.cordon = { avance: Math.round(e.avance), rue: droit.arete.nom, virage: e.sortie.nom };
-                break;
-            }
-            const apres = (pose.cordon ? pose.cordon.avance : 0) + 80;
-            const candidats = etapes.filter(e => e.n.aretes.length >= 3 && e.avance > apres && e.avance < ch.longueur - 80);
-            const e = candidats.sort((u, v) => Math.abs(u.avance - 0.66 * ch.longueur) - Math.abs(v.avance - 0.66 * ch.longueur))[0];
+            // Dans l'ordre du film, sur un parcours de 430 m : les passants vers 70 m,
+            // le groupe vers le tiers, le cordon ensuite, les casseurs après lui.
+            // Le groupe dans une rue de côté d'un carrefour ; sans carrefour là, sur
+            // le trottoir du parcours.
+            const visee = Math.max(120, 0.33 * ch.longueur);
+            const candidats = etapes.filter(e => e.n.aretes.length >= 3 && e.avance > 100 && e.avance < 0.5 * ch.longueur);
+            const e = candidats.sort((u, v) => Math.abs(u.avance - visee) - Math.abs(v.avance - visee))[0];
+            let gx, gy, rue, ou;
             if (e) {
                 const cote = e.n.aretes.find(a => a !== e.venue && a !== e.sortie);
-                const [x, y] = d.pointArete(cote, cote.a === e.n ? Math.min(8, cote.longueur) : Math.max(cote.longueur - 8, 0));
-                d.creerGroupe(d.GROUPES_CORTEGE[1], x, y);
-                c.groupes[0].fin = Infinity;
-                pose.groupe = { avance: Math.round(e.avance), rue: cote.nom, n: c.groupes[0].membres.length };
+                [gx, gy] = d.pointArete(cote, cote.a === e.n ? Math.min(8, cote.longueur) : Math.max(cote.longueur - 8, 0));
+                rue = cote.nom;
+                ou = e.avance;
+            } else {
+                ou = visee;
+                const o = d.surChemin(ch, ou), [, , dx, dy] = d.pointArete(o.arete, o.s), l = Math.hypot(dx, dy) || 1;
+                // Du côté où le trottoir est libre, hors des bâtiments.
+                const cote = [1, -1].find(k => d.placeLibre(o.x + dy / l * 9 * k, o.y - dx / l * 9 * k)) || 1;
+                gx = o.x + dy / l * 9 * cote;
+                gy = o.y - dx / l * 9 * cote;
+                rue = o.arete.nom;
+            }
+            d.creerGroupe(d.GROUPES_CORTEGE[0], gx, gy);
+            c.groupes[0].fin = Infinity;
+            pose.groupe = { avance: Math.round(ou), rue, n: c.groupes[0].membres.length };
+            // Le cordon, sur le parcours, 60 m après le groupe et vers la moitié au
+            // moins : posé au premier morceau de 30 m qui commence après le groupe,
+            // il tombait à 333 m sur 428, sans place pour les casseurs ensuite.
+            const xc = Math.max(ou + 60, 0.5 * ch.longueur);
+            const oc = d.surChemin(ch, xc);
+            if (oc) {
+                d.creerCordon(oc.arete, oc.s);
+                pose.cordon = { avance: Math.round(xc), rue: oc.arete.nom };
+            }
+            for (const x of [70, 90, 55, 110]) {
+                const o = d.surChemin(ch, x);
+                if (!o || o.arete.longueur < 12) continue;
+                const deja = c.passants.find(g => g.etat !== 'rallie' && Math.hypot(g.x - o.x, g.y - o.y) < 25);
+                if (!deja) d.creerPassants({ a: o.arete, s: o.s, x: o.x, y: o.y });
+                pose.passants = { avance: x, n: (deja || c.passants.at(-1)).membres.length * 10 };
+                break;
             }
             return pose;
         });
+    },
+    /** Des slogans mis en file : le pilote les lance à leur tour, quand le précédent est fini et le registre rechargé. */
+    async slogans(liste) {
+        await page.evaluate(l => { window.__slogansFilm = (window.__slogansFilm || []).concat(l); }, liste);
     },
     /**
      * Le pilote du cortège, `secondes` au plus, image par image : la cadence
      * `cadence` ; aux carrefours, la branche du plus court chemin vers le
      * groupe qui attend, puis vers l'arrivée, choisie à `choixA` m du
      * carrefour, comme un joueur qui voit la flèche au sol ; avec `envoyer`, F
-     * pour chaque casseur. Les touches qu'il presse s'allument au clavier
-     * incrusté ; le cartouche dit les participants, le soleil, la fatigue.
+     * pour chaque casseur ; devant un cordon, N ; les slogans mis en file
+     * (slogans). Les touches qu'il presse s'allument au clavier incrusté ; le
+     * cartouche dit les participants, l'élan et la tension.
      * S'arrête quand `jusqua` (voir arretCortege) est atteint, plus `apres` s.
      * Rend l'état de la partie.
      */
@@ -2469,7 +2427,7 @@ const outils = {
      */
     async couperCortege(o) {
         await installerPiloteCortege();
-        const e = await page.evaluate((o, fps) => {
+        const e = await horsPiste(() => page.evaluate((o, fps) => {
             let e = null;
             for (let i = 0; i < (o.max || 90) * fps; i++) {
                 e = window.__piloteCortege(o);
@@ -2478,9 +2436,10 @@ const outils = {
                 window.__pas(1000 / fps);
             }
             return e;
-        }, o, FPS);
-        // Arrivé ou dispersé pendant la coupe : la suite filmerait une autre manifestation.
-        if (e.phase !== 'marche' && o.jusqua !== 'fin') throw new Error(`coupe : partie finie (${JSON.stringify(e)})`);
+        }, o, FPS));
+        // Arrivé ou dispersé pendant la coupe : la suite filmerait une autre
+        // manifestation ; sauf `tolerant`, quand la suite filme l'arrivée.
+        if (e.phase !== 'marche' && o.jusqua !== 'fin' && !o.tolerant) throw new Error(`coupe : partie finie (${JSON.stringify(e)})`);
         await outils.cartouche(cartoucheCortege(e));
         return e;
     },
@@ -2488,9 +2447,10 @@ const outils = {
     async lancerCasseurs(n, devant, cote = 0, rayon = 30) {
         return page.evaluate((n, devant, cote, rayon) => {
             const d = window.__demo, c = d.cortege, t = c.tete;
-            const dx = Math.sin(c.cap), dy = Math.cos(c.cap);
+            const dx = Math.sin(c.cap), dy = Math.cos(c.cap), avant = new Set(c.casseurs);
             d.vagueCasseurs({ x: t.x + dx * devant + dy * cote, y: t.y + dy * devant - dx * cote, rayon }, n);
-            return c.casseurs.map(cs => Math.round(Math.hypot(cs.p.x - t.x, cs.p.y - t.y)));
+            // Les nouveaux seulement : un casseur encore escorté comptait pour un lancé.
+            return c.casseurs.filter(cs => !avant.has(cs)).map(cs => Math.round(Math.hypot(cs.p.x - t.x, cs.p.y - t.y)));
         }, n, devant, cote, rayon);
     },
     /** Le bonhomme reposé, caché contre le véhicule le plus proche de `p` (mise en scène du départ). */
@@ -2539,10 +2499,12 @@ const outils = {
     async chauffer(cadre, secondes = 20) {
         await outils.poser(cadre);
         const fin = Date.now() + secondes * 1000;
-        while (Date.now() < fin) {
-            await page.evaluate(dt => window.__pas(dt), 1000 / FPS);
-            await new Promise(r => setTimeout(r, 60));
-        }
+        await horsPiste(async () => {
+            while (Date.now() < fin) {
+                await page.evaluate(dt => window.__pas(dt), 1000 / FPS);
+                await new Promise(r => setTimeout(r, 60));
+            }
+        });
     },
     /** Un export de la page : le curseur clique son bouton, le fichier arrive dans TRAVAIL.
      *  L'écriture tient la page une à deux secondes au premier pas de rendu ; l'horloge
@@ -2687,6 +2649,34 @@ for (const q of sequences) {
 }
 ffmpeg.stdin.end();
 await new Promise(r => ffmpeg.on('close', r));
+// La piste du cortège, rendue d'un coup (voir AVEC_SON_JEU), puis lue par
+// morceaux : en un seul page.evaluate, 30 Mo en base64 tenaient mal.
+const PISTE = path.join(TRAVAIL, 'piste.raw');
+if (AVEC_SON_JEU) {
+    const debutRendu = Date.now();
+    const octets = await page.evaluate(async () => {
+        if (!window.__sonFilm) return 0;
+        const b = await window.__sonFilm.startRendering(), g = b.getChannelData(0), d = b.getChannelData(1);
+        const pcm = new Int16Array(b.length * 2);
+        for (let i = 0; i < b.length; i++) {
+            pcm[2 * i] = Math.max(-1, Math.min(1, g[i])) * 32767;
+            pcm[2 * i + 1] = Math.max(-1, Math.min(1, d[i])) * 32767;
+        }
+        window.__pcm = new Uint8Array(pcm.buffer);
+        return window.__pcm.length;
+    });
+    const morceaux = [];
+    for (let i = 0; i < octets; i += 4e6) {
+        morceaux.push(Buffer.from(await page.evaluate(i => {
+            const u = window.__pcm.subarray(i, i + 4e6);
+            let s = '';
+            for (let k = 0; k < u.length; k += 0x8000) s += String.fromCharCode(...u.subarray(k, k + 0x8000));
+            return btoa(s);
+        }, i), 'base64'));
+    }
+    fs.writeFileSync(PISTE, Buffer.concat(morceaux));
+    console.log(`piste du jeu : ${(octets / 4 / 48000).toFixed(1)} s rendues en ${((Date.now() - debutRendu) / 1000).toFixed(1)} s`);
+}
 await navigateur.close();
 if (erreurs.length) console.warn('Erreurs de la page :\n  ' + erreurs.join('\n  '));
 
@@ -2702,6 +2692,14 @@ if (fmt.gif) {
     const filtre = `fps=8,scale=480:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=96:stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=4:diff_mode=rectangle`;
     spawnSync('ffmpeg', ['-y', '-loglevel', 'error', '-i', VIDEO_MUETTE, '-filter_complex', filtre, `${nom}.gif`], { stdio: 'inherit' });
     fs.copyFileSync(VIDEO_MUETTE, `${nom}.mp4`);
+} else if (AVEC_SON_JEU && fs.existsSync(PISTE) && fs.statSync(PISTE).size) {
+    // Le son du jeu sous la vidéo, ramené à −16 LUFS (le niveau des vidéos en
+    // ligne), fondu sur les deux dernières secondes.
+    const duree = images / FPS, fondu = 2;
+    spawnSync('ffmpeg', ['-y', '-loglevel', 'error', '-i', VIDEO_MUETTE, '-f', 's16le', '-ar', '48000', '-ac', '2', '-i', PISTE,
+                         '-map', '0:v', '-map', '1:a', '-af', `loudnorm=I=-16:TP=-1.5:LRA=11,afade=t=out:st=${(duree - fondu).toFixed(2)}:d=${fondu}`,
+                         '-t', duree.toFixed(3), '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k', '-ar', '48000', '-movflags', '+faststart', `${nom}.mp4`],
+              { stdio: 'inherit' });
 } else if (!fmt.voix && MUSIQUE) {
     const duree = images / FPS, fondu = 2.5;
     // La musique part après la séquence `musiqueApres` (un avertissement), sinon d'emblée.
