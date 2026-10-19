@@ -56,6 +56,8 @@ vue3d/
   geopf.py      GET avec reprise sur la Géoplateforme ; 8 places pour tout le service, lectures groupées abandonnées au premier échec
   tuiles.py     tuiles WMTS de la page (ortho, plan) : stock servi, sinon redirection vers l'IGN ; une tuile refusée au navigateur est relue ici et gardée 90 jours (cache/tuiles/)
   static/index.html   la page entière : HTML, CSS et JavaScript (three.js r160)
+  static/favicon.svg, favicon-32.png, apple-touch-icon.png   le logo de la page, tiré de docs/logo/
+docs/logo/      le logo « Tuile » : SVG avec et sans le nom (vectorisé), icône, aperçu GitHub
 ```
 
 Pas de base de données, pas de clé d'API, pas de build front : la page est un

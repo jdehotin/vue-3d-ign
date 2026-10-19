@@ -15,6 +15,12 @@ messages de commit et dans les commentaires des modules.
 
 ### Ajouté
 
+- **Un logo, la Tuile** : une carte de neuf cases en perspective
+  isométrique, dont celle du centre se lève en volume, à l'orange de la page.
+  Il remplace l'arbre du favicon, sert d'icône à la page ajoutée à l'écran
+  d'accueil, précède le titre du panneau et ouvre le README (versions claire
+  et sombre). Les fichiers sont dans `docs/logo/`, avec l'aperçu des liens
+  vers le dépôt GitHub.
 - **Le service sous `container`, l'outil d'Apple, à la place de Docker
   Desktop.** `run_container.sh` construit le même `Dockerfile` et lance le
   service dans une petite machine virtuelle Linux (macOS 26, Apple silicon,

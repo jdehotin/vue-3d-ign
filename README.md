@@ -1,4 +1,9 @@
-# Vue 3D IGN
+<h1>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/logo/logo-sombre.svg">
+    <img src="docs/logo/logo-clair.svg" alt="Vue 3D IGN" width="440">
+  </picture>
+</h1>
 
 Une vue 3D de n'importe quel lieu de France métropolitaine, reconstruite à partir
 des **données ouvertes de l'IGN** : on donne une adresse, un lieu ou des
@@ -897,6 +902,16 @@ Pour une voix off, enregistrer les phrases de `docs/demo/demo-voix-off.txt`,
 une par séquence, et donner le dossier par `VOIX_DOSSIER=…` : chaque
 séquence prend la durée de sa phrase. `VOIX="Audrey (Premium)"` prend à la
 place une voix de synthèse de macOS.
+
+## Logo
+
+Le logo, la **Tuile**, est dans [docs/logo/](docs/logo/) : une carte de neuf
+cases en perspective isométrique, dont celle du centre se lève en volume.
+`logo-clair.svg` et `logo-sombre.svg` portent le nom, `marque-*.svg` le dessin
+seul, `icone.svg` et `icone-512.png` l'icône carrée, `apercu-social.png`
+l'aperçu des liens vers le dépôt (1280 × 640). Le nom est écrit en Archivo
+(SIL Open Font License), vectorisé : aucun SVG ne dépend d'une police. La page
+en tire son favicon et son icône d'écran d'accueil (`vue3d/static/`).
 
 ## Licence
 

@@ -2,7 +2,13 @@
 <html lang="fr">
 <head>
     <meta charset="utf-8" />
-    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🌳%3C/text%3E%3C/svg%3E" />
+    <!-- Le logo, la Tuile (docs/logo/). Le PNG sert aux navigateurs sans
+         favicon SVG ; il porte sa taille pour que Chrome garde le SVG, qui
+         reste net à toute densité d'écran. iOS arrondit lui-même les coins
+         de l'icône d'écran d'accueil, d'où un carré plein. -->
+    <link rel="icon" href="static/favicon-32.png" sizes="32x32" type="image/png" />
+    <link rel="icon" href="static/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="static/apple-touch-icon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <!-- Ajoutée à l'écran d'accueil, la page s'ouvre sans la barre du
          navigateur : le seul plein écran de l'iPhone, qui n'a pas l'API. -->
@@ -20,7 +26,9 @@
         #panel { width:300px; flex:0 0 300px; background:var(--panel); color:var(--text);
                  display:flex; flex-direction:column; overflow-y:auto; }
         #panel header { padding:14px 16px; border-bottom:1px solid var(--line); }
-        #panel header h1 { margin:0 0 4px; font-size:14px; font-weight:600; }
+        #panel header h1 { margin:0 0 4px; font-size:14px; font-weight:600;
+                           display:flex; align-items:center; gap:8px; }
+        #panel header h1 .logo { width:28px; height:22px; flex:none; }
         #panel header .sub { font-size:11px; color:var(--muted); word-break:break-all; }
         #panel header a { color:var(--accent); font-size:11px; text-decoration:none; display:block; margin-top:4px; }
         #panel header a:hover { text-decoration:underline; }
@@ -314,7 +322,14 @@
     <div id="panel">
         <header>
             <button type="button" id="btn-fermer-tiroir" aria-label="Fermer le panneau">×</button>
-            <h1>Vue 3D IGN</h1>
+            <h1><svg class="logo" viewBox="9.03 18.40 81.94 63.25" aria-hidden="true">
+                <polygon points="11.03,51.90 50,74.40 50,79.65 11.03,57.15" fill="#a9b0b7"/>
+                <polygon points="88.97,51.90 50,74.40 50,79.65 88.97,57.15" fill="#7d858d"/>
+                <g fill="#e8eaed"><polygon points="50,29.40 62.19,36.44 50,43.48 37.81,36.44"/><polygon points="36.21,37.36 48.40,44.40 37.01,50.98 24.82,43.94"/><polygon points="23.22,44.86 35.41,51.90 23.22,58.94 11.03,51.90"/><polygon points="63.79,37.36 75.18,43.94 62.99,50.98 51.60,44.40"/><polygon points="50,45.32 61.39,51.90 50,58.48 38.61,51.90"/><polygon points="37.01,52.82 48.40,59.40 36.21,66.44 24.82,59.86"/><polygon points="76.78,44.86 88.97,51.90 76.78,58.94 64.59,51.90"/><polygon points="62.99,52.82 75.18,59.86 63.79,66.44 51.60,59.40"/><polygon points="50,60.32 62.19,67.36 50,74.40 37.81,67.36"/></g>
+                <polygon points="39.61,51.90 50,57.90 50,32.40 39.61,26.40" fill="#e07b00"/>
+                <polygon points="60.39,51.90 50,57.90 50,32.40 60.39,26.40" fill="#af6000"/>
+                <polygon points="50,20.40 60.39,26.40 50,32.40 39.61,26.40" fill="#e9a34d"/>
+            </svg>Vue 3D IGN</h1>
             <div id="nom-point" hidden></div>
             <div class="sub" id="coord-point">—</div>
             <form id="form-point" class="form-point" role="search" autocomplete="off">
