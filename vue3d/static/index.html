@@ -108,6 +108,43 @@
         #jeu-indice svg { width:56px; height:56px; fill:#ff5a48; stroke:#fff; stroke-width:1.2;
                           filter:drop-shadow(0 2px 4px rgba(0,0,0,.6)); }
         #jeu-indice small { font-size:14px; font-weight:500; }
+        /* Le cortège : ses jauges dans le bandeau, une barre courte que l'œil
+           compare d'un coup, là où un pourcentage se lisait. */
+        #hud-jeu .jauge { display:inline-block; width:54px; height:7px; margin:0 4px 1px; border-radius:4px;
+                          background:rgba(255,255,255,.18); vertical-align:middle; overflow:hidden; }
+        #hud-jeu .jauge i { display:block; height:100%; background:#f1c40f; transition:width .3s; }
+        #hud-jeu .jauge.tension i { background:#e74c3c; }
+        #hud-jeu .alerte { color:#ff8a7a; font-weight:700; }
+        #hud-jeu.cortege { flex-direction:column; align-items:flex-start; gap:3px; }
+        /* Ses slogans, en bas au centre ; au doigt, entre les deux croix, ou
+           au-dessus d'elles sur un écran étroit, où rien ne passe entre. */
+        #barre-cortege { position:absolute; left:50%; bottom:64px; z-index:4; transform:translateX(-50%);
+                         display:flex; flex-wrap:wrap; justify-content:center; gap:6px; width:max-content;
+                         max-width:calc(100% - 24px); }
+        #barre-cortege[hidden] { display:none; }
+        #scene:has(#pad-drone:not([hidden])) #barre-cortege { bottom:76px; }
+        @media (max-width: 700px) { #scene:has(#pad-drone:not([hidden])) #barre-cortege { bottom:192px; } }
+        #barre-cortege button { position:relative; overflow:hidden; min-width:88px; max-width:168px; padding:6px 10px 8px;
+                                border-radius:10px; border:1px solid var(--line); background:rgba(31,35,40,.9);
+                                color:var(--text); font:600 12px/1.25 system-ui, sans-serif; text-align:left;
+                                cursor:pointer; touch-action:manipulation; }
+        #barre-cortege button[hidden] { display:none; }
+        #barre-cortege button:hover:not(:disabled) { border-color:var(--accent); }
+        #barre-cortege button:disabled { opacity:.5; cursor:default; }
+        #barre-cortege button.chante { border-color:var(--accent); background:rgba(255,140,40,.28); }
+        #barre-cortege button kbd { margin-right:4px; padding:0 4px; border-radius:3px; background:rgba(255,255,255,.14);
+                                    font:inherit; font-size:10px; }
+        #barre-cortege button small { display:block; overflow:hidden; color:var(--muted); font-weight:400;
+                                      white-space:nowrap; text-overflow:ellipsis; }
+        #barre-cortege button .recharge { position:absolute; left:0; bottom:0; height:3px; background:var(--accent); }
+        #barre-cortege .negocier { border-color:#2ecc71; background:rgba(39,120,70,.9); }
+        #barre-cortege .son { min-width:0; padding:6px 9px; text-align:center; }
+        /* Au doigt, le nom seul : avec le slogan, la barre prenait deux rangs
+           au-dessus des croix et cachait le milieu du cortège (390 px). */
+        @media (pointer: coarse) {
+            #barre-cortege kbd, #barre-cortege button small { display:none; }
+            #barre-cortege button { min-width:0; padding:9px 10px 11px; }
+        }
         /* Le seul à se cliquer : #haut-gauche laisse passer la souris. */
         .conseil { pointer-events:auto; flex-wrap:wrap; }
         .conseil button { background:none; border:0; padding:0; font:inherit; cursor:pointer; }
@@ -209,8 +246,15 @@
         .bouton-vue svg { width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.8;
                           stroke-linecap:round; stroke-linejoin:round; }
         .bouton-vue.texte { font:600 10px/1 system-ui, sans-serif; letter-spacing:.02em; }
+        /* En vol, sept boutons : 416 px depuis le haut, et le pad du drone
+           occupe le bas sur 182 px. Sur un téléphone en paysage (390 px de
+           haut), Cortège et « ? » sortaient de l'écran, un autre passait sous
+           la flèche ▶ : la colonne s'arrête au-dessus des crédits, ou du pad,
+           et se poursuit à sa gauche (wrap-reverse : la première à droite). */
         #nav-vue { position:absolute; top:88px; right:26px; z-index:3; display:flex;
-                   flex-direction:column; gap:8px; }
+                   flex-direction:column; flex-wrap:wrap-reverse; align-content:flex-start; gap:8px;
+                   max-height:calc(100% - 88px - 56px); }
+        #scene:has(#pad-drone:not([hidden])) #nav-vue { max-height:calc(100% - 88px - 190px); }
         .pastille-borne { display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:6px; }
         /* Prise en main : ouverte à la première visite, puis par « ? ». */
         #tuto { width:min(520px, calc(100vw - 24px)); max-height:min(86vh, 760px); padding:0;
@@ -572,12 +616,10 @@
                 </svg>
             </button>
             <!-- Les jeux du drone, visibles en vol ; chacun s'arrête par son bouton. -->
-            <button type="button" id="t-jeu" class="bouton-vue texte" hidden aria-label="Jeu des incendies"
-                    title="Jeu : éteindre depuis le drone les incendies qui se déclarent dans la ville, au milieu des manifestations">Feux</button>
             <button type="button" id="t-traque" class="bouton-vue texte" hidden aria-label="Jeu de la traque"
                     title="Jeu : retrouver Vladimir, qui court sur les routes entre les véhicules, et le toucher depuis le drone">Traque</button>
             <button type="button" id="t-cortege" class="bouton-vue texte" hidden aria-label="Jeu du cortège"
-                    title="Jeu : mener une marche pacifique jusqu'à son arrivée par les vraies rues, en écartant les casseurs qui s'y infiltrent">Cortège</button>
+                    title="Jeu : mener une marche pacifique jusqu'à son arrivée par les vraies rues, avec ses slogans, sans que la préfecture l'interrompe">Cortège</button>
             <button type="button" id="btn-aide" class="bouton-vue" aria-label="Prise en main"
                     aria-haspopup="dialog" aria-controls="tuto" title="Prise en main : les gestes, et ce que montre la vue">
                 <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -647,6 +689,16 @@
                 <button type="button" data-touche="ShiftLeft" style="grid-area:2/2" aria-label="Descendre">▼</button>
                 <button type="button" data-touche="KeyD" style="grid-area:2/3" aria-label="Glisser à droite">▶</button>
             </div>
+        </div>
+        <!-- Le cortège : les slogans que l'on lance, la négociation devant un
+             cordon, le son. Le texte du slogan suivant s'y lit (data-slot). -->
+        <div id="barre-cortege" hidden>
+            <button type="button" data-slot="0"><kbd>1</kbd>Ambiance<small></small><i class="recharge"></i></button>
+            <button type="button" data-slot="1"><kbd>2</kbd>Aux passants<small></small><i class="recharge"></i></button>
+            <button type="button" data-slot="2"><kbd>3</kbd>Calme<small></small><i class="recharge"></i></button>
+            <button type="button" data-slot="3"><kbd>4</kbd>La ville<small></small><i class="recharge"></i></button>
+            <button type="button" class="negocier" hidden><kbd>N</kbd>Négocier<small>sit-in devant le cordon</small></button>
+            <button type="button" class="son" aria-label="Couper le son" title="Le son du cortège (M)">🔊</button>
         </div>
         <div id="decalage" hidden>
             <button type="button" class="n" data-vers="n"><span class="pointe"></span>N</button>
@@ -1224,6 +1276,8 @@ document.getElementById('form-point').addEventListener('submit', async e => {
 // choisi dans la liste la précède (« Arc de Triomphe — 9 Place Charles de
 // Gaulle, 75116 Paris »), sauf s'il y est déjà : une adresse, une commune.
 // Sans adresse, en forêt ou sur l'eau, l'onglet prend le nom du panneau.
+// La commune sert aussi aux slogans du cortège (« Gordes, debout ! »).
+let communeDuPoint = null;
 (async () => {
     const nomPoint = document.getElementById('nom-point');
     let nom = ACCUEIL ? POINT_DEFAUT.nom : null, adresse = null;
@@ -1237,6 +1291,7 @@ document.getElementById('form-point').addEventListener('submit', async e => {
             lat: LAT0, lon: LON0, index: 'address', limit: 1 }));
         const p = r.ok ? (((await r.json()).features || [])[0] || {}).properties : null;
         if (p && p.city) {
+            communeDuPoint = p.city;
             const commune = p.postcode ? `${p.city} (${p.postcode})` : p.city;
             nom = nom || commune;
             adresse = p.name && p.name !== p.city ? `${p.name}, ${[p.postcode, p.city].filter(Boolean).join(' ')}` : commune;
@@ -9601,7 +9656,7 @@ function objetSous(touche) {
 
 renderer.domElement.addEventListener('pointermove', e => {
     // Pendant la traque, pas d'infobulle sous le viseur (activerJeu la ferme).
-    if (tipEpingle || jeu.actif || feux.actif || cortege.actif) return;
+    if (tipEpingle || jeu.actif || cortege.actif) return;
     const r = renderer.domElement.getBoundingClientRect();
     souris.x = ((e.clientX - r.left) / r.width) * 2 - 1;
     souris.y = -((e.clientY - r.top) / r.height) * 2 + 1;
@@ -9879,6 +9934,8 @@ const AIDE_DRONE = AU_DOIGT
 const TOUCHES_DRONE = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
                                'KeyW', 'KeyA', 'KeyS', 'KeyD', 'Space', 'ShiftLeft', 'ShiftRight', 'KeyF']);
 
+// Les slogans, la négociation, le son : au cortège seulement.
+const TOUCHES_CORTEGE = /^(Digit[1-4]|Numpad[1-4]|KeyN|KeyM)$/;
 var droneActif = false;
 const drone = { position: new THREE.Vector3(), vitesse: new THREE.Vector3(), cap: 0, lacet: 0,
                 tangage: 0, roulis: 0, recul: DRONE_RECUL.depart, sol: null };
@@ -9996,12 +10053,12 @@ function entrerDrone() {
     hudDrone.hidden = false;
     padDrone.hidden = !TACTILE;
     decalage.hidden = true;
-    btnJeu.hidden = btnTraque.hidden = btnCortege.hidden = false;
+    btnTraque.hidden = btnCortege.hidden = false;
 }
 
 function sortirDrone() {
     arreterLesJeux();
-    btnJeu.hidden = btnTraque.hidden = btnCortege.hidden = true;
+    btnTraque.hidden = btnCortege.hidden = true;
     droneActif = false;
     btnDrone.classList.remove('on');
     controls.enabled = true;
@@ -10027,6 +10084,11 @@ btnOrbit.addEventListener('click', () => { if (droneActif) sortirDrone(); });
 window.addEventListener('keydown', e => {
     if (!droneActif || e.target.closest?.('input, select, textarea')) return;
     if (e.code === 'Escape') { sortirDrone(); return; }
+    if (cortege.actif && TOUCHES_CORTEGE.test(e.code) && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault();
+        if (!e.repeat) cortege.appuis.push(e.code);
+        return;
+    }
     if (!TOUCHES_DRONE.has(e.code) || e.metaKey || e.ctrlKey || e.altKey) return;
     e.preventDefault();
     touchesDrone.add(e.code);
@@ -10107,7 +10169,7 @@ function majDrone(dt, maintenant) {
 // --- Jeu : la traque -------------------------------------------------------------
 // Depuis le drone, retrouver un petit bonhomme — Vladimir, une figurine :
 // costume sombre, cravate, front dégarni — qui court sur les
-// routes, entre les véhicules, et le toucher. Le bouton « Jeu » apparaît en
+// routes, entre les véhicules, et le toucher. Le bouton « Traque » apparaît en
 // vol ; ?jeu=1 ouvre la page dans la traque, drone décollé, une fois la scène
 // construite. Rien dans la scène ni dans le cache : le jeu ne lit que ce que
 // la page a déjà, routes BD TOPO et véhicules vus sur l'orthophoto.
@@ -10126,9 +10188,10 @@ function majDrone(dt, maintenant) {
 // lui, sous le réticule rouge ; un clic, ou un toucher, vise ce qu'il
 // désigne. Les valeurs ci-dessous sont des réglages de jeu, pas des mesures.
 const JEU_DEMANDE = PARAMS.has('jeu') && PARAMS.get('jeu') !== '0';
-// Le jeu que lance ?jeu= : les incendies, sauf ?jeu=traque et ?jeu=cortege.
-// En vol, chaque jeu a son bouton (Feux, Traque, Cortège).
-const choixJeu = { type: ['traque', 'cortege'].includes(PARAMS.get('jeu')) ? PARAMS.get('jeu') : 'incendies' };
+// Le jeu que lance ?jeu= : la traque, sauf ?jeu=cortege. En vol, chaque jeu
+// a son bouton (Traque, Cortège). Les incendies (?jeu=1 du 18 au 19 octobre
+// 2026) ont été retirés : leurs liens ouvrent la traque.
+const choixJeu = { type: PARAMS.get('jeu') === 'cortege' ? 'cortege' : 'traque' };
 const JEU_ECHELLE = 1.5;                    // 2,6 m : plus grand que nature, pour se voir du ciel
 const JEU_VITESSE = 3.2;                    // m/s, au petit trot
 const JEU_VITESSE_FUITE = 6.5;              // m/s, le drone à moins de JEU_ALERTE
@@ -10163,7 +10226,6 @@ const AIDE_JEU = AU_DOIGT
       + 'F tire sous le réticule, un clic là où il désigne · flèches, Q D, espace, Maj pour voler · '
       + 'Échap pour sortir';
 
-const btnJeu = document.getElementById('t-jeu');            // les incendies
 const btnTraque = document.getElementById('t-traque');
 const hudJeu = document.getElementById('hud-jeu');
 const messageJeu = document.getElementById('jeu-message');
@@ -10747,7 +10809,8 @@ function annoncer(html, duree) {
     messageJeu.innerHTML = html;
     messageJeu.hidden = false;
     // Un message masque l'indice : posés au même endroit, l'un sur l'autre,
-    // « Éteint ! » et « Tournez à gauche » se lisaient mal (film des incendies).
+    // « Éteint ! » et « Tournez à gauche » se lisaient mal (film des incendies,
+    // jeu retiré depuis).
     indiceJeu.hidden = true;
     clearTimeout(finAnnonce);
     // Traque en cours : effacé par majJeu, à l'horloge du jeu, celle des
@@ -10755,7 +10818,7 @@ function annoncer(html, duree) {
     // tournage à horloge figée (outils/demo-video.mjs) fait filer trois à
     // quatre fois plus vite que celui du film. Hors traque, une minuterie.
     jeu.finMessage = performance.now() + duree * 1000;
-    if (!jeu.actif && !feux.actif && !cortege.actif) finAnnonce = setTimeout(() => { messageJeu.hidden = true; }, duree * 1000);
+    if (!jeu.actif && !cortege.actif) finAnnonce = setTimeout(() => { messageJeu.hidden = true; }, duree * 1000);
 }
 
 const DIRECTIONS_CARDINALES = ['au nord', 'au nord-est', "à l'est", 'au sud-est',
@@ -10889,21 +10952,15 @@ function arreterJeu() {
 // change de jeu.
 function arreterLesJeux() {
     arreterJeu();
-    arreterIncendies();
     arreterCortege();
 }
-btnJeu.addEventListener('click', () => {
-    if (feux.actif) arreterIncendies(); else { arreterLesJeux(); activerIncendies(); }
-    // Comme le drone : l'espace, qui fait monter, presserait encore le bouton.
-    btnJeu.blur();
-});
 btnTraque.addEventListener('click', () => {
     if (jeu.actif) arreterJeu(); else { arreterLesJeux(); activerJeu(); }
+    // Comme le drone : l'espace, qui fait monter, presserait encore le bouton.
     btnTraque.blur();
 });
 if (JEU_DEMANDE) Promise.allSettled([sceneConstruite, reliefCharge])
-    .then(() => (choixJeu.type === 'traque' ? activerJeu()
-               : choixJeu.type === 'cortege' ? activerCortege() : activerIncendies()));
+    .then(() => (choixJeu.type === 'cortege' ? activerCortege() : activerJeu()));
 
 const busteJeu = new THREE.Vector3(), trajet = new THREE.Line3(), surTrajet = new THREE.Vector3();
 function majJeu(dt, maintenant) {
@@ -10977,59 +11034,15 @@ function majJeu(dt, maintenant) {
     }
 }
 
-// --- Jeu : les incendies --------------------------------------------------------
-// L'autre jeu en drone, celui du bouton « Jeu » (et de ?jeu=1) ; la traque
-// reste jouable par ?jeu=traque. Des incendies se déclarent un à un aux
-// carrefours de la ville, une manifestation autour de chacun ; le drone les
-// éteint en larguant de l'eau. Elle tombe en gardant la vitesse du drone :
-// on largue avant d'être dessus, et le réticule bleu dit où elle arrivera.
-// La réserve se remplit à la base, d'où le drone a décollé, ou au ras de
-// l'eau de la BD TOPO (lac, rivière). Les manifestants sont le décor : ils
-// scandent, s'écartent d'une eau tombée près d'eux, applaudissent le feu
-// éteint, puis se dispersent. Rien dans la scène ni dans le cache. Les
-// valeurs ci-dessous sont des réglages de jeu, pas des mesures.
-const FEU_PAR_PARTIE = 6;
-const FEU_SIMULTANES = 4;
-const FEU_DEPART = 2;                       // déclarés d'emblée, puis un toutes les FEU_INTERVALLE_S
-const FEU_INTERVALLE_S = 25;
-const FEU_ECART_M = 120;                    // au moins, entre deux foyers
-const FEU_DISTANCE = [150, 500];            // m de la base
-const FEU_INTENSITE_DEPART = 0.35;
-const FEU_CROISSANCE = 1 / 80;              // par seconde : au plus fort en 52 s
-const FEU_EAU = 0.25;                       // un largage dans le foyer : quatre au plus fort
-const FEU_PERDU_S = 45;                     // au plus fort tout ce temps : hors de contrôle
-const FEU_FOULE = 32;                       // manifestants autour d'un foyer
-const FEU_FOULE_RAYON = [7, 17];            // m du foyer
-const FEU_ECHELLE_FOULE = 1.3;              // un peu plus grands que nature, comme Vladimir
-const FEU_ENTRE_PARTIES_S = 8;
-const EAU_RESERVE = 12;                     // largages
-const EAU_CADENCE_S = 0.4;
-const EAU_REMPLISSAGE_S = 0.25;             // par largage rendu
-const EAU_BASE_M = 15;                      // de la base, à l'horizontale, pour remplir
-const EAU_HAUTEUR_M = 20;                   // au plus au-dessus du sol, à la base ou sur l'eau
-const EAU_ECLABOUSSURE_M = 4;               // les manifestants plus près s'écartent
-const PESANTEUR = 9.81;
-const CLE_RECORD_FEUX = 'vue3d.incendies-record';
-const AIDE_INCENDIES = AU_DOIGT
-    ? `Incendies : un indice toutes les ${JEU_INDICE_S} s · EAU, ou toucher la vue, pour larguer · `
-      + 'remplir au ras de la base ou de l\'eau · le bouton Feux pour arrêter'
-    : `Incendies : un indice toutes les ${JEU_INDICE_S} s · F, ou un clic, largue l'eau, qui tombe sous `
-      + 'le réticule bleu · remplir au ras de la base ou de l\'eau · flèches, Q D, espace, Maj '
-      + 'pour voler · Échap pour sortir';
-
-const feux = { actif: false, foyers: [], gouttes: [], effets: [], reserve: EAU_RESERVE, remplissage: 0,
-               remplit: false, declares: 0, eteints: 0, perdus: 0, debut: 0, prochain: 0, relance: null,
-               dernierLargage: -Infinity, base: new THREE.Vector3(), hud: 0, prochainIndice: Infinity,
-               finIndice: 0, prochainEau: 0, surEau: false };
-const groupeFeux = new THREE.Group();
-groupeFeux.visible = false;
-scene.add(groupeFeux);
-
-// La foule : une figure par manifestant, en maillages instanciés (jambes,
+// --- Figures et foyers ------------------------------------------------------------
+// Ce que le cortège pose dans la ville : des figures, une par personne, et des
+// foyers qui brûlent et fument. Venus du jeu des incendies, retiré le
+// 19 octobre 2026. Rien dans la scène ni dans le cache.
+//
+// Une foule : une figure par personne, en maillages instanciés (jambes,
 // torse, tête, bâton et pancarte), couleurs tirées par personne. Pas d'ombre
-// portée, comme le drone. Un emplacement par manifestant possible, libéré à
-// sa dispersion. Le cortège a la sienne, faite de même (nouvelleFoule).
-const FOULE_MAX = FEU_PAR_PARTIE * FEU_FOULE;
+// portée, comme le drone. Un emplacement par personne possible, libéré à
+// son départ.
 const MAT_FOULE = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85 });
 const PARTIES_FIGURE = {
     jambes: new THREE.BoxGeometry(0.34, 0.8, 0.22).translate(0, 0.4, 0),
@@ -11054,7 +11067,6 @@ function nouvelleFoule(max, parent) {
     }
     return { maillages, gens: new Array(max).fill(null), nul: FIGURE_NULLE };
 }
-const foule = nouvelleFoule(FOULE_MAX, groupeFeux);
 
 /** Les couleurs de la figure `i` : { torse, jambes, tete, baton, pancarte }. */
 const couleurFigure = new THREE.Color();
@@ -11074,49 +11086,17 @@ const TEINTES_PANCARTES = [0xffffff, 0xfff3b0, 0xffd6d6, 0xd6f0ff];
 
 // Les foyers : un sol brûlé, une barricade, des flammes qui vacillent, une
 // colonne de fumée qui se voit de loin, emportée par un vent d'ouest.
+const FEU_INTENSITE_DEPART = 0.35;
 const GEO_DISQUE = new THREE.CircleGeometry(1, 24);
 const GEO_FLAMME = new THREE.ConeGeometry(1, 1, 7).translate(0, 0.5, 0);
 const GEO_BOUFFEE = new THREE.SphereGeometry(1, 10, 8);
-const GEO_GOUTTE = new THREE.SphereGeometry(0.7, 10, 8);
 const GEO_DEBRIS = new THREE.BoxGeometry(1.6, 0.5, 0.9);
 const MAT_BRULE = new THREE.MeshBasicMaterial({ color: 0x111111, transparent: true, opacity: 0.55, depthWrite: false,
     polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 });
 const MAT_DEBRIS = new THREE.MeshStandardMaterial({ color: 0x3b2a1e, roughness: 0.9 });
 const MAT_FLAMMES = [0xff5a00, 0xff8c00, 0xffc400].map(c => new THREE.MeshBasicMaterial({
     color: c, transparent: true, opacity: 0.88, depthWrite: false }));
-const MAT_GOUTTE = new THREE.MeshBasicMaterial({ color: 0x8fd3ff, transparent: true, opacity: 0.85 });
 const VENT = new THREE.Vector3(1.5, 0, 0.3);   // m/s, vers l'est
-
-// La base : un « H » au sol et une colonne bleue qui se voit de loin.
-const base = new THREE.Group();
-{
-    const blanc = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, depthWrite: false,
-        polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 });
-    const anneau = new THREE.Mesh(new THREE.RingGeometry(6, 6.8, 40), blanc);
-    anneau.rotation.x = -Math.PI / 2;
-    const h = new THREE.Group();
-    for (const [l, p, x] of [[0.9, 6, -1.6], [0.9, 6, 1.6], [3.2, 0.9, 0]]) {
-        const barre = new THREE.Mesh(new THREE.PlaneGeometry(l, p), blanc);
-        barre.position.x = x;
-        h.add(barre);
-    }
-    h.rotation.x = -Math.PI / 2;
-    const colonne = new THREE.Mesh(new THREE.CylinderGeometry(2, 2, 60, 16, 1, true).translate(0, 30, 0),
-        new THREE.MeshBasicMaterial({ color: 0x5ab4ff, transparent: true, opacity: 0.18, depthWrite: false,
-                                      side: THREE.DoubleSide }));
-    base.add(anneau, h, colonne);
-    base.children.slice(0, 2).forEach(o => { o.position.y = 0.08; });
-    base.userData.colonne = colonne;
-    groupeFeux.add(base);
-}
-
-// Le réticule de l'eau : où tomberait un largage lâché maintenant.
-const reticuleEau = new THREE.Mesh(new THREE.RingGeometry(1.4, 1.9, 32), new THREE.MeshBasicMaterial({
-    color: 0x3aa8ff, transparent: true, opacity: 0.9, depthTest: false, depthWrite: false }));
-reticuleEau.add(new THREE.Mesh(new THREE.CircleGeometry(0.3, 12), reticuleEau.material));
-reticuleEau.rotation.x = -Math.PI / 2;
-reticuleEau.renderOrder = reticuleEau.children[0].renderOrder = 10;
-groupeFeux.add(reticuleEau);
 
 const rayonFeu = f => 2.5 + 4.5 * f.intensite;
 /** Un point local (est, nord) où un manifestant peut se tenir : dans l'emprise, hors des bâtiments. */
@@ -11127,47 +11107,8 @@ function placeLibre(x, y) {
     return sol !== null && dessus - sol < 0.8;
 }
 
-/** Les nœuds du graphe des routes, gardés une fois : les carrefours en tête. */
-function noeudsJeu() {
-    if (jeu.graphe.noeuds) return jeu.graphe.noeuds;
-    const vus = new Set();
-    for (const a of jeu.graphe.aretes) { vus.add(a.a); vus.add(a.b); }
-    return jeu.graphe.noeuds = [...vus];
-}
-
-/**
- * Un nouveau foyer : un carrefour de la ville (trois branches ou plus), à
- * FEU_DISTANCE de la base et FEU_ECART_M des autres foyers, le plus dégagé
- * d'une quinzaine tirés au hasard — la foule doit tenir autour, hors des
- * bâtiments. À défaut, un point de route quelconque.
- */
-function declarerFoyer() {
-    const noeuds = noeudsJeu(), carrefours = noeuds.filter(n => n.aretes.length >= 3);
-    const loinDesAutres = (x, y) => feux.foyers.every(f => f.etat === 'fini' || Math.hypot(f.x - x, f.y - y) >= FEU_ECART_M);
-    const [bx, by] = [feux.base.x, -feux.base.z];
-    let meilleur = null;
-    for (let k = 0; k < 60 && (!meilleur || k < 15); k++) {
-        let x, y;
-        if (carrefours.length && k < 45) ({ x, y } = carrefours[Math.floor(Math.random() * carrefours.length)]);
-        else { const a = areteAuHasard(jeu.graphe); [x, y] = pointArete(a, Math.random() * a.longueur); }
-        const d = Math.hypot(x - bx, y - by);
-        if (d < FEU_DISTANCE[0] || d > FEU_DISTANCE[1] || !loinDesAutres(x, y)) continue;
-        let libres = 0;
-        for (let i = 0; i < 12; i++) {
-            const a = i / 12 * 2 * Math.PI, r = (FEU_FOULE_RAYON[0] + FEU_FOULE_RAYON[1]) / 2;
-            if (placeLibre(x + r * Math.cos(a), y + r * Math.sin(a))) libres++;
-        }
-        if (!meilleur || libres > meilleur.libres) meilleur = { x, y, libres };
-    }
-    if (!meilleur) return null;
-    const f = creerFoyer(meilleur.x, meilleur.y);
-    feux.foyers.push(f);
-    feux.declares++;
-    return f;
-}
-
-/** Un foyer en (x, y) local, dans `parent` ; `avecFoule` : sa manifestation autour (les incendies). */
-function creerFoyer(x, y, parent = groupeFeux, avecFoule = true) {
+/** Un foyer en (x, y) local, dans `parent`. */
+function creerFoyer(x, y, parent) {
     const groupe = new THREE.Group();
     const sol = new THREE.Mesh(GEO_DISQUE, MAT_BRULE);
     sol.rotation.x = -Math.PI / 2;
@@ -11188,38 +11129,11 @@ function creerFoyer(x, y, parent = groupeFeux, avecFoule = true) {
         groupe.add(m);
     }
     parent.add(groupe);
-    const f = { x, y, groupe, sol, flammes, fumee: [], intensite: FEU_INTENSITE_DEPART, auMax: 0,
-                etat: 'brule', fin: 0, prochaineBouffee: 0, gens: [], parent };
-    if (avecFoule) placerFoule(f);
-    return f;
+    return { x, y, groupe, sol, flammes, fumee: [], intensite: FEU_INTENSITE_DEPART, auMax: 0,
+             etat: 'brule', fin: 0, prochaineBouffee: 0, parent };
 }
 
-/** La manifestation autour d'un foyer, tournée vers lui. */
-function placerFoule(f) {
-    const libres = [];
-    for (let i = 0; i < FOULE_MAX && libres.length < FEU_FOULE; i++) if (!foule.gens[i]) libres.push(i);
-    const pris = [];
-    for (let essai = 0; essai < 4 * FEU_FOULE && pris.length < libres.length; essai++) {
-        const a = Math.random() * 2 * Math.PI;
-        const r = FEU_FOULE_RAYON[0] + Math.random() * (FEU_FOULE_RAYON[1] - FEU_FOULE_RAYON[0]);
-        const x = f.x + r * Math.cos(a), y = f.y + r * Math.sin(a);
-        if (!placeLibre(x, y) || pris.some(p => Math.hypot(p.x - x, p.y - y) < 0.9)) continue;
-        const i = libres[pris.length];
-        const p = { i, foyer: f, x, y, phase: Math.random() * 10, pancarte: Math.random() < 0.55,
-                    etat: 'scande', depuis: 0, ex: 0, ey: 0, vx: 0, vy: 0, echelle: FEU_ECHELLE_FOULE };
-        habiller(foule, i, { torse: tire(TEINTES_HABITS), jambes: tire(TEINTES_JAMBES), tete: tire(TEINTES_PEAU),
-                             baton: 0x7a5230, pancarte: tire(TEINTES_PANCARTES) });
-        foule.gens[i] = p;
-        pris.push(p);
-    }
-    for (const m of Object.values(foule.maillages)) m.instanceColor.needsUpdate = true;
-    f.gens = pris;
-}
 const tire = l => l[Math.floor(Math.random() * l.length)];
-
-function libererPersonne(p) {
-    libererFigure(foule, p.i);
-}
 
 const mFigure = new THREE.Matrix4(), mPancarte = new THREE.Matrix4(), mLocal = new THREE.Matrix4();
 const qFigure = new THREE.Quaternion(), eFigure = new THREE.Euler(), vFigure = new THREE.Vector3(), sFigure = new THREE.Vector3();
@@ -11254,63 +11168,6 @@ function poserFigure(f, i, x, y, cap, saut, echelle, pancarte = null, bouclier =
     }
 }
 
-/** La foule à l'image suivante : elle scande, s'écarte de l'eau, applaudit, puis s'en va. */
-function majFoule(dt, t) {
-    const m = foule.maillages;
-    for (const p of foule.gens) {
-        if (!p) continue;
-        p.depuis += dt;
-        if (p.etat === 'applaudit' && p.depuis > 3) { p.etat = 'part'; p.depuis = 0; }
-        // Écartée par l'eau : une poussée amortie en une demi-seconde.
-        p.ex += p.vx * dt; p.ey += p.vy * dt;
-        const amorti = Math.exp(-dt / 0.5);
-        p.vx *= amorti; p.vy *= amorti;
-        let x = p.x + p.ex, y = p.y + p.ey, echelle = p.echelle;
-        if (p.etat === 'part') {
-            // Dispersée : elle s'éloigne du foyer à pied, et s'efface au bout de 6 s.
-            const dx = x - p.foyer.x, dy = y - p.foyer.y, l = Math.hypot(dx, dy) || 1;
-            p.x += dx / l * 1.6 * dt; p.y += dy / l * 1.6 * dt;
-            echelle *= Math.min(1, Math.max(0, (6 - p.depuis) / 1));
-            if (p.depuis > 6) { libererPersonne(p); continue; }
-        }
-        const saut = p.etat === 'applaudit' ? Math.abs(Math.sin(t * 9 + p.phase)) * 0.45
-                   : p.etat === 'scande' ? Math.abs(Math.sin(t * 4 + p.phase)) * 0.1 : Math.abs(Math.sin(t * 7 + p.phase)) * 0.05;
-        const cap = p.etat === 'part' ? Math.atan2(x - p.foyer.x, y - p.foyer.y) : Math.atan2(p.foyer.x - x, p.foyer.y - y);
-        poserFigure(foule, p.i, x, y, cap, saut, echelle, p.pancarte && p.etat !== 'part'
-            ? Math.sin(t * 2.2 + p.phase) * (p.etat === 'applaudit' ? 0.5 : 0.25) : null);
-    }
-    for (const mm of Object.values(m)) mm.instanceMatrix.needsUpdate = true;
-}
-
-/** Les flammes et la fumée d'un foyer à l'image suivante. */
-function majFoyer(f, dt, t, maintenant) {
-    const y0 = ySol(...toLonLat(f.x, f.y));
-    f.groupe.position.set(f.x, y0, -f.y);
-    if (f.etat === 'brule') {
-        f.intensite = Math.min(1, f.intensite + FEU_CROISSANCE * dt);
-        if (f.intensite >= 1) {
-            f.auMax += dt;
-            if (f.auMax > FEU_PERDU_S) perdreFoyer(f);
-        }
-    }
-    const allume = f.etat === 'brule' || f.etat === 'perdu';
-    animerFlammes(f, t, allume);
-    // Une bouffée toutes les 0,25 s au plus fort, plus rarement au début ;
-    // de la vapeur blanche, en rafale, à l'extinction. Une toutes les 0,6 s
-    // ne faisait que trois bouffées à la fois au départ : pas de colonne, et
-    // le foyer ne se voyait pas de loin.
-    if (allume && maintenant > f.prochaineBouffee) {
-        f.prochaineBouffee = maintenant + 250 / Math.max(f.intensite, 0.3);
-        bouffee(f, 0x5c5c5c, 0.7, 20);
-    }
-    animerFumee(f, dt);
-    // Éteint ou perdu depuis un moment, la foule partie : le foyer s'efface.
-    if ((f.etat === 'eteint' && maintenant > f.fin) && !f.fumee.length) {
-        groupeFeux.remove(f.groupe);
-        f.etat = 'fini';
-    }
-}
-
 /** Les flammes d'un foyer qui vacillent, à la mesure de son intensité ; éteintes si `allume` est faux. */
 function animerFlammes(f, t, allume) {
     const r = rayonFeu(f);
@@ -11337,7 +11194,7 @@ function animerFumee(f, dt) {
     }
     f.fumee = f.fumee.filter(b => {
         if (b.age < b.vie) return true;
-        (f.parent || groupeFeux).remove(b.m);
+        f.parent.remove(b.m);
         b.m.material.dispose();
         return false;
     });
@@ -11349,333 +11206,51 @@ function bouffee(f, couleur, opacite, vie, taille) {
         opacity: 0, depthWrite: false }));
     const y0 = ySol(...toLonLat(f.x, f.y));
     m.position.set(f.x + (Math.random() - 0.5) * 2, y0 + 2 + 3 * f.intensite, -f.y + (Math.random() - 0.5) * 2);
-    (f.parent || groupeFeux).add(m);
+    f.parent.add(m);
     f.fumee.push({ m, age: 0, vie, o: opacite, r0: 1.5 + 1.5 * f.intensite, r1: taille ?? 12 + 8 * f.intensite,
                    v: new THREE.Vector3(VENT.x + (Math.random() - 0.5), 3.2 + Math.random(), VENT.z + (Math.random() - 0.5)) });
 }
 
-function eteindreFoyer(f) {
-    f.etat = 'eteint';
-    f.intensite = 0;
-    f.fin = performance.now() + 9000;
-    feux.eteints++;
-    // Une vapeur légère : huit bouffées de 12 m, opaques à 0,7, faisaient une
-    // boule blanche qui mangeait le centre de l'image (film des incendies).
-    for (let i = 0; i < 5; i++) bouffee(f, 0xf2f4f6, 0.4, 3.5, 6);
-    for (const p of f.gens) if (p.etat !== 'part') { p.etat = 'applaudit'; p.depuis = Math.random() * 0.5; }
-    const restent = feux.foyers.filter(g => g.etat === 'brule').length;
-    annoncer(`Éteint !<small>la foule applaudit · ${restent} incendie${restent > 1 ? 's' : ''} en cours</small>`, 3);
-    son('touche');
-}
-
-function perdreFoyer(f) {
-    f.etat = 'perdu';
-    feux.perdus++;
-    for (const p of f.gens) if (p.etat === 'scande') { p.etat = 'part'; p.depuis = Math.random(); }
-    annoncer('Hors de contrôle<small>un foyer laissé trop longtemps au plus fort</small>', 3);
-}
-
-/** F, TIR (EAU), ou un clic : un largage, s'il reste de l'eau. */
-function larguer(maintenant) {
-    if (maintenant - feux.dernierLargage < EAU_CADENCE_S * 1000 || feux.reserve <= 0) return;
-    feux.dernierLargage = maintenant;
-    feux.reserve--;
-    const m = new THREE.Mesh(GEO_GOUTTE, MAT_GOUTTE);
-    m.position.copy(drone.position).y -= 0.5;
-    groupeFeux.add(m);
-    feux.gouttes.push({ m, v: drone.vitesse.clone().add(vFigure.set(0, -1, 0)) });
-}
-
-/** L'eau arrivée au sol en `p` : les foyers proches baissent, la foule s'écarte. */
-function eclabousser(p) {
-    const anneau = new THREE.Mesh(GEO_DISQUE, new THREE.MeshBasicMaterial({ color: 0xbfe6ff, transparent: true,
-        opacity: 0.8, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }));
-    anneau.rotation.x = -Math.PI / 2;
-    anneau.position.copy(p).y += 0.1;
-    groupeFeux.add(anneau);
-    feux.effets.push({ m: anneau, age: 0, duree: 0.6, taille: 5 });
-    son('impact');
-    const x = p.x, y = -p.z;
-    for (const f of feux.foyers) {
-        if (f.etat !== 'brule') continue;
-        if (Math.hypot(x - f.x, y - f.y) > rayonFeu(f) + 2) continue;
-        f.intensite -= FEU_EAU;
-        f.auMax = 0;
-        for (let i = 0; i < 3; i++) bouffee(f, 0xe8ecef, 0.45, 3, 5);
-        if (f.intensite <= 0) eteindreFoyer(f);
-    }
-    for (const q of foule.gens) {
-        if (!q) continue;
-        const dx = q.x + q.ex - x, dy = q.y + q.ey - y, d = Math.hypot(dx, dy);
-        if (d > EAU_ECLABOUSSURE_M) continue;
-        // Tombée juste sur lui : il s'écarte d'un côté au hasard.
-        const a = d > 1e-3 ? Math.atan2(dy, dx) : Math.random() * 2 * Math.PI;
-        q.vx += Math.cos(a) * 5; q.vy += Math.sin(a) * 5;
-    }
-}
-
-const pointChute = new THREE.Vector3(), vitesseChute = new THREE.Vector3();
-/** Où tomberait un largage lâché maintenant, sur le terrain : null s'il quitte ce qui est chargé. */
-function chutePrevue() {
-    pointChute.copy(drone.position).y -= 0.5;
-    vitesseChute.copy(drone.vitesse).y -= 1;
-    for (let i = 0; i < 300; i++) {
-        vitesseChute.y -= PESANTEUR * 0.04;
-        pointChute.addScaledVector(vitesseChute, 0.04);
-        const sol = solSous(pointChute.x, pointChute.z, false);
-        if (sol === null) return null;
-        if (pointChute.y <= sol) { pointChute.y = sol; return pointChute; }
-    }
-    return null;
-}
-
-const rayonEau = new THREE.Raycaster(), versLeBasEau = new THREE.Vector3(0, -1, 0);
-/** La réserve se remplit à la base, ou au ras de l'eau (scrutée 5 fois par seconde : ses maillages sont lourds). */
-function majReserve(dt, maintenant) {
-    const sol = drone.sol ?? drone.position.y;
-    const pres = Math.hypot(drone.position.x - feux.base.x, drone.position.z - feux.base.z) < EAU_BASE_M
-                 && drone.position.y - feux.base.y < EAU_HAUTEUR_M;
-    if (maintenant > feux.prochainEau) {
-        feux.prochainEau = maintenant + 200;
-        feux.surEau = false;
-        if (groupeEau.children.length && feux.reserve < EAU_RESERVE && drone.position.y - sol < EAU_HAUTEUR_M) {
-            rayonEau.set(drone.position, versLeBasEau);
-            rayonEau.far = EAU_HAUTEUR_M + 2;
-            feux.surEau = rayonEau.intersectObjects(groupeEau.children, false).length > 0;
-        }
-    }
-    feux.remplit = (pres || feux.surEau) && feux.reserve < EAU_RESERVE;
-    if (!feux.remplit) { feux.remplissage = 0; return; }
-    feux.remplissage += dt;
-    while (feux.remplissage >= EAU_REMPLISSAGE_S && feux.reserve < EAU_RESERVE) {
-        feux.remplissage -= EAU_REMPLISSAGE_S;
-        feux.reserve++;
-    }
-}
-
-/** Le foyer encore en feu le plus proche du drone, et sa distance. */
-function foyerLePlusProche() {
-    let meilleur = null, d = Infinity;
-    for (const f of feux.foyers) {
-        if (f.etat !== 'brule') continue;
-        const e = Math.hypot(f.x - drone.position.x, -f.y - drone.position.z);
-        if (e < d) { d = e; meilleur = f; }
-    }
-    return meilleur;
-}
-
-/** L'indice des incendies : vers le foyer le plus proche, ou vers la base, réserve vide. */
-function majIndiceFeu() {
-    const f = feux.reserve ? foyerLePlusProche() : null;
-    const [x, y] = f ? [f.x, f.y] : [feux.base.x, -feux.base.z];
-    const dx = x - drone.position.x, dz = -y - drone.position.z;
-    const distance = Math.hypot(dx, dz), azimut = Math.atan2(dx, -dz) * 180 / Math.PI;
-    const relatif = ((azimut - drone.cap * 180 / Math.PI) % 360 + 540) % 360 - 180;
-    const dessous = distance < JEU_SOUS_LE_DRONE_M;
-    const fleche = indiceJeu.querySelector('svg');
-    fleche.style.display = dessous ? 'none' : '';
-    fleche.style.transform = `rotate(${relatif.toFixed(0)}deg)`;
-    const ou = `à ${Math.round(distance / 10) * 10} m ${DIRECTIONS_CARDINALES[Math.round(((azimut + 360) % 360) / 45) % 8]}`;
-    const titre = dessous ? (f ? 'Juste en dessous : larguez !' : 'La base est sous vous') : coteIndice(relatif);
-    const detail = f ? `incendie ${ou}${f.intensite >= 1 ? ' · au plus fort' : ''}` : `réserve vide · la base ${ou}`;
-    const [span, small] = [indiceJeu.querySelector('span'), indiceJeu.querySelector('small')];
-    if (span.textContent !== titre) span.textContent = titre;
-    if (small.textContent !== detail) small.textContent = detail;
-}
-
-function nouvellePartie() {
-    for (const f of feux.foyers) {
-        groupeFeux.remove(f.groupe);
-        for (const b of f.fumee) { groupeFeux.remove(b.m); b.m.material.dispose(); }
-    }
-    for (const p of foule.gens) if (p) libererPersonne(p);
-    feux.foyers = [];
-    feux.declares = feux.eteints = feux.perdus = 0;
-    feux.reserve = EAU_RESERVE;
-    feux.relance = null;
-    feux.debut = performance.now();
-    feux.prochain = feux.debut + FEU_INTERVALLE_S * 1000;
-    feux.prochainIndice = feux.debut + JEU_INDICE_PREMIER_S * 1000;
-    for (let i = 0; i < FEU_DEPART; i++) declarerFoyer();
-    annoncer(`Des incendies dans la ville<small>éteignez-les avec l'eau du drone · `
-             + `un indice toutes les ${JEU_INDICE_S} s</small>`, 4);
-}
-
-function finDePartie(maintenant) {
-    const duree = (maintenant - feux.debut) / 1000;
-    let record = null, nouveau = false;
-    if (!feux.perdus) {
-        try {
-            record = Number(localStorage.getItem(CLE_RECORD_FEUX)) || null;
-            nouveau = !record || duree < record;
-            if (nouveau) localStorage.setItem(CLE_RECORD_FEUX, duree.toFixed(1));
-        } catch (e) { /* navigation privée : pas de record */ }
-    }
-    const bilan = `${feux.eteints} éteint${feux.eteints > 1 ? 's' : ''} sur ${feux.declares} en ${enClair(duree)}`
-        + (feux.perdus ? ` · ${feux.perdus} hors de contrôle` : nouveau ? ' · record' : record ? ` · record : ${enClair(record)}` : '');
-    annoncer(`${feux.perdus ? 'Partie terminée' : 'Ville sauvée !'}<small>${bilan}<br>`
-             + `nouvelle partie dans ${FEU_ENTRE_PARTIES_S} s</small>`, FEU_ENTRE_PARTIES_S);
-    feux.relance = maintenant + FEU_ENTRE_PARTIES_S * 1000;
-}
-
-function activerIncendies() {
-    // La scène se construit encore : ni routes, ni emprise.
-    if (!ARTEFACT || !reliefRegle) return;
-    if (!droneActif) entrerDrone();
-    jeu.graphe = jeu.graphe || grapheJeu();
-    if (!jeu.graphe.aretes.length) {
-        annoncer('Pas d\'incendies ici<small>aucune route BD TOPO dans cette scène</small>', 4);
-        return;
-    }
-    feux.actif = true;
-    btnJeu.classList.add('on');
-    groupeFeux.visible = true;
-    hudJeu.hidden = false;
-    padTir.hidden = !TACTILE;
-    padTir.textContent = 'EAU';
-    padTir.setAttribute('aria-label', 'Larguer de l\'eau');
-    aideVue.textContent = AIDE_INCENDIES;
-    detacherTip();
-    tip.style.display = 'none';
-    // La base, sous le drone qui décolle.
-    feux.base.set(drone.position.x, solSous(drone.position.x, drone.position.z, false) ?? 0, drone.position.z);
-    base.position.copy(feux.base);
-    nouvellePartie();
-}
-
-function arreterIncendies() {
-    if (!feux.actif) return;
-    feux.actif = false;
-    btnJeu.classList.remove('on');
-    groupeFeux.visible = false;
-    for (const f of feux.foyers) {
-        groupeFeux.remove(f.groupe);
-        for (const b of f.fumee) { groupeFeux.remove(b.m); b.m.material.dispose(); }
-    }
-    for (const p of foule.gens) if (p) libererPersonne(p);
-    for (const { m } of feux.gouttes) groupeFeux.remove(m);
-    for (const { m } of feux.effets) { groupeFeux.remove(m); m.material.dispose(); }
-    feux.foyers = [];
-    feux.gouttes = [];
-    feux.effets = [];
-    hudJeu.hidden = messageJeu.hidden = indiceJeu.hidden = padTir.hidden = true;
-    padTir.textContent = 'TIR';
-    padTir.setAttribute('aria-label', 'Tirer');
-    if (droneActif) aideVue.textContent = AIDE_DRONE;
-}
-
-function majIncendies(dt, maintenant) {
-    const t = maintenant / 1000;
-    if (feux.relance && maintenant > feux.relance) nouvellePartie();
-    const enFeu = feux.foyers.filter(f => f.etat === 'brule').length;
-    // Un foyer de plus toutes les FEU_INTERVALLE_S ; sans attendre, s'il n'en brûle plus aucun.
-    if (!feux.relance && feux.declares < FEU_PAR_PARTIE && enFeu < FEU_SIMULTANES
-        && (maintenant > feux.prochain || !enFeu)) {
-        const f = declarerFoyer();
-        feux.prochain = maintenant + FEU_INTERVALLE_S * 1000;
-        if (f && feux.declares > FEU_DEPART) {
-            const dx = f.x - drone.position.x, dz = -f.y - drone.position.z;
-            const az = (Math.atan2(dx, -dz) * 180 / Math.PI + 360) % 360;
-            annoncer(`Nouvel incendie<small>${DIRECTIONS_CARDINALES[Math.round(az / 45) % 8]}, `
-                     + `à ${Math.round(Math.hypot(dx, dz) / 10) * 10} m</small>`, 3);
-        }
-    }
-    if (!feux.relance && feux.declares >= FEU_PAR_PARTIE && !feux.foyers.some(f => f.etat === 'brule')) finDePartie(maintenant);
-
-    for (const f of feux.foyers) if (f.etat !== 'fini') majFoyer(f, dt, t, maintenant);
-    majFoule(dt, t);
-    majReserve(dt, maintenant);
-    if (touchesDrone.has('KeyF')) larguer(maintenant);
-
-    // L'eau en chute, freinée par rien : elle garde la vitesse du drone.
-    feux.gouttes = feux.gouttes.filter(g => {
-        g.v.y -= PESANTEUR * dt;
-        g.m.position.addScaledVector(g.v, dt);
-        g.m.lookAt(vFigure.copy(g.m.position).add(g.v));
-        g.m.scale.set(1, 1, 1.8);
-        const sol = solSous(g.m.position.x, g.m.position.z, true);
-        if (sol !== null && g.m.position.y > sol && g.m.position.y > -1000) return true;
-        if (sol !== null) { g.m.position.y = sol; eclabousser(g.m.position); }
-        groupeFeux.remove(g.m);
-        return false;
-    });
-    feux.effets = feux.effets.filter(e => {
-        e.age += dt;
-        const k = Math.min(e.age / e.duree, 1);
-        e.m.scale.setScalar(0.5 + k * e.taille);
-        e.m.material.opacity = 0.8 * (1 - k);
-        if (k < 1) return true;
-        groupeFeux.remove(e.m);
-        e.m.material.dispose();
-        return false;
-    });
-
-    // La colonne de la base sert à la retrouver de loin : au décollage, la
-    // caméra était dedans, la vue voilée de bleu.
-    base.userData.colonne.visible = Math.hypot(camera.position.x - feux.base.x, camera.position.z - feux.base.z) > 40;
-    const chute = chutePrevue();
-    reticuleEau.visible = chute !== null && feux.reserve > 0;
-    if (chute) {
-        reticuleEau.position.copy(chute).y += 0.15;
-        reticuleEau.scale.setScalar(Math.max(1, camera.position.distanceTo(chute) / 50));
-    }
-
-    if (!feux.relance && messageJeu.hidden && maintenant > feux.prochainIndice) {
-        feux.prochainIndice = maintenant + JEU_INDICE_S * 1000;
-        feux.finIndice = maintenant + JEU_INDICE_DUREE_S * 1000;
-        majIndiceFeu();
-        indiceJeu.hidden = false;
-        son('indice');
-    }
-    if (!indiceJeu.hidden && (maintenant > feux.finIndice || feux.relance)) indiceJeu.hidden = true;
-    if (!messageJeu.hidden && maintenant > jeu.finMessage) messageJeu.hidden = true;
-
-    if (maintenant - feux.hud > 150) {
-        feux.hud = maintenant;
-        if (!indiceJeu.hidden) majIndiceFeu();
-        const f = foyerLePlusProche(), chrono = Math.floor((maintenant - feux.debut) / 1000);
-        let ou = '';
-        if (f) {
-            const dx = f.x - drone.position.x, dz = -f.y - drone.position.z;
-            const relatif = (Math.atan2(dx, -dz) - drone.cap) * 180 / Math.PI;
-            ou = ` · <span class="fleche" style="transform:rotate(${relatif.toFixed(0)}deg)">↑</span>`
-               + `le plus proche à ${Math.round(Math.hypot(dx, dz))} m`;
-        }
-        const enCours = feux.foyers.filter(g => g.etat === 'brule').length;
-        hudJeu.innerHTML = `${enCours} incendie${enCours > 1 ? 's' : ''} en cours · ${feux.eteints} éteint${feux.eteints > 1 ? 's' : ''}`
-            + (feux.perdus ? ` · ${feux.perdus} hors de contrôle` : '')
-            + ` · eau ${feux.reserve}/${EAU_RESERVE}${feux.remplit ? ' (remplissage)' : feux.reserve ? '' : ' : vide, à la base ou au ras de l\'eau'}`
-            + `${ou} · ${Math.floor(chrono / 60)}:${String(chrono % 60).padStart(2, '0')}`;
-    }
-}
-
 // --- Jeu : le cortège ------------------------------------------------------------
-// Le troisième jeu du drone, au bouton « Cortège » (ou ?jeu=cortege) : mener
-// une marche pacifique de la place de la scène jusqu'à son arrivée, par les
-// rues BD TOPO, en gardant le plus de monde. Le drone ne se pilote plus : il
-// suit la tête et filme. ← → choisissent la branche au prochain carrefour,
-// ↑ ↓ la cadence, ↓ à l'arrêt fait demi-tour.
+// Le second jeu du drone, au bouton « Cortège » (ou ?jeu=cortege) : mener une
+// marche pacifique de la place de la scène jusqu'à son arrivée, par les rues
+// BD TOPO, avec le plus de monde, sans que la préfecture l'interrompe. Le
+// drone ne se pilote plus : il suit la tête et filme. ← → choisissent la
+// branche au prochain carrefour, ↑ ↓ la cadence, ↓ à l'arrêt fait demi-tour ;
+// 1 à 4 lancent un slogan, N négocie devant un cordon.
+//
+// Deux jauges font la partie. L'élan, l'énergie de la foule : les slogans le
+// nourrissent ; le silence, le soleil, l'attente et le gaz l'usent. Haut, il
+// presse le pas et entraîne les passants des trottoirs ; bas, des gens
+// rentrent chez eux. La tension, la patience de la préfecture : elle monte
+// hors du parcours déclaré, contre un cordon, après l'incident d'un casseur ;
+// à 100, la préfecture interrompt le cortège. Ce sont les enjeux des
+// manifestations de l'automne 2026 : un parcours négocié avec la préfecture,
+// des cortèges débordés par des casseurs et interrompus avant leur terme.
 //
 // La ville réelle compte. Une rue étroite étire le cortège et le ralentit,
 // un boulevard le resserre ; une montée le ralentit aussi. Au soleil, à
-// l'heure et au jour du panneau Soleil, il se fatigue et perd du monde ; à
-// l'ombre des immeubles et des arbres, il récupère. En route, des groupes
-// attendent qu'il passe les prendre ; des cordons de police ferment des
-// rues, des barricades en barrent d'autres ; des casseurs approchent par les
-// rues voisines pour s'y infiltrer, et le service d'ordre les escorte
+// l'heure et au jour du panneau Soleil, l'élan s'use ; l'ombre des immeubles
+// et des arbres l'épargne. Les passants sont d'autant plus nombreux que la
+// rue est bordée de logements et de commerces (BD TOPO) ; les slogans de la
+// ville prennent le nom de la commune et des rues. En route, des groupes
+// attendent qu'on passe les prendre ; des cordons ferment des rues ; des
+// casseurs approchent pour s'infiltrer, et le service d'ordre les escorte
 // dehors. Un casseur laissé faire met le feu, et le gaz qui répond disperse
 // ceux qui s'y trouvent. Personne n'est frappé : les cordons bloquent sans
-// charger, le gaz ne répond qu'aux incidents. Rien dans la scène ni dans le
-// cache. Les valeurs ci-dessous sont des réglages de jeu, pas des mesures.
+// charger, le gaz ne répond qu'aux incidents. À l'arrivée, un rassemblement,
+// puis le bilan. Rien dans la scène ni dans le cache. Les valeurs ci-dessous
+// sont des réglages de jeu, pas des mesures.
 const CORTEGE_EXCLUES = new Set(['Bac ou liaison maritime', 'Type autoroutier', 'Bretelle']);
 const CORTEGE_PARTICIPANTS = 1200;
 const CORTEGE_PAR_FIGURE = 10;              // participants par figure
 const CORTEGE_FIGURES_MAX = 240;            // dans les rangs
-const CORTEGE_FOULE_MAX = 360;              // avec les groupes, les cordons, les casseurs, le service d'ordre
-const CORTEGE_ECHELLE = 1.3;                // comme la foule des incendies
+const CORTEGE_FOULE_MAX = 520;              // avec les groupes, les passants, les cordons, les casseurs, le service d'ordre
+const CORTEGE_ECHELLE = 1.3;                // un peu plus grands que nature, comme Vladimir
 const CORTEGE_CADENCES = [0, 1.5, 3, 4.5];  // m/s : halte, lent, normal, rapide ; le temps du jeu file
 const CORTEGE_NOMS_CADENCES = ['halte', 'lent', 'normal', 'rapide'];
 const CORTEGE_EFFORT = [0, 0.6, 1, 1.6];    // ce que chaque cadence coûte au soleil
+const CORTEGE_TAMBOURS = [0, 96, 108, 124]; // battements par minute, à chaque cadence
 const CORTEGE_TROTTOIRS_M = 4;              // ajoutés à la chaussée : le cortège tient la rue de façade à façade
 const CORTEGE_LARGEUR_MAX = 14;
 // Par figure, au sol : 1,7 m² faisait un bloc de 12 m sur 17 sur le boulevard de
@@ -11689,31 +11264,83 @@ const CORTEGE_CHOIX_S = 10;                 // pour cliquer l'arrivée
 const CORTEGE_FORMATION_S = 4;
 const CORTEGE_ARRIVE_M = 15;
 const CORTEGE_DISPERSE = 0.2;               // du départ : en dessous, le cortège s'est dispersé
-const CORTEGE_ENTRE_PARTIES_S = 10;
+const CORTEGE_ENTRE_PARTIES_S = 14;
 const CORTEGE_VIRAGE = 25 * Math.PI / 180;  // en deçà, c'est tout droit
-// La fatigue, en points de pourcentage par seconde.
-// À 1,2, le 21 juin à 14 h, République perdait 40 % du cortège en 50 s ; à
-// 0,7, avec 0,006 de pertes, 70 % en six minutes au pilote.
-const FATIGUE_SOLEIL = 0.6;                 // plein soleil au zénith, cadence normale
-const FATIGUE_OMBRE = 0.5;                  // regagnés à l'ombre
-const FATIGUE_HALTE = 0.8;                  // regagnés à l'arrêt
-const FATIGUE_SEUIL = 50;                   // au-delà, des participants s'en vont
-const FATIGUE_PERTE = 0.004;                // part des participants par seconde, à 100 %
-const FATIGUE_LENTE = 80;                   // au-delà, lent au plus
+// L'élan, de 0 à 100, et ce qui le fait bouger, par seconde.
+const ELAN_DEPART = 60;
+const ELAN_USURE = 0.35;                    // le silence : sans slogan, la foule retombe
+const ELAN_SOLEIL = 1.0;                    // plein soleil au zénith, cadence normale
+const ELAN_OMBRE = 0.15;                    // regagnés à l'ombre
+const ELAN_CORDON = 0.6;                    // arrêté contre un cordon, sans négocier
+const ELAN_GAZ = 1.5;                       // du gaz sur les rangs
+const ELAN_BAS = 30;                        // en dessous, des participants s'en vont
+const ELAN_PERTE = 0.005;                   // part des participants par seconde, à élan nul
+const ELAN_ENTRAINE = 70;                   // au-dessus, les passants que la tête frôle se joignent d'eux-mêmes
+const ELAN_ALLURE = 0.3;                    // de la vitesse, entre élan nul et élan plein
+// La tension, de 0 à 100 : à 100, la préfecture interrompt le cortège.
+const TENSION_DEPART = 10;
+const TENSION_DETENTE = 0.3;                // par seconde, quand rien ne l'attise
+const TENSION_HORS_PARCOURS = 0.7;          // par seconde, la tête hors du parcours déclaré
+const TENSION_CORDON = 0.6;                 // par seconde, pressé contre un cordon sans négocier
+const TENSION_INFILTRE = 0.25;              // par seconde et par casseur dans les rangs
+const TENSION_INCIDENT = 22;
+const TENSION_SOMMATIONS = 70;
+// Les slogans : quatre registres, chacun sa recharge. Un registre relancé
+// juste après lui-même porte moitié moins : varier rapporte. Ceux de la
+// ville sont tirés de la commune et des rues (textesVille).
+const SLOGANS = [
+    { nom: 'Ambiance', recharge: 6, textes: ['On est là ! On est là !', 'Tous ensemble ! Tous ensemble ! Ouais ! Ouais !',
+        'Et on lâche rien ! On lâche rien !', 'Allez ! Allez ! Allez !', 'Ensemble, on est plus forts !'] },
+    { nom: 'Aux passants', recharge: 10, textes: ['Ne nous regardez pas, rejoignez-nous !', 'Avec nous ! Avec nous !',
+        'Descendez dans la rue !'] },
+    { nom: 'Calme', recharge: 12, textes: ['Pacifiques ! Pacifiques !', 'Sans violence ! Sans violence !',
+        'Restons groupés, restons calmes !'] },
+    { nom: 'La ville', recharge: 25, elanMin: 60, textes: [] },
+];
+// Un slogan porte moins quand la foule est déjà chaude : son élan est
+// multiplié par 1 − élan/130. Sans ce frein, un pilote qui enchaînait les
+// slogans tenait l'élan entre 90 et 100 toute la partie (République).
+const SLOGAN_RENDEMENT = 130;
+const SLOGAN_ELAN = 14;                     // l'ambiance
+const SLOGAN_VILLE_ELAN = 22;
+const SLOGAN_PASSANTS_ELAN = 4;
+const SLOGAN_CALME_TENSION = 14;
+const SLOGAN_PORTEE_M = 45;                 // aux passants : jusqu'où on les entend, du plus proche des rangs
+const SLOGAN_VILLE_PORTEE_M = 30;
+const SLOGAN_ISOLE_S = 10;                  // « Calme » : l'incident d'un casseur infiltré, retardé d'autant
+// Les passants : sur les trottoirs, par grappes, d'autant plus que la rue est
+// bordée de logements et de commerces ; dans une bande autour du parcours.
+const PASSANTS_GRAPPES = [14, 22];
+const PASSANTS_FIGURES = [3, 8];
+const PASSANTS_BANDE_M = 260;
+const PASSANTS_ECART_M = 35;
+const PASSANTS_VUS_M = 220;                 // de la tête : leur nombre s'affiche au-dessus d'eux
+const MAILLE_DENSITE = 20;
+// La négociation devant un cordon : un sit-in, que la tension fait échouer.
+const NEGOCIATION_S = 14;                   // à tension basse et élan correct
+const NEGOCIATION_MAX_S = 30;
+const NEGOCIATION_REFUS = 80;               // de tension : la préfecture refuse
+const NEGOCIATION_CALME = 0.22;             // de la négociation, à chaque « Calme »
+// Le rassemblement, à l'arrivée.
+const RASSEMBLEMENT_S = 18;
 const OMBRE_PORTEE_M = 300;
 const OMBRE_TESTS_PAR_IMAGE = 3;
 const MAILLE_ARBRES = 20;
-// Les points de mobilisation : des groupes qui attendent le cortège.
-const GROUPES_CORTEGE = [{ nom: 'Les étudiants', teinte: 0xf1c40f }, { nom: 'Les soignants', teinte: 0x3498db },
-                         { nom: 'Les habitants du quartier', teinte: 0x27ae60 }];
+// Les points de mobilisation : des groupes qui attendent le cortège, trois
+// tirés parmi ceux-ci. Les cortèges de l'automne 2026 les mêlaient tous.
+const GROUPES_CORTEGE = [{ nom: 'Les lycéens', teinte: 0x9b59b6 }, { nom: 'Les soignants', teinte: 0x5dade2 },
+                         { nom: 'Les gilets jaunes', teinte: 0xf4e04d }, { nom: 'Les agriculteurs', teinte: 0x27ae60 },
+                         { nom: 'Les habitants du quartier', teinte: 0xe67e22 }];
 const GROUPE_FIGURES = [18, 24];
 const GROUPE_ECART_M = [40, 180];           // du plus court chemin
 const GROUPE_ATTENTE_S = [120, 200];
 const GROUPE_RALLIE_M = 25;
+const GROUPE_ELAN = 10;
 // Les cordons et les barricades.
 const CORDON_POLICIERS = 9;
 const CORDON_CONTACT_M = 8;
-const CORDON_PERTE = 0.008;                 // part des participants par seconde, arrêté devant
+const CORDON_PERTE = 0.004;                 // part des participants par seconde, arrêté devant
+const CORDON_LATERAUX = 3;                  // des rues qui partent du parcours, fermées d'emblée
 const CORDON_DEVIATIONS = 2;
 const CORDON_DEVIATION_S = [50, 110];       // de la marche à la première déviation, puis entre deux
 const CORDON_DEVIATION_M = [120, 250];      // devant la tête, par la route
@@ -11751,18 +11378,26 @@ const GAZ_DEPART = 0.05;                    // chance par seconde qu'une figure 
 const FEU_CORTEGE_S = 40;
 const FEU_GENE_M = 8;                       // la tête plus près ralentit
 const FEU_ECART_FIGURES_M = 6;
-const SCORE_ECARTE = 100;
+// Le bilan : des points par participant arrivé, par point d'élan moyen, par
+// casseur écarté ; des points en moins par incident et par seconde de retard.
+const SCORE_ELAN = 20;
+// 100 points par casseur écarté faisaient plus de la moitié du score d'un
+// cortège muet, au service d'ordre parfait (Gordes, 1 000 sur 1 822).
+const SCORE_ECARTE = 40;
+const SCORE_INCIDENT = 150;
 const SCORE_RETARD = 2;                     // points par seconde au-delà du temps de référence
 const SCORE_MARGE = 1.3;                    // le temps de référence : le plus court chemin, cadence normale
 const CLE_RECORD_CORTEGE = 'vue3d.cortege-record';
+const CLE_SON_CORTEGE = 'vue3d.cortege-son';
 const AIDE_CORTEGE = AU_DOIGT
     ? 'Cortège : ↶ ↷ la branche au prochain carrefour · ↑ ↓ la cadence, ↓ à l\'arrêt pour demi-tour · '
-      + 'S.O., ou toucher un casseur, pour le service d\'ordre · le bouton Cortège pour arrêter'
+      + 'les slogans en bas · S.O., ou toucher un casseur, pour le service d\'ordre · le bouton Cortège pour arrêter'
     : 'Cortège : ← → la branche au prochain carrefour · ↑ ↓ la cadence, ↓ à l\'arrêt pour demi-tour · '
-      + 'F, ou un clic sur un casseur, pour le service d\'ordre · molette pour la vue · '
-      + 'l\'heure du panneau Soleil déplace les ombres · Échap pour sortir';
+      + '1 à 4 les slogans · N négocier devant un cordon · F, ou un clic sur un casseur, pour le service d\'ordre · '
+      + 'M le son · molette pour la vue · Échap pour sortir';
 
 const btnCortege = document.getElementById('t-cortege');
+const barreCortege = document.getElementById('barre-cortege');
 const groupeCortege = new THREE.Group();
 groupeCortege.visible = false;
 scene.add(groupeCortege);
@@ -11899,25 +11534,22 @@ function capArrivee(a, sens, l = 6) {
 }
 
 /**
- * La branche prise au nœud `n`, venu par `venue` dans le sens `sens` : celle
- * que désigne le choix du joueur (−1 à gauche, 0 tout droit, 1 à droite),
- * sinon la plus droite ; null dans une impasse. `tourne` : l'angle du virage,
- * positif à droite.
+ * La branche prise au nœud `n`, venu par `venue` dans le sens `sens` : les
+ * branches rangées de gauche à droite, celle qui est à `choix` crans de la
+ * plus droite (−1 la suivante à gauche, 1 à droite), au bord si `choix`
+ * dépasse ; null dans une impasse. `tourne` : l'angle du virage, positif à
+ * droite. Le choix ne pouvait désigner que la plus à gauche ou la plus à
+ * droite : dans les ruelles de Gordes, la branche du parcours déclaré était
+ * parfois hors d'atteinte.
  */
 function brancheCortege(n, venue, sens, choix) {
     const options = n.aretes.filter(a => a !== venue);
     if (!options.length) return null;
     const arrivee = capArrivee(venue, sens);
-    const branches = options.map(a => ({ arete: a, tourne: ecartAngle(capIssue(n, a), arrivee) }));
-    const droite = branches.reduce((u, v) => (Math.abs(v.tourne) < Math.abs(u.tourne) ? v : u));
-    if (choix > 0) {
-        const b = branches.reduce((u, v) => (v.tourne > u.tourne ? v : u));
-        if (b.tourne > CORTEGE_VIRAGE) return b;
-    } else if (choix < 0) {
-        const b = branches.reduce((u, v) => (v.tourne < u.tourne ? v : u));
-        if (b.tourne < -CORTEGE_VIRAGE) return b;
-    }
-    return droite;
+    const branches = options.map(a => ({ arete: a, tourne: ecartAngle(capIssue(n, a), arrivee) }))
+        .sort((u, v) => u.tourne - v.tourne);
+    const droite = branches.reduce((k, b, i) => (Math.abs(b.tourne) < Math.abs(branches[k].tourne) ? i : k), 0);
+    return branches[Math.min(Math.max(droite + choix, 0), branches.length - 1)];
 }
 
 /** Le côté d'un virage, en clair. */
@@ -11976,6 +11608,537 @@ function surChemin(chemin, x) {
     return null;
 }
 
+// --- Le son du cortège ---
+// Tout de synthèse, comme les bips des jeux (son), et sur le même contexte :
+// un brouhaha continu, des tambours au pas, des sifflets, et les slogans,
+// lancés au mégaphone puis repris en chœur. Le chœur suit le rythme, la
+// mélodie et les voyelles du slogan : chaque syllabe est une voyelle — trois
+// formants qui filtrent une quinzaine de voix désaccordées, en trois rangs
+// décalés de quelques centièmes de seconde —, attaquée par sa consonne, un
+// souffle de bruit. Il ne se comprend pas : le texte s'affiche au-dessus du
+// cortège. Le volume suit la foule et son élan.
+const FORMANTS = { a: [750, 1250, 2500], e: [480, 1350, 2450], é: [400, 1950, 2600], è: [580, 1750, 2500],
+                   i: [290, 2250, 3000], o: [450, 850, 2450], ou: [320, 760, 2300], u: [300, 1750, 2150],
+                   an: [650, 1050, 2500], on: [450, 800, 2350], in: [580, 1450, 2500] };
+// Les graphies d'une voyelle, les plus longues d'abord ; une nasale (an, on…)
+// ne l'est que devant une consonne autre que n ou m, ou en fin de mot.
+const NOYAUX = [['eau', 'o'], ['ain', 'in'], ['ein', 'in'], ['oin', 'in'], ['aim', 'in'], ['ou', 'ou'], ['où', 'ou'],
+                ['oi', 'a'], ['au', 'o'], ['ai', 'è'], ['ei', 'è'], ['eu', 'e'], ['œu', 'e'], ['ui', 'i'],
+                ['an', 'an'], ['am', 'an'], ['en', 'an'], ['em', 'an'], ['on', 'on'], ['om', 'on'], ['in', 'in'],
+                ['im', 'in'], ['un', 'in'], ['a', 'a'], ['à', 'a'], ['â', 'a'], ['é', 'é'], ['è', 'è'], ['ê', 'è'],
+                ['ë', 'è'], ['e', 'e'], ['i', 'i'], ['î', 'i'], ['ï', 'i'], ['y', 'i'], ['o', 'o'], ['ô', 'o'],
+                ['u', 'u'], ['û', 'u'], ['ù', 'u']];
+const EST_VOYELLE = /[aàâeéèêëiîïoôuûùyœ]/;
+
+/** La consonne qui attaque une syllabe, en famille de bruit : p (occlusive), s, ch, f, l (liquide, nasale), null. */
+function classeConsonne(groupe, noyau) {
+    if (!groupe) return null;
+    if (groupe.endsWith('ch')) return 'ch';
+    const c = groupe.length >= 2 && /[lr]$/.test(groupe) && /[bcdfgkptv]/.test(groupe.at(-2)) ? groupe.at(-2) : groupe.at(-1);
+    const doux = /^[eéèêiîy]/.test(noyau);
+    if (c === 'c') return doux ? 's' : 'p';
+    if (c === 'g') return doux ? 'ch' : 'p';
+    if ('ptkbdq'.includes(c)) return 'p';
+    if ('sçxz'.includes(c)) return 's';
+    if ('jh'.includes(c)) return 'ch';
+    if ('fv'.includes(c)) return 'f';
+    return 'l';
+}
+
+/** Les syllabes d'un mot, à la française et en gros : { v, c }, la voyelle et sa consonne d'attaque. */
+function syllabesMot(mot, attaque = '') {
+    const w = mot.toLocaleLowerCase('fr').replace(/œ/g, 'œ');
+    if (w === 'et') return { syl: [{ v: 'é', c: classeConsonne(attaque, 'é') }], reste: '' };
+    const syl = [];
+    let i = 0;
+    while (i < w.length) {
+        const ch = w[i];
+        // « qu », « gu » devant une voyelle : le u ne se prononce pas.
+        if (!EST_VOYELLE.test(ch) || (ch === 'u' && /[qg]$/.test(attaque) && EST_VOYELLE.test(w[i + 1] || ''))) {
+            attaque += ch;
+            i++;
+            continue;
+        }
+        let g = ch, v = 'e';
+        for (const [graphie, son] of NOYAUX) {
+            if (!w.startsWith(graphie, i)) continue;
+            const apres = w[i + graphie.length];
+            if (/[nm]$/.test(graphie) && graphie.length > 1 && apres && (EST_VOYELLE.test(apres) || apres === 'n' || apres === 'm')) continue;
+            [g, v] = [graphie, son];
+            break;
+        }
+        const reste = w.slice(i + g.length);
+        if (g === 'e') {
+            // Le e muet de la fin (« bande », « restes ») : chanté après un groupe (« ensemble »).
+            if (syl.length && /^(s|nt)?$/.test(reste) && !/[bcdfgkptv][lr]$/.test(attaque)) break;
+            if (/^(r|z|t)$/.test(reste)) v = 'é';
+            else if (/^[^aàâeéèêëiîïoôuûùy]{2}/.test(reste) || /^[^aàâeéèêëiîïoôuûùy]+$/.test(reste)) v = 'è';
+        }
+        syl.push({ v, c: classeConsonne(attaque, g) });
+        attaque = '';
+        i += g.length;
+    }
+    // Un mot sans voyelle (« l' », « d' ») prête ses consonnes au suivant.
+    return { syl, reste: syl.length ? '' : attaque };
+}
+
+/**
+ * Le rythme d'un slogan : ses syllabes, phrase par phrase (une phrase finit
+ * sur une ponctuation), chacune d'un temps, la dernière de la phrase de deux,
+ * puis un silence après un « ! ». La mélodie : deux notes, la dernière
+ * syllabe d'une phrase une tierce plus haut, sa réponse un ton plus bas.
+ */
+function rythmeSlogan(texte) {
+    const syl = [];
+    const phrases = texte.replace(/-/g, ' ').match(/[^!?.,;:]+[!?.,;:]*/g) || [];
+    phrases.forEach((phrase, k) => {
+        const fin = phrase.trim().slice(-1);
+        let attaque = '';
+        const debut = syl.length;
+        for (const mot of phrase.replace(/[!?.,;:]/g, ' ').split(/[\s']+/).filter(Boolean)) {
+            const r = syllabesMot(mot, attaque);
+            attaque = r.reste;
+            for (const s of r.syl) syl.push({ ...s, duree: 1, ton: 0, silence: 0 });
+        }
+        if (syl.length === debut) return;
+        const der = syl.at(-1);
+        der.duree = 2;
+        der.ton = k % 2 ? -2 : 3;
+        der.silence = fin === '!' ? 1 : fin === ',' ? 0.5 : 0;
+    });
+    return syl;
+}
+
+const sonCortege = { ctx: null, coupe: false, maitre: null, sec: null, blanc: null, rose: null, bravos: null,
+                     brouhaha: null, prochainTemps: 0, temps: 0, prochainSifflet: 0, prochainMurmure: 0,
+                     prochaineHoule: 0 };
+// La saturation d'un mégaphone.
+const COURBE_MEGAPHONE = (() => {
+    const n = 1024, c = new Float32Array(n);
+    for (let i = 0; i < n; i++) { const x = i / (n - 1) * 2 - 1; c[i] = Math.tanh(3 * x); }
+    return c;
+})();
+
+/** Un tampon de bruit de `duree` s : blanc, ou rose (filtré à −3 dB par octave). */
+function tamponBruit(ctx, duree, rose = false) {
+    const n = Math.round(ctx.sampleRate * duree), t = ctx.createBuffer(1, n, ctx.sampleRate), d = t.getChannelData(0);
+    let b0 = 0, b1 = 0, b2 = 0;
+    for (let i = 0; i < n; i++) {
+        const w = Math.random() * 2 - 1;
+        if (!rose) { d[i] = w; continue; }
+        b0 = 0.99765 * b0 + w * 0.099046;
+        b1 = 0.963 * b1 + w * 0.2965164;
+        b2 = 0.57 * b2 + w * 1.0526913;
+        d[i] = (b0 + b1 + b2 + w * 0.1848) * 0.2;
+    }
+    return t;
+}
+
+/** L'écho de la rue : un bruit stéréo qui décroît en `duree` s. */
+function impulsionRue(ctx, duree) {
+    const n = Math.round(ctx.sampleRate * duree), t = ctx.createBuffer(2, n, ctx.sampleRate);
+    for (let c = 0; c < 2; c++) {
+        const d = t.getChannelData(c);
+        for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n) ** 2.5 * (i < 200 ? i / 200 : 1);
+    }
+    return t;
+}
+
+/** Des applaudissements : des claquements au hasard, 1 500 par seconde, sur `duree` s. */
+function tamponBravos(ctx, duree) {
+    const sr = ctx.sampleRate, n = Math.round(sr * duree), t = ctx.createBuffer(1, n, sr), d = t.getChannelData(0);
+    const claque = Math.round(sr * 0.004);
+    for (let k = 0; k < duree * 1500; k++) {
+        const p = Math.floor(Math.random() * (n - claque)), a = 0.2 + Math.random() * 0.8;
+        for (let i = 0; i < claque; i++) d[p + i] += (Math.random() * 2 - 1) * a * (1 - i / claque) ** 2;
+    }
+    for (let i = 0; i < n; i++) d[i] *= 0.7;
+    return t;
+}
+
+/**
+ * Le graphe du son, branché sur `ctx` et `sortie` : un maître, un
+ * compresseur qui évite la saturation quand tout sonne à la fois, l'écho de
+ * la rue en dérivation. Rend sonCortege, prêt.
+ */
+function brancherSonCortege(ctx, sortie) {
+    const S = sonCortege;
+    S.ctx = ctx;
+    S.maitre = ctx.createGain();
+    S.maitre.gain.value = S.coupe ? 0 : VOLUME_CORTEGE;
+    const compresseur = ctx.createDynamicsCompressor();
+    compresseur.threshold.value = -16;
+    compresseur.ratio.value = 4;
+    S.maitre.connect(compresseur).connect(sortie);
+    const echo = ctx.createConvolver();
+    echo.buffer = impulsionRue(ctx, 1.6);
+    const retour = ctx.createGain();
+    retour.gain.value = 0.28;
+    echo.connect(retour).connect(S.maitre);
+    S.sec = ctx.createGain();
+    S.sec.connect(S.maitre);
+    S.sec.connect(echo);
+    S.blanc = S.blanc && S.blanc.sampleRate === ctx.sampleRate ? S.blanc : tamponBruit(ctx, 3);
+    S.rose = S.rose && S.rose.sampleRate === ctx.sampleRate ? S.rose : tamponBruit(ctx, 4, true);
+    S.bravos = S.bravos && S.bravos.sampleRate === ctx.sampleRate ? S.bravos : tamponBravos(ctx, 3);
+    // Le brouhaha : du bruit rose dans deux bandes de la voix, dont la houle
+    // et le timbre bougent au hasard ; des murmures s'y ajoutent (majSonCortege).
+    const src = ctx.createBufferSource();
+    src.buffer = S.rose;
+    src.loop = true;
+    const houle = ctx.createGain(), volume = ctx.createGain();
+    volume.gain.value = 0;
+    const bandes = [[420, 0.8, 0.9], [1300, 1.2, 0.45]].map(([f, q, g]) => {
+        const b = ctx.createBiquadFilter();
+        b.type = 'bandpass';
+        b.frequency.value = f;
+        b.Q.value = q;
+        const n = ctx.createGain();
+        n.gain.value = g;
+        src.connect(b).connect(n).connect(houle);
+        return b;
+    });
+    houle.connect(volume).connect(S.sec);
+    src.start();
+    S.brouhaha = { src, houle, volume, aigu: bandes[1] };
+    S.prochainTemps = ctx.currentTime + 0.1;
+    S.temps = 0;
+    return S;
+}
+
+/**
+ * `syl` (rythmeSlogan) chanté à partir de `t0`, `temps` s la syllabe : par
+ * une voix au mégaphone, ou par le chœur, en trois rangs décalés. `hauteur` :
+ * un facteur sur la note. Rend la fin, en temps audio.
+ */
+function chanter(S, syl, t0, temps, volume, megaphone = false, hauteur = 1) {
+    const ctx = S.ctx;
+    const fin = t0 + syl.reduce((d, s) => d + s.duree + s.silence, 0) * temps + 0.4;
+    // Le mégaphone sature avant son volume : la saturation ne dépend pas de lui.
+    const sortie = ctx.createGain(), niveau = ctx.createGain();
+    sortie.gain.value = megaphone ? 0.6 : 1;
+    niveau.gain.value = volume;
+    if (megaphone) {
+        const sature = ctx.createWaveShaper(), haut = ctx.createBiquadFilter(), bas = ctx.createBiquadFilter();
+        sature.curve = COURBE_MEGAPHONE;
+        haut.type = 'highpass';
+        haut.frequency.value = 480;
+        bas.type = 'lowpass';
+        bas.frequency.value = 3200;
+        sortie.connect(sature).connect(haut).connect(bas).connect(niveau);
+    } else sortie.connect(niveau);
+    niveau.connect(S.sec);
+    const rangs = megaphone ? 1 : 3, parRang = megaphone ? 1 : 5;
+    for (let r = 0; r < rangs; r++) {
+        const decale = megaphone ? 0 : r * 0.024 + Math.random() * 0.012;
+        const bus = ctx.createGain(), env = ctx.createGain();
+        bus.gain.value = 1 / parRang;
+        env.gain.value = 0.0001;
+        const filtres = [[6, 4], [9, 3], [10, 1.6]].map(([q, g]) => {
+            const f = ctx.createBiquadFilter(), n = ctx.createGain();
+            f.type = 'bandpass';
+            f.Q.value = q;
+            n.gain.value = g;
+            bus.connect(f).connect(n).connect(env);
+            return f;
+        });
+        env.connect(sortie);
+        const vibrato = ctx.createOscillator(), profondeur = ctx.createGain();
+        vibrato.frequency.value = 4.5 + Math.random() * 1.5;
+        profondeur.gain.value = megaphone ? 2 : 5;
+        vibrato.connect(profondeur);
+        const voix = [];
+        for (let k = 0; k < parRang; k++) {
+            const o = ctx.createOscillator();
+            o.type = 'sawtooth';
+            // Des voix d'hommes et de femmes, à l'octave, un peu fausses.
+            const base = megaphone ? 150 : (k % 2 ? 220 : 112) * (1 + (Math.random() - 0.5) * 0.05);
+            profondeur.connect(o.frequency);
+            o.connect(bus);
+            voix.push({ o, base });
+        }
+        let t = t0 + decale;
+        for (const s of syl) {
+            const d = s.duree * temps, [f1, f2, f3] = FORMANTS[s.v];
+            filtres[0].frequency.setTargetAtTime(f1, t, 0.012);
+            filtres[1].frequency.setTargetAtTime(f2, t, 0.012);
+            filtres[2].frequency.setTargetAtTime(f3, t, 0.012);
+            const note = 2 ** (s.ton / 12) * hauteur;
+            for (const { o, base } of voix) o.frequency.setTargetAtTime(base * note, t, 0.02);
+            env.gain.setValueAtTime(0.0001, t);
+            env.gain.linearRampToValueAtTime(1, t + (s.c === 'l' ? 0.05 : 0.025));
+            env.gain.setValueAtTime(1, t + d * 0.7);
+            env.gain.linearRampToValueAtTime(0.0001, t + d * 0.92);
+            if (r === 0 && s.c) consonne(S, s.c, t, sortie, megaphone ? 1 : 1.6);
+            t += d + s.silence * temps;
+        }
+        for (const { o } of voix) { o.start(t0); o.stop(fin); }
+        vibrato.start(t0);
+        vibrato.stop(fin);
+    }
+    return fin;
+}
+
+/** Une consonne avant la voyelle qui commence à `t` : un souffle de bruit filtré selon sa famille. */
+function consonne(S, c, t, sortie, niveau) {
+    const ctx = S.ctx;
+    const [type, frequence, duree, gain] = { p: ['bandpass', 1800, 0.03, 0.7], s: ['highpass', 4500, 0.08, 0.45],
+        ch: ['bandpass', 2600, 0.08, 0.45], f: ['highpass', 1600, 0.06, 0.25], l: ['lowpass', 500, 0.04, 0.12] }[c];
+    const src = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+    src.buffer = S.blanc;
+    f.type = type;
+    f.frequency.value = frequence;
+    const debut = Math.max(ctx.currentTime, t - duree);
+    g.gain.setValueAtTime(0.0001, debut);
+    g.gain.linearRampToValueAtTime(gain * niveau, Math.max(debut + 0.005, t - duree * 0.3));
+    g.gain.linearRampToValueAtTime(0.0001, t + 0.015);
+    src.connect(f).connect(g).connect(sortie);
+    src.start(debut, Math.random() * 2);
+    src.stop(t + 0.03);
+}
+
+/**
+ * Un slogan lancé au mégaphone, puis repris deux fois par le chœur (une
+ * fois s'il est long). Rend son programme, en secondes depuis le départ :
+ * sa durée, et les syllabes du chœur, que les figures marquent en sautant.
+ */
+function programmeSlogan(texte) {
+    const syl = rythmeSlogan(texte);
+    const battements = syl.reduce((d, s) => d + s.duree + s.silence, 0);
+    const appel = { t0: 0.1, temps: 0.2 };
+    const debutChoeur = appel.t0 + battements * appel.temps + 0.35;
+    // Un slogan se répète déjà (« On est là ! On est là ! ») : le chœur le
+    // reprend une fois ; deux fois s'il est court. Plus, il durait 8 à 11 s.
+    const reprises = battements > 9 ? 1 : 2;
+    const temps = 0.27;
+    const choeurs = [], pulsations = [];
+    for (let k = 0; k < reprises; k++) {
+        const t0 = debutChoeur + k * battements * temps;
+        choeurs.push({ t0, temps });
+        let t = t0;
+        for (const s of syl) { pulsations.push({ t, d: s.duree * temps }); t += (s.duree + s.silence) * temps; }
+    }
+    return { syl, appel, choeurs, pulsations, debutChoeur, duree: debutChoeur + reprises * battements * temps + 0.3 };
+}
+
+/** Le programme joué : l'appel, puis le chœur, au volume de la foule (`force`, de 0 à 1,5). */
+function jouerSlogan(S, prog, force, t0 = S.ctx.currentTime) {
+    chanter(S, prog.syl, t0 + prog.appel.t0, prog.appel.temps, 0.3, true);
+    for (const c of prog.choeurs) chanter(S, prog.syl, t0 + c.t0, c.temps, 0.5 * force);
+}
+
+/** Une grosse caisse à `t` : une sinusoïde qui tombe de 120 à 48 Hz. */
+function grosseCaisse(S, t, niveau) {
+    const ctx = S.ctx, o = ctx.createOscillator(), g = ctx.createGain();
+    o.frequency.setValueAtTime(120, t);
+    o.frequency.exponentialRampToValueAtTime(48, t + 0.14);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(0.9 * niveau, t + 0.005);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.38);
+    o.connect(g).connect(S.sec);
+    o.start(t);
+    o.stop(t + 0.4);
+}
+
+/** Une caisse claire à `t` : un claquement de bruit sur une note courte. */
+function caisseClaire(S, t, niveau) {
+    const ctx = S.ctx, src = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+    src.buffer = S.blanc;
+    f.type = 'bandpass';
+    f.frequency.value = 2800;
+    f.Q.value = 0.7;
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(0.55 * niveau, t + 0.003);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
+    src.connect(f).connect(g).connect(S.sec);
+    src.start(t, Math.random() * 2);
+    src.stop(t + 0.18);
+    const o = ctx.createOscillator(), go = ctx.createGain();
+    o.type = 'triangle';
+    o.frequency.value = 190;
+    go.gain.setValueAtTime(0.3 * niveau, t);
+    go.gain.exponentialRampToValueAtTime(0.0001, t + 0.08);
+    o.connect(go).connect(S.sec);
+    o.start(t);
+    o.stop(t + 0.1);
+}
+
+/** Un coup de sifflet à `t`, ou deux, ou trois (« tu-tu-tuuu »). */
+function sifflet(S, t, niveau) {
+    const ctx = S.ctx, coups = Math.random() < 0.4 ? 3 : Math.random() < 0.5 ? 2 : 1;
+    const f0 = 2700 + Math.random() * 700;
+    for (let k = 0; k < coups; k++) {
+        const long = k === coups - 1 ? 0.35 + Math.random() * 0.5 : 0.12;
+        const o = ctx.createOscillator(), roulette = ctx.createOscillator(), prof = ctx.createGain(), g = ctx.createGain();
+        o.frequency.value = f0;
+        // La bille du sifflet : un trille rapide.
+        roulette.frequency.value = 22 + Math.random() * 8;
+        prof.gain.value = 140;
+        roulette.connect(prof).connect(o.frequency);
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.linearRampToValueAtTime(0.07 * niveau, t + 0.012);
+        g.gain.setValueAtTime(0.07 * niveau, t + long - 0.03);
+        g.gain.linearRampToValueAtTime(0.0001, t + long);
+        o.connect(g).connect(S.sec);
+        o.start(t);
+        roulette.start(t);
+        o.stop(t + long + 0.02);
+        roulette.stop(t + long + 0.02);
+        t += long + 0.07;
+    }
+}
+
+/** Le deux-tons d'un fourgon, sur `duree` s. */
+function sirene(S, t, duree, niveau = 1) {
+    const ctx = S.ctx, o = ctx.createOscillator(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+    o.type = 'square';
+    for (let k = 0; k * 0.55 < duree; k++) o.frequency.setValueAtTime(k % 2 ? 580 : 435, t + k * 0.55);
+    f.type = 'lowpass';
+    f.frequency.value = 1800;
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(0.05 * niveau, t + 0.05);
+    g.gain.setValueAtTime(0.05 * niveau, t + duree - 0.2);
+    g.gain.linearRampToValueAtTime(0.0001, t + duree);
+    o.connect(f).connect(g).connect(S.sec);
+    o.start(t);
+    o.stop(t + duree + 0.05);
+}
+
+/** Des applaudissements sur `duree` s, et un « ouais ! » si `cri`. */
+function applaudir(S, t, duree, niveau, cri = true) {
+    const ctx = S.ctx, src = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+    src.buffer = S.bravos;
+    src.loop = true;
+    f.type = 'bandpass';
+    f.frequency.value = 2200;
+    f.Q.value = 0.6;
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(niveau, t + 0.25);
+    g.gain.setValueAtTime(niveau, t + duree * 0.6);
+    g.gain.linearRampToValueAtTime(0.0001, t + duree);
+    src.connect(f).connect(g).connect(S.sec);
+    src.start(t, Math.random() * 2);
+    src.stop(t + duree + 0.05);
+    if (cri) chanter(S, [{ v: 'ou', c: null, duree: 0.7, ton: 0, silence: 0 }, { v: 'è', c: null, duree: 3, ton: 5, silence: 0 }],
+                     t + 0.05, 0.22, 0.9 * niveau);
+}
+
+/** Un murmure, dans le brouhaha : une voix seule, une voyelle au hasard, à peine audible. */
+function murmure(S, t, niveau) {
+    const ctx = S.ctx, voyelles = Object.keys(FORMANTS), v = voyelles[Math.floor(Math.random() * voyelles.length)];
+    const o = ctx.createOscillator(), g = ctx.createGain(), d = 0.12 + Math.random() * 0.25;
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime((Math.random() < 0.5 ? 105 : 200) * (0.85 + Math.random() * 0.4), t);
+    o.frequency.linearRampToValueAtTime(o.frequency.value * (0.9 + Math.random() * 0.2), t + d);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(niveau, t + 0.03);
+    g.gain.linearRampToValueAtTime(0.0001, t + d);
+    for (const [k, fr] of FORMANTS[v].slice(0, 2).entries()) {
+        const f = ctx.createBiquadFilter();
+        f.type = 'bandpass';
+        f.frequency.value = fr;
+        f.Q.value = 7;
+        o.connect(f).connect(g);
+        if (k) f.gain.value = 0.5;
+    }
+    g.connect(S.sec);
+    o.start(t);
+    o.stop(t + d + 0.02);
+}
+
+/**
+ * À chaque image : la houle du brouhaha, ses murmures, les tambours au pas,
+ * les sifflets. `etat` : { foule, elan (0 à 1), bpm (0 : pas de tambours),
+ * proche (0 à 1, la caméra près du cortège) }.
+ */
+function majSonCortege(S, etat) {
+    const ctx = S.ctx, now = ctx.currentTime;
+    const { foule, elan, bpm, proche } = etat;
+    const niveau = proche * Math.min(1.5, Math.sqrt(Math.max(foule, 0) / 1200));
+    if (now > S.prochaineHoule) {
+        S.prochaineHoule = now + 0.12;
+        const b = S.brouhaha;
+        b.houle.gain.setTargetAtTime(0.7 + Math.random() * 0.6, now, 0.08);
+        b.aigu.frequency.setTargetAtTime(1100 + Math.random() * 500, now, 0.2);
+        b.volume.gain.setTargetAtTime(0.35 * niveau * (0.6 + 0.6 * elan), now, 0.4);
+    }
+    if (now > S.prochainMurmure) {
+        S.prochainMurmure = now + 1 / (3 + 12 * elan) * (0.5 + Math.random());
+        if (niveau > 0.05) murmure(S, now + 0.02, 0.06 * niveau);
+    }
+    if (bpm > 0) {
+        if (S.prochainTemps < now) S.prochainTemps = now + 0.05;
+        while (S.prochainTemps < now + 0.2) {
+            const t = S.prochainTemps, b = S.temps % 8, n = niveau * (0.35 + 0.65 * elan);
+            if (b === 0 || b === 4 || (elan > 0.65 && b === 6)) grosseCaisse(S, t, 0.5 * n);
+            if (b === 2 || b === 6) caisseClaire(S, t, 0.5 * n);
+            if (elan > 0.5 && (b === 3 || b === 7)) caisseClaire(S, t, 0.15 * n);
+            S.temps++;
+            S.prochainTemps = t + 30 / bpm;
+        }
+    } else S.prochainTemps = 0;
+    if (now > S.prochainSifflet) {
+        S.prochainSifflet = now + (1.5 + Math.random() * 6) / Math.max(elan, 0.1);
+        if (elan > 0.25) sifflet(S, now + 0.05, niveau);
+    }
+}
+
+const VOLUME_CORTEGE = 0.75;
+try { sonCortege.coupe = localStorage.getItem(CLE_SON_CORTEGE) === 'coupe'; } catch (e) { /* navigation privée */ }
+
+/** Le son branché sur le contexte des jeux, s'il peut l'être : un geste doit l'avoir précédé. */
+function demarrerSonCortege() {
+    if (sonCortege.maitre) return true;
+    try {
+        if (!audioJeu && navigator.userActivation && !navigator.userActivation.hasBeenActive) return false;
+        audioJeu = audioJeu || new AudioContext();
+        if (audioJeu.state === 'suspended') audioJeu.resume();
+        brancherSonCortege(audioJeu, audioJeu.destination);
+        return true;
+    } catch (e) { return false; }
+}
+
+/** Le son éteint en un dixième de seconde, puis débranché. */
+function arreterSonCortege() {
+    const S = sonCortege;
+    if (!S.maitre) return;
+    const maitre = S.maitre, src = S.brouhaha.src;
+    maitre.gain.setTargetAtTime(0, S.ctx.currentTime, 0.08);
+    setTimeout(() => { try { src.stop(); maitre.disconnect(); } catch (e) { /* déjà arrêté */ } }, 600);
+    S.maitre = S.sec = S.brouhaha = null;
+}
+
+/** M, ou le bouton : le son coupé ou rendu, retenu pour la visite suivante. */
+function basculerSonCortege() {
+    const S = sonCortege;
+    S.coupe = !S.coupe;
+    try { localStorage.setItem(CLE_SON_CORTEGE, S.coupe ? 'coupe' : 'actif'); } catch (e) { /* navigation privée */ }
+    if (S.maitre) S.maitre.gain.setTargetAtTime(S.coupe ? 0 : VOLUME_CORTEGE, S.ctx.currentTime, 0.05);
+    majBoutonSon();
+}
+function majBoutonSon() {
+    const b = barreCortege.querySelector('.son');
+    b.textContent = sonCortege.coupe ? '🔇' : '🔊';
+    b.setAttribute('aria-label', sonCortege.coupe ? 'Rendre le son' : 'Couper le son');
+}
+/** Un son du cortège, s'il est branché. */
+function jouerSon(f) {
+    if (!sonCortege.maitre) return;
+    try { f(sonCortege); } catch (e) { /* sans son */ }
+}
+
+/** Une prise de parole au mégaphone : des syllabes au hasard, une intonation de discours. */
+function discoursAuHasard(n = 14) {
+    const voyelles = Object.keys(FORMANTS), consonnes = ['p', 's', 'ch', 'f', 'l', 'l', null];
+    return Array.from({ length: n }, (_, k) => ({ v: tire(voyelles), c: tire(consonnes), duree: k === n - 1 ? 2 : 1,
+                                                 ton: k === n - 1 ? -3 : Math.round(Math.random() * 3), silence: k % 5 === 4 ? 1 : 0 }));
+}
+// Page cachée, la boucle de rendu s'arrête : le brouhaha se tait avec elle.
+document.addEventListener('visibilitychange', () => {
+    const S = sonCortege;
+    if (S.maitre) S.maitre.gain.setTargetAtTime(document.hidden || S.coupe ? 0 : VOLUME_CORTEGE, S.ctx.currentTime, 0.05);
+});
+
 // --- Les figures du jeu : une par personne, dans fouleCortege ---
 
 /** Une personne de plus, de rôle `role`, en (x, y) : null si la foule est pleine. */
@@ -12020,8 +12183,12 @@ function fairePartir(p, dx, dy) {
 
 function etatNeuf() {
     return { phase: 'choix', depart: null, arrivee: null, tete: null, trace: [], ordre: [], gens: [],
-             participants: CORTEGE_PARTICIPANTS, rallies: 0, cadence: 2, choix: 0, fatigue: 0,
-             partSoleil: 0, chaleur: 0, distanceOmbre: 0, parcouru: 0, cordons: [], barricades: [], groupes: [],
+             participants: CORTEGE_PARTICIPANTS, rallies: 0, passantsRallies: 0, cadence: 2, choix: 0,
+             elan: ELAN_DEPART, tension: TENSION_DEPART, sommations: false, elanCumul: 0, dureeCumul: 0,
+             tensionMax: TENSION_DEPART, partSoleil: 0, chaleur: 0, distanceOmbre: 0, parcouru: 0,
+             cordons: [], barricades: [], groupes: [], passants: [], parcours: null, horsParcours: false,
+             chant: null, bulle: null, dernierSlot: -1, recharges: [0, 0, 0, 0], variantes: [0, 0, 0, 0],
+             negociation: null, rassemblement: null, defaite: null,
              casseurs: [], equipes: [], nuages: [], feux: [], lances: 0, ecartes: 0, incidents: 0,
              prochaineVague: Infinity, deviations: 0, prochaineDeviation: Infinity, debut: 0, finChoix: 0,
              debutMarche: 0, relance: null, hud: 0, prochainIndice: Infinity, finIndice: 0, plusCourt: 0,
@@ -12080,17 +12247,29 @@ function soleilEnDegres() {
 
 /** Tout ce qu'une manifestation a posé dans la scène, retiré. */
 function viderCortege() {
-    for (const p of cortege.gens || []) retirerPersonne(p);
-    for (const o of [...(cortege.cordons || []), ...(cortege.barricades || []), ...(cortege.groupes || [])]) {
+    const c = cortege;
+    for (const p of c.gens || []) retirerPersonne(p);
+    for (const o of [...(c.cordons || []), ...(c.barricades || []), ...(c.groupes || [])]) {
         if (o.objet) groupeCortege.remove(o.objet);
     }
-    for (const c of cortege.casseurs || []) groupeCortege.remove(c.marque);
-    for (const n of cortege.nuages || []) { for (const b of n.bouffees) groupeCortege.remove(b); n.materiau.dispose(); }
-    for (const f of cortege.feux || []) {
-        groupeCortege.remove(f.groupe);
+    for (const g of c.passants || []) if (g.etiquette) retirerSprite(g.etiquette);
+    for (const cs of c.casseurs || []) groupeCortege.remove(cs.marque);
+    for (const n of c.nuages || []) { for (const b of n.bouffees) groupeCortege.remove(b); n.materiau.dispose(); }
+    for (const f of [...(c.feux || []), ...((c.rassemblement && c.rassemblement.fumigenes) || [])]) {
+        if (f.groupe) groupeCortege.remove(f.groupe);
         for (const b of f.fumee) { groupeCortege.remove(b.m); b.m.material.dispose(); }
     }
+    if (c.rassemblement) groupeCortege.remove(c.rassemblement.camion);
+    if (c.parcours) { groupeCortege.remove(c.parcours.objet); c.parcours.objet.geometry.dispose(); }
+    if (c.bulle) retirerSprite(c.bulle);
     for (const m of flechesCarrefour) m.visible = false;
+}
+
+/** Une étiquette retirée de la scène, sa texture rendue. */
+function retirerSprite(s) {
+    groupeCortege.remove(s);
+    s.material.map.dispose();
+    s.material.dispose();
 }
 
 /** Le clic pendant le choix : l'arrivée, là où il désigne, sur une rue à CORTEGE_ARRIVEE_MIN_M au moins. */
@@ -12109,7 +12288,7 @@ function cliquerArrivee(rayon) {
 
 /**
  * L'arrivée d'office : un carrefour à CORTEGE_ARRIVEE_M par la route, le plus
- * dégagé d'une vingtaine tirés au hasard, comme le foyer d'un incendie ; à
+ * dégagé d'une vingtaine tirés au hasard ; à
  * défaut, le nœud le plus loin à portée.
  */
 function arriveeAuto() {
@@ -12155,12 +12334,15 @@ function choisirArrivee(q) {
     const m = chemin.morceaux[0];
     t.sens = m.a >= m.de ? 1 : -1;
     formerTrace();
+    tracerParcours(chemin);
     placerObstacles(chemin);
     cortege.phase = 'forme';
     cortege.debutMarche = performance.now() + CORTEGE_FORMATION_S * 1000;
     banderole.visible = true;
-    annoncer(`Le cortège se forme<small>arrivée à ${Math.round(chemin.longueur / 10) * 10} m par les rues · `
-             + `${cortege.groupes.length} groupe${cortege.groupes.length > 1 ? 's' : ''} attendent qu'on passe les prendre</small>`,
+    const passants = cortege.passants.reduce((n, g) => n + g.membres.length, 0) * CORTEGE_PAR_FIGURE;
+    annoncer(`Le cortège se forme<small>parcours déclaré : ${Math.round(chemin.longueur / 10) * 10} m, en vert au sol · `
+             + `${cortege.groupes.length} groupe${cortege.groupes.length > 1 ? 's' : ''} attendent qu'on passe les prendre`
+             + `${passants ? `, ${passants.toLocaleString('fr-FR')} passants sur les trottoirs` : ''}</small>`,
              CORTEGE_FORMATION_S);
 }
 
@@ -12201,30 +12383,27 @@ function formerTrace() {
 }
 
 /**
- * Les obstacles d'une manifestation, d'après le plus court chemin : deux
- * cordons dessus, à 35 % et 65 %, s'il reste un détour de CORDON_DETOUR_M au plus ; deux barricades sur
- * le chemin qui les évite ; trois groupes à quelques rues de lui.
+ * Les obstacles d'une manifestation, d'après le parcours déclaré : la
+ * préfecture le tient, et ferme d'emblée quelques rues qui en partent, à
+ * 80 m au moins l'une de l'autre ; trois groupes attendent à quelques rues
+ * de lui ; des passants sont sur les trottoirs. Les barricades viendront
+ * des casseurs, les déviations de la marche.
  */
 function placerObstacles(chemin) {
-    const t = cortege.tete, arr = cortege.arrivee;
+    const t = cortege.tete, arr = cortege.arrivee, parcours = cortege.parcours.aretes;
     const pres = (o, d) => Math.hypot(o.x - t.x, o.y - t.y) < d || Math.hypot(o.x - arr.x, o.y - arr.y) < d;
-    const bloquees = new Set();
-    const libre = a => a !== t.arete && a !== arr.arete && a.longueur >= 16 && !bloquees.has(a)
-                       && !cortege.barricades.some(b => b.arete === a);
-    for (const part of [0.35, 0.65]) {
-        for (const decale of [0, 0.06, -0.06, 0.12, -0.12]) {
-            const o = surChemin(chemin, (part + decale) * chemin.longueur);
-            if (!o || !libre(o.arete) || pres(o, 60)) continue;
-            bloquees.add(o.arete);
-            const detour = cheminCortege(t, arr, bloquees);
-            if (detour && detour.longueur <= chemin.longueur + CORDON_DETOUR_M) { creerCordon(o.arete, o.s); break; }
-            bloquees.delete(o.arete);
-        }
+    const lateraux = [];
+    for (const m of chemin.morceaux.slice(0, -1)) {
+        const nd = m.a === 0 ? m.arete.a : m.arete.b;
+        if (pres(nd, 60)) continue;
+        for (const a of nd.aretes) if (!parcours.has(a) && a.longueur >= 25) lateraux.push({ a, nd });
     }
-    const evite = cheminCortege(t, arr, bloquees) || chemin;
-    for (const part of [0.3, 0.7]) {
-        const o = surChemin(evite, part * evite.longueur);
-        if (o && libre(o.arete) && !pres(o, 50)) creerBarricade(o.arete, o.s);
+    const poses = [];
+    for (const { a, nd } of melanger(lateraux)) {
+        if (poses.length >= CORDON_LATERAUX) break;
+        if (poses.some(p => Math.hypot(p.x - nd.x, p.y - nd.y) < 80)) continue;
+        creerCordon(a, a.a === nd ? Math.min(14, a.longueur / 2) : Math.max(a.longueur - 14, a.longueur / 2));
+        poses.push(nd);
     }
     // Les groupes : à des carrefours à GROUPE_ECART_M du plus court chemin,
     // entre 15 et 85 % du trajet, à 120 m au moins l'un de l'autre.
@@ -12240,12 +12419,211 @@ function placerObstacles(chemin) {
             candidats.push({ n, avance });
         }
     }
-    for (const modele of GROUPES_CORTEGE) {
+    for (const modele of melanger([...GROUPES_CORTEGE]).slice(0, 3)) {
         const restants = candidats.filter(c => cortege.groupes.every(g => Math.hypot(g.x - c.n.x, g.y - c.n.y) >= 120));
         if (!restants.length) break;
         const c = restants[Math.floor(Math.random() * restants.length)];
         creerGroupe(modele, c.n.x, c.n.y);
     }
+    placerPassants(chemin);
+}
+
+/** `l` mélangé sur place, et rendu. */
+function melanger(l) {
+    for (let i = l.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [l[i], l[j]] = [l[j], l[i]];
+    }
+    return l;
+}
+
+/**
+ * Le parcours déclaré : le plus court chemin vers l'arrivée, tracé au sol en
+ * tirets verts de 3 m. Ses arêtes, gardées, disent si la tête en est sortie.
+ */
+const MAT_PARCOURS = new THREE.MeshBasicMaterial({ color: 0x2ecc71, transparent: true, opacity: 0.5, depthWrite: false,
+    side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
+function tracerParcours(chemin) {
+    const sommets = [], pas = 1.5;
+    for (let x = 0, k = 0; x + pas <= chemin.longueur; x += pas, k++) {
+        if (k % 3 === 2) continue;
+        const p = surChemin(chemin, x), q = surChemin(chemin, x + pas);
+        const l = Math.hypot(q.x - p.x, q.y - p.y) || 1, nx = (q.y - p.y) / l * 0.8, ny = -(q.x - p.x) / l * 0.8;
+        const yp = ySol(...toLonLat(p.x, p.y)) + 0.15, yq = ySol(...toLonLat(q.x, q.y)) + 0.15;
+        sommets.push(p.x - nx, yp, -(p.y - ny), p.x + nx, yp, -(p.y + ny), q.x + nx, yq, -(q.y + ny),
+                     p.x - nx, yp, -(p.y - ny), q.x + nx, yq, -(q.y + ny), q.x - nx, yq, -(q.y - ny));
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(sommets, 3));
+    const objet = new THREE.Mesh(geo, MAT_PARCOURS);
+    objet.renderOrder = 2;
+    groupeCortege.add(objet);
+    cortege.parcours = { aretes: new Set(chemin.morceaux.map(m => m.arete)), objet };
+}
+
+/**
+ * La densité des rues : les logements des bâtiments BD TOPO (estimés d'après
+ * la surface et les étages quand la BD TOPO ne les compte pas), plus les
+ * commerces, sommés par maille de MAILLE_DENSITE m et lus autour de chaque
+ * arête tous les 15 m. Ramenée à 1 au 9e décile, plafonnée à 1,5. À
+ * République, 15 315 logements dans 1 284 bâtiments, 130 commerces.
+ */
+function densiteRues(g) {
+    if (g.densiteFaite) return;
+    const cellules = new Map();
+    for (const f of (ARTEFACT && ARTEFACT.batiments && ARTEFACT.batiments.features) || []) {
+        const p = f.properties || {}, geo = f.geometry || {};
+        const anneau = geo.type === 'Polygon' ? geo.coordinates[0] : geo.type === 'MultiPolygon' ? geo.coordinates[0][0] : null;
+        if (!anneau || anneau.length < 4) continue;
+        const pts = anneau.map(([lo, la]) => toLocal(lo, la));
+        let cx = 0, cy = 0, aire = 0;
+        for (let i = 0; i < pts.length - 1; i++) {
+            const [x0, y0] = pts[i], [x1, y1] = pts[i + 1], k = x0 * y1 - x1 * y0;
+            aire += k;
+            cx += (x0 + x1) * k;
+            cy += (y0 + y1) * k;
+        }
+        if (Math.abs(aire) < 1e-6) continue;
+        cx /= 3 * aire;
+        cy /= 3 * aire;
+        aire = Math.abs(aire) / 2;
+        const etages = p.nombre_d_etages || Math.max(1, Math.round((p.hauteur || 3) / 3));
+        let poids = p.nombre_de_logements || (p.usage_1 === 'Résidentiel' ? aire * etages / 70
+                                            : p.usage_1 === 'Indifférencié' ? aire * etages / 150 : 0);
+        if (p.usage_1 === 'Commercial et services' || p.usage_2 === 'Commercial et services') poids += 8;
+        poids = Math.min(poids, 150);
+        if (!poids) continue;
+        const cle = `${Math.floor(cx / MAILLE_DENSITE)},${Math.floor(cy / MAILLE_DENSITE)}`;
+        cellules.set(cle, (cellules.get(cle) || 0) + poids);
+    }
+    const autour = (x, y) => {
+        const i = Math.floor(x / MAILLE_DENSITE), j = Math.floor(y / MAILLE_DENSITE);
+        let s = 0;
+        for (let di = -1; di <= 1; di++) for (let dj = -1; dj <= 1; dj++) s += cellules.get(`${i + di},${j + dj}`) || 0;
+        return s;
+    };
+    const valeurs = [];
+    for (const a of g.aretes) {
+        let s = 0, n = 0;
+        for (let x = 0; x <= a.longueur; x += 15) { const [px, py] = pointArete(a, x); s += autour(px, py); n++; }
+        a.densite = s / n;
+        valeurs.push(a.densite);
+    }
+    valeurs.sort((u, v) => u - v);
+    const decile = valeurs[Math.floor(valeurs.length * 0.9)] || 1;
+    for (const a of g.aretes) a.densite = Math.min(a.densite / decile, 1.5);
+    g.densiteFaite = true;
+}
+
+/**
+ * Les passants : des grappes sur les trottoirs, dans une bande de
+ * PASSANTS_BANDE_M autour du parcours, tirées au prorata de la densité de la
+ * rue, à PASSANTS_ECART_M l'une de l'autre ; ni au départ ni à l'arrivée.
+ */
+function placerPassants(chemin) {
+    const c = cortege;
+    densiteRues(c.graphe);
+    const jalons = [];
+    for (let x = 0; x <= chemin.longueur; x += 20) jalons.push(surChemin(chemin, x));
+    const candidats = [];
+    for (const a of c.graphe.aretes) {
+        if (a.longueur < 12) continue;
+        for (let x = 6; x < a.longueur - 6; x += 18) {
+            const [px, py] = pointArete(a, x);
+            const d = jalons.reduce((m, j) => Math.min(m, Math.hypot(j.x - px, j.y - py)), Infinity);
+            if (d > PASSANTS_BANDE_M) continue;
+            if (Math.hypot(px - c.depart.x, py - c.depart.y) < 70 || Math.hypot(px - c.arrivee.x, py - c.arrivee.y) < 40) continue;
+            // Trois fois plus sur le parcours qu'au bord de la bande : en
+            // bande uniforme, le plus court chemin de République n'en croisait
+            // que 90 sur 1 210, et l'appel aux passants n'y servait à rien.
+            candidats.push({ a, s: x, x: px, y: py, poids: (0.04 + a.densite ** 1.5) * (1 + 2 * (1 - d / PASSANTS_BANDE_M)) });
+        }
+    }
+    const n = PASSANTS_GRAPPES[0] + Math.floor(Math.random() * (PASSANTS_GRAPPES[1] - PASSANTS_GRAPPES[0] + 1));
+    const total = candidats.reduce((s, k) => s + k.poids, 0);
+    for (let essai = 0; essai < 8 * n && c.passants.length < n && total > 0; essai++) {
+        let r = Math.random() * total, k = 0;
+        while (k < candidats.length - 1 && (r -= candidats[k].poids) > 0) k++;
+        const choisi = candidats[k];
+        if (c.passants.some(q => Math.hypot(q.x - choisi.x, q.y - choisi.y) < PASSANTS_ECART_M)) continue;
+        creerPassants(choisi);
+    }
+}
+
+/** Une grappe de passants au bord de la rue, sur le trottoir libre, tournée vers la chaussée. */
+function creerPassants({ a, s, x, y }) {
+    const { nx, ny } = normaleArete(a, s);
+    const ecart = largeurUtile(a) / 2 + 0.6;
+    let cote = Math.random() < 0.5 ? 1 : -1;
+    if (!placeLibre(x + nx * cote * ecart, y + ny * cote * ecart)) cote = -cote;
+    const gx = x + nx * cote * ecart, gy = y + ny * cote * ecart;
+    const figures = Math.round(PASSANTS_FIGURES[0] + Math.min(a.densite, 1) * (PASSANTS_FIGURES[1] - PASSANTS_FIGURES[0])
+                               * (0.6 + 0.4 * Math.random()));
+    const g = { x: gx, y: gy, a, membres: [], etat: 'attend', etiquette: null };
+    const cap = Math.atan2(-nx * cote, -ny * cote);
+    for (let k = 0; k < figures; k++) {
+        // En file le long du trottoir, sur deux rangs : (−ny, nx) suit la rue.
+        const u = (k - (figures - 1) / 2) * 0.9 + (Math.random() - 0.5) * 0.3, v = (k % 2) * 0.7 * cote;
+        const px = gx - ny * u + nx * v, py = gy + nx * u + ny * v;
+        const p = nouvellePersonne('passant', px, py, { torse: tire(TEINTES_HABITS), jambes: tire(TEINTES_JAMBES),
+                                                        tete: tire(TEINTES_PEAU), baton: 0x7a5230, pancarte: 0xffffff });
+        if (!p) break;
+        p.place = [px, py];
+        p.cap = cap;
+        p.grappe = g;
+        g.membres.push(p);
+    }
+    if (!g.membres.length) return;
+    g.etiquette = etiquette(`+${g.membres.length * CORTEGE_PAR_FIGURE}`, 'rgba(41,128,185,.92)', 0.026);
+    g.etiquette.position.set(gx, ySol(...toLonLat(gx, gy)) + 4.5, -gy);
+    g.etiquette.visible = false;
+    groupeCortege.add(g.etiquette);
+    cortege.passants.push(g);
+}
+
+/**
+ * Les passants à l'image : tournés vers la rue, ils se tournent vers le
+ * cortège qui passe et l'applaudissent s'il a de l'élan ; la tête qui les
+ * frôle les entraîne au-dessus d'ELAN_ENTRAINE. Leur nombre s'affiche
+ * au-dessus d'eux quand la tête n'est pas loin.
+ */
+function majPassants() {
+    const c = cortege, t = c.tete, enMarche = c.phase === 'marche';
+    for (const g of c.passants) {
+        if (g.etat === 'rallie') continue;
+        const dTete = Math.hypot(g.x - t.x, g.y - t.y);
+        g.etiquette.visible = enMarche && dTete < PASSANTS_VUS_M;
+        const pres = enMarche && (dTete < 40 || distanceAuCortege(g.x, g.y) < 30);
+        for (const p of g.membres) {
+            if (pres) p.cap = Math.atan2(t.x - p.x, t.y - p.y);
+            p.applaudit = pres && c.elan > 50;
+        }
+        if (enMarche && dTete < 14 && c.elan >= ELAN_ENTRAINE) {
+            const n = rallierPassants(g);
+            annoncer(`+${n} passants<small>entraînés par le cortège</small>`, 2);
+            jouerSon(S => applaudir(S, S.ctx.currentTime, 1.5, 0.25, false));
+        }
+    }
+}
+
+/** Une grappe de passants rejoint les rangs, près du rang le plus proche ; rend combien ils sont. */
+function rallierPassants(g) {
+    const c = cortege;
+    g.etat = 'rallie';
+    retirerSprite(g.etiquette);
+    let k = 0, d = Infinity;
+    c.ordre.forEach((q, i) => { const e = Math.hypot(q.x - g.x, q.y - g.y); if (e < d) { d = e; k = i; } });
+    for (const p of g.membres) {
+        p.role = 'marche';
+        p.lat = Math.random() * 2 - 1;
+        p.applaudit = false;
+    }
+    c.ordre.splice(k, 0, ...g.membres);
+    const n = g.membres.length * CORTEGE_PAR_FIGURE;
+    c.participants += n;
+    c.passantsRallies += n;
+    c.elan = Math.min(100, c.elan + 2);
+    return n;
 }
 
 /** Le côté droit de la rue, à l'abscisse `s` de l'arête, pour la direction des abscisses croissantes. */
@@ -12284,8 +12662,9 @@ function creerCordon(a, s, annonce = false) {
     }
     cortege.cordons.push(o);
     if (annonce) {
-        annoncer(`Déviation<small>un cordon ferme ${a.nom || 'la rue'} devant le cortège</small>`, 3.5);
-        son('indice');
+        annoncer(`Déviation<small>un cordon ferme ${a.nom || 'la rue'} devant le cortège · `
+                 + `${AU_DOIGT ? 'négocier' : 'négocier (N)'} ou contourner</small>`, 3.5);
+        jouerSon(S => sirene(S, S.ctx.currentTime, 2.5, 0.8));
     }
     return o;
 }
@@ -12337,20 +12716,221 @@ function creerGroupe(modele, x, y) {
     cortege.groupes.push(g);
 }
 
+// --- Les slogans ---
+
+/** Les slogans de la ville : la commune, sinon la ville tout court. */
+function textesVille() {
+    const v = communeDuPoint;
+    return v ? [`${v}, debout ! ${v}, debout !`, `${v} ! ${v} ! On est là !`] : ['Toute la ville est là !', 'Toute la ville avec nous !'];
+}
+
+/** Le texte que lancera le registre `k`, ses textes à tour de rôle ; la ville y mêle la rue où passe la tête. */
+function texteSlogan(k) {
+    const c = cortege;
+    let textes = k === 3 ? textesVille() : SLOGANS[k].textes;
+    const rue = k === 3 && c.tete && c.tete.arete.nom;
+    if (rue) textes = [...textes, `${rue}, on est là !`];
+    return textes[c.variantes[k] % textes.length];
+}
+
+/** Ce qui empêche de lancer le registre `k` maintenant, en clair ; null s'il peut l'être. */
+function sloganImpossible(k, maintenant) {
+    const c = cortege;
+    if (c.phase !== 'marche') return 'pas en marche';
+    if (c.chant) return 'un slogan à la fois';
+    if (maintenant < c.recharges[k]) return `encore ${Math.ceil((c.recharges[k] - maintenant) / 1000)} s`;
+    if (SLOGANS[k].elanMin && c.elan < SLOGANS[k].elanMin) return `élan ${SLOGANS[k].elanMin} requis`;
+    return null;
+}
+
+/**
+ * Le registre `k` lancé : le meneur au mégaphone, puis le chœur. L'effet
+ * part quand le chœur reprend (appliquerSlogan) ; le texte s'affiche
+ * au-dessus de la tête le temps du slogan.
+ */
+function lancerSlogan(k, maintenant) {
+    const c = cortege, pourquoi = sloganImpossible(k, maintenant);
+    if (pourquoi) {
+        if (c.phase === 'marche' && !c.chant) annoncer(`${SLOGANS[k].nom}<small>${pourquoi}</small>`, 1.5);
+        return;
+    }
+    const texte = texteSlogan(k), prog = programmeSlogan(texte);
+    c.variantes[k]++;
+    c.recharges[k] = maintenant + SLOGANS[k].recharge * 1000;
+    c.chant = { k, texte, prog, debut: maintenant, applique: false };
+    const force = Math.min(1.5, 0.4 + 0.6 * Math.sqrt(Math.max(c.participants, 0) / CORTEGE_PARTICIPANTS) * (0.5 + c.elan / 100));
+    jouerSon(S => jouerSlogan(S, prog, force));
+    if (c.bulle) retirerSprite(c.bulle);
+    c.bulle = etiquette(`« ${texte} »`, 'rgba(192,57,43,.92)', 0.026);
+    groupeCortege.add(c.bulle);
+}
+
+/** L'effet d'un slogan, quand le chœur le reprend : moitié moins s'il suit le même registre, moins sur une foule chaude. */
+function appliquerSlogan(k) {
+    const c = cortege, porte = c.dernierSlot === k ? 0.5 : 1;
+    const rendement = Math.max(0.15, 1 - c.elan / SLOGAN_RENDEMENT);
+    c.dernierSlot = k;
+    let effet;
+    if (k === 0) {
+        c.elan += SLOGAN_ELAN * porte * rendement;
+        effet = `élan +${Math.round(SLOGAN_ELAN * porte * rendement)}`;
+    } else if (k === 1) {
+        c.elan += SLOGAN_PASSANTS_ELAN * porte * rendement;
+        // Les passants à portée viennent d'autant plus que le cortège a de l'élan.
+        const chance = Math.min(1, Math.max(0.15, (c.elan - 20) / 50)) * porte;
+        let n = 0, hesitent = 0;
+        for (const g of c.passants) {
+            if (g.etat === 'rallie' || distanceAuCortege(g.x, g.y) > SLOGAN_PORTEE_M) continue;
+            if (Math.random() < chance) n += rallierPassants(g); else hesitent++;
+        }
+        effet = n ? `+${n} passants` : hesitent ? 'les passants hésitent : il faut plus d\'élan' : 'personne à portée de voix';
+        if (n) jouerSon(S => applaudir(S, S.ctx.currentTime + 0.5, 2, 0.3, false));
+    } else if (k === 2) {
+        c.tension -= SLOGAN_CALME_TENSION * porte;
+        let isoles = 0;
+        for (const cs of c.casseurs) {
+            if (cs.etat !== 'infiltre' || cs.isole) continue;
+            cs.isole = true;
+            cs.incident += SLOGAN_ISOLE_S * 1000;
+            isoles++;
+        }
+        if (c.negociation) c.negociation.progres += NEGOCIATION_CALME * porte;
+        effet = `tension −${Math.round(SLOGAN_CALME_TENSION * porte)}`
+              + (isoles ? ` · ${isoles} casseur${isoles > 1 ? 's' : ''} isolé${isoles > 1 ? 's' : ''}` : '');
+    } else {
+        c.elan += SLOGAN_VILLE_ELAN * porte * rendement;
+        let n = 0;
+        for (const g of c.passants) {
+            if (g.etat !== 'rallie' && distanceAuCortege(g.x, g.y) <= SLOGAN_VILLE_PORTEE_M) n += rallierPassants(g);
+        }
+        effet = `élan +${Math.round(SLOGAN_VILLE_ELAN * porte * rendement)}${n ? ` · +${n} passants` : ''}`;
+    }
+    c.elan = Math.min(100, c.elan);
+    c.tension = Math.max(0, c.tension);
+    c.effetSlogan = { texte: effet + (porte < 1 ? ' (déjà entendu : variez)' : ''), fin: performance.now() + 3000 };
+}
+
+/** Le slogan en cours : son effet quand le chœur reprend, sa bulle au-dessus de la tête, sa fin. */
+function majChant(maintenant) {
+    const c = cortege, ch = c.chant;
+    if (!ch) return;
+    const t = (maintenant - ch.debut) / 1000;
+    if (!ch.applique && t >= ch.prog.debutChoeur) {
+        ch.applique = true;
+        if (c.phase === 'marche') appliquerSlogan(ch.k);
+    }
+    if (c.bulle) c.bulle.position.set(c.tete.x, ySol(...toLonLat(c.tete.x, c.tete.y)) + 6.5, -c.tete.y);
+    if (t > ch.prog.duree) {
+        c.chant = null;
+        if (c.bulle) { retirerSprite(c.bulle); c.bulle = null; }
+    }
+}
+
+/** La pulsation du chœur à l'instant : de 0 à 1 sur une syllabe chantée, 0 entre deux et hors du chœur. */
+function pulsationChant(maintenant) {
+    const ch = cortege.chant;
+    if (!ch || !ch.applique) return 0;
+    const t = (maintenant - ch.debut) / 1000;
+    for (const p of ch.prog.pulsations) if (t >= p.t && t < p.t + p.d) return Math.sin(Math.PI * (t - p.t) / p.d);
+    return 0;
+}
+
+/** La barre des slogans : le texte qui partira, la recharge, ce qui empêche ; Négocier devant un cordon. */
+function majBarreCortege(maintenant) {
+    const c = cortege;
+    for (const b of barreCortege.querySelectorAll('[data-slot]')) {
+        const k = Number(b.dataset.slot), pourquoi = sloganImpossible(k, maintenant), texte = texteSlogan(k);
+        const libelle = pourquoi && c.phase === 'marche' && pourquoi !== 'un slogan à la fois' ? pourquoi : `« ${texte} »`;
+        const small = b.querySelector('small');
+        if (small.textContent !== libelle) small.textContent = libelle;
+        b.title = `${SLOGANS[k].nom} : « ${texte} »`;
+        b.disabled = !!pourquoi;
+        b.classList.toggle('chante', !!c.chant && c.chant.k === k);
+        const reste = Math.max(0, c.recharges[k] - maintenant) / (SLOGANS[k].recharge * 1000);
+        b.querySelector('.recharge').style.width = `${Math.round(reste * 100)}%`;
+    }
+    barreCortege.querySelector('.negocier').hidden = !peutNegocier();
+}
+barreCortege.addEventListener('click', e => {
+    const b = e.target.closest('button');
+    if (!b || !cortege.actif) return;
+    if (b.dataset.slot) cortege.appuis.push(`Digit${Number(b.dataset.slot) + 1}`);
+    else if (b.classList.contains('negocier')) cortege.appuis.push('KeyN');
+    else if (b.classList.contains('son')) basculerSonCortege();
+    // L'espace, qui fait monter le drone ailleurs, presserait encore le bouton.
+    b.blur();
+});
+
+// --- La négociation devant un cordon ---
+
+/** Arrêté contre un cordon fermé, sans négociation en cours ni refus. */
+function peutNegocier() {
+    const c = cortege, o = c.tete && c.tete.bloque;
+    return c.phase === 'marche' && !!o && o.type === 'cordon' && !o.ouvert && !o.refuse && !c.negociation;
+}
+
+/** N : un sit-in devant le cordon, le temps que la préfecture tranche. */
+function negocier(maintenant) {
+    if (!peutNegocier()) return;
+    cortege.negociation = { o: cortege.tete.bloque, debut: maintenant, progres: 0 };
+    annoncer('Négociation<small>sit-in devant le cordon · « Calme » l\'accélère · la tension doit rester basse</small>', 3);
+}
+
+/**
+ * Le sit-in : la négociation avance d'autant plus vite que la tension est
+ * basse et l'élan correct ; la préfecture refuse au-delà de
+ * NEGOCIATION_REFUS de tension, ou au bout de NEGOCIATION_MAX_S.
+ */
+function majNegociation(dt, maintenant) {
+    const c = cortege, n = c.negociation;
+    if (!n) return;
+    const vitesse = (c.tension < 40 ? 1.2 : c.tension < 65 ? 0.7 : 0.25) * (c.elan >= 40 ? 1 : 0.6);
+    n.progres += dt / NEGOCIATION_S * vitesse;
+    if (n.progres >= 1) {
+        n.o.ouvert = true;
+        ouvrirCordon(n.o);
+        c.tete.bloque = null;
+        c.negociation = null;
+        c.elan = Math.min(100, c.elan + 10);
+        annoncer('Le cordon s\'ouvre<small>la préfecture laisse passer le cortège</small>', 3);
+        jouerSon(S => applaudir(S, S.ctx.currentTime, 2.5, 0.45));
+    } else if (c.tension >= NEGOCIATION_REFUS || maintenant - n.debut > NEGOCIATION_MAX_S * 1000) {
+        n.o.refuse = true;
+        c.negociation = null;
+        annoncer(`Refus<small>la rue reste fermée · ${AU_DOIGT ? '↓' : '↓ à l\'arrêt'} pour faire demi-tour</small>`, 3);
+        jouerSon(S => sirene(S, S.ctx.currentTime, 2));
+    }
+}
+
+/** Un cordon ouvert : ses policiers s'écartent sur les deux trottoirs, en file. */
+function ouvrirCordon(o) {
+    const l = Math.max(largeurUtile(o.arete) / 2 + 0.8, 2), dx = Math.sin(o.cap), dy = Math.cos(o.cap);
+    o.policiers.forEach((p, k) => {
+        const cote = k % 2 ? 1 : -1, rang = Math.floor(k / 2) - 2;
+        p.place = [o.x + o.nx * cote * l + dx * rang * 1.2, o.y + o.ny * cote * l + dy * rang * 1.2];
+    });
+}
+
 // --- La marche ---
 
-/** Les appuis de la file : la branche, la cadence, le demi-tour, le service d'ordre. */
-function traiterAppuis() {
+/** Les appuis de la file : la branche, la cadence, le demi-tour, les slogans, la négociation, le son, le service d'ordre. */
+function traiterAppuis(maintenant) {
     const c = cortege;
     for (const code of c.appuis.splice(0)) {
+        if (code === 'KeyM') { basculerSonCortege(); continue; }
         if (code === 'KeyF') { if (c.phase === 'marche') envoyerVersMenace(); continue; }
+        const slot = /^(Digit|Numpad)([1-4])$/.exec(code);
+        if (slot) { lancerSlogan(Number(slot[2]) - 1, maintenant); continue; }
+        if (code === 'KeyN') { negocier(maintenant); continue; }
         if (c.phase !== 'marche' && c.phase !== 'forme') continue;
-        if (code === 'ArrowLeft' || code === 'KeyA') c.choix = Math.max(c.choix - 1, -1);
-        else if (code === 'ArrowRight' || code === 'KeyD') c.choix = Math.min(c.choix + 1, 1);
+        if (code === 'ArrowLeft' || code === 'KeyA') c.choix = Math.max(c.choix - 1, -4);
+        else if (code === 'ArrowRight' || code === 'KeyD') c.choix = Math.min(c.choix + 1, 4);
         else if (code === 'ArrowUp' || code === 'KeyW') c.cadence = Math.min(c.cadence + 1, CORTEGE_CADENCES.length - 1);
         else if (code === 'ArrowDown' || code === 'KeyS') {
-            if (c.phase === 'marche' && (c.cadence === 0 || (c.tete.bloque && c.tete.bloque.type === 'cordon'))) demiTour('Demi-tour');
-            else c.cadence = Math.max(c.cadence - 1, 0);
+            if (c.phase === 'marche' && (c.cadence === 0 || (c.tete.bloque && c.tete.bloque.type === 'cordon'))) {
+                c.negociation = null;
+                demiTour('Demi-tour');
+            } else c.cadence = Math.max(c.cadence - 1, 0);
         }
     }
 }
@@ -12359,7 +12939,7 @@ function traiterAppuis() {
 function obstacleDevant(t) {
     let meilleur = null;
     for (const o of cortege.cordons.concat(cortege.barricades)) {
-        if (o.arete !== t.arete || o.degagee) continue;
+        if (o.arete !== t.arete || o.degagee || o.ouvert) continue;
         const ecart = (o.s - t.s) * t.sens;
         if (ecart < -0.5) continue;
         if (!meilleur || ecart < meilleur.ecart) meilleur = { o, ecart };
@@ -12416,14 +12996,15 @@ function bordDeZone(n) {
     return n.x < o + 4 || n.x > e - 4 || n.y < s + 4 || n.y > nn - 4;
 }
 
-/** Arrêté contre un obstacle : piétiner devant un cordon, attendre qu'on dégage une barricade. */
+/** Arrêté contre un obstacle : devant un cordon, négocier ou faire demi-tour ; une barricade, on la dégage. */
 function arreter(o) {
     const t = cortege.tete;
     if (t.bloque === o) return;
     t.bloque = o;
     if (o.type === 'cordon') {
-        annoncer(`Cordon de police<small>la rue est fermée · le cortège piétine et perd du monde · `
-                 + '↓ à l\'arrêt pour faire demi-tour</small>', 4);
+        annoncer(o.refuse ? 'Cordon de police<small>la préfecture a déjà refusé · faites demi-tour (↓)</small>'
+                 : `Cordon de police<small>la rue est fermée · ${AU_DOIGT ? 'Négocier, en bas' : 'N pour négocier'}, `
+                   + 'ou ↓ à l\'arrêt pour faire demi-tour · piétiner fait monter la tension</small>', 4);
     } else {
         annoncer('Barricade<small>les premiers rangs la démontent · quelques secondes d\'arrêt</small>', 3);
     }
@@ -12465,14 +13046,13 @@ function demiTour(raison) {
     annoncer(`${raison}<small>la queue du cortège passe en tête</small>`, 2.5);
 }
 
-/** La vitesse de la tête : la cadence, la largeur de la rue, la pente, la fatigue, un feu tout près. */
+/** La vitesse de la tête : la cadence, l'élan, la largeur de la rue, la pente, un feu tout près. */
 function vitesseTete() {
     const c = cortege, t = c.tete;
     if (t.bloque) return 0;
-    let cadence = c.cadence;
-    if (c.fatigue > FATIGUE_LENTE) cadence = Math.min(cadence, 1);
-    let v = CORTEGE_CADENCES[cadence];
+    let v = CORTEGE_CADENCES[c.cadence];
     if (!v) return 0;
+    v *= 1 - ELAN_ALLURE / 2 + ELAN_ALLURE * c.elan / 100;
     v *= Math.min(Math.max((largeurUtile(t.arete) - 1) / 6, 0.45), 1);
     // La pente, sur 3 m devant, hors de l'exagération du relief.
     const s2 = Math.min(Math.max(t.s + t.sens * 3, 0), t.arete.longueur);
@@ -12509,6 +13089,7 @@ function pointDeTrace(D, k) {
  */
 function majCorps(dt, t, vTete) {
     const c = cortege, tr = c.trace;
+    if (c.phase === 'rassemblement' || c.phase === 'fin') return;
     const formee = c.phase !== 'choix';
     let b = CORTEGE_TETE_M, k = tr.length - 1;
     // En formation, chacun gagne vite sa place dans la rue.
@@ -12546,9 +13127,15 @@ function majCorps(dt, t, vTete) {
     c.bQueue = b;
 }
 
-/** Les figures à l'image : chacun selon son rôle, une foulée en marchant. */
+/**
+ * Les figures à l'image, chacune selon son rôle : une foulée en marchant,
+ * d'autant plus vive que l'élan est haut ; un saut à chaque syllabe du
+ * chœur, pancartes brandies ; assis pendant un sit-in ; les passants et la
+ * foule rassemblée applaudissent.
+ */
 function poserGens(dt, t) {
-    const c = cortege;
+    const c = cortege, ferveur = 0.5 + c.elan / 100, pulse = pulsationChant(t * 1000);
+    const r = c.rassemblement, bravos = !!r && t * 1000 > r.bravos[0] && t * 1000 < r.bravos[1];
     for (const p of c.gens) {
         if (p.retire) continue;
         if (p.role === 'part') {
@@ -12561,10 +13148,15 @@ function poserGens(dt, t) {
         }
         p.apparition = Math.min(1, p.apparition + dt * 2);
         const efface = p.role === 'part' ? Math.min(1, Math.max(0, 6 - p.depuis)) : p.cache ? 0 : 1;
-        const marche = (p.vitesse || 0) > 0.3;
-        const saut = marche ? Math.abs(Math.sin(t * 7 + p.phase)) * 0.06
-                   : p.role === 'groupe' || (p.role === 'marche' && c.phase !== 'marche') ? Math.abs(Math.sin(t * 4 + p.phase)) * 0.1 : 0;
-        const pancarte = p.pancarte ? Math.sin(t * 2.2 + p.phase) * 0.25 : null;
+        const marche = (p.vitesse || 0) > 0.3, rang = p.role === 'marche';
+        let saut = 0;
+        if (rang && c.negociation) saut = -0.6;
+        else if (rang && pulse > 0) saut = pulse * 0.3 * ferveur;
+        else if (marche) saut = Math.abs(Math.sin(t * 7 + p.phase)) * 0.06 * ferveur;
+        else if (p.applaudit || (rang && bravos)) saut = Math.abs(Math.sin(t * 9 + p.phase)) * 0.3;
+        else if (p.role === 'groupe' || (rang && c.phase !== 'marche')) saut = Math.abs(Math.sin(t * 4 + p.phase)) * 0.1;
+        const pancarte = p.pancarte && !(rang && c.negociation)
+            ? Math.sin(t * 2.2 + p.phase) * 0.25 * ferveur + (rang ? pulse * 0.4 : 0) : null;
         poserFigure(fouleCortege, p.i, p.x, p.y, p.cap, saut, p.echelle * efface * p.apparition, pancarte, !!p.bouclier);
     }
     c.gens = c.gens.filter(p => !p.retire);
@@ -12645,9 +13237,10 @@ function majGroupes(maintenant) {
             c.ordre.splice(Math.min(10, c.ordre.length), 0, ...g.membres);
             c.participants += n * CORTEGE_PAR_FIGURE;
             c.rallies += n * CORTEGE_PAR_FIGURE;
+            c.elan = Math.min(100, c.elan + GROUPE_ELAN);
             groupeCortege.remove(g.objet);
-            annoncer(`+${n * CORTEGE_PAR_FIGURE} participants<small>${g.nom.toLowerCase()} rejoignent le cortège</small>`, 3);
-            son('touche');
+            annoncer(`+${n * CORTEGE_PAR_FIGURE} participants<small>${g.nom.toLowerCase()} rejoignent le cortège · élan +${GROUPE_ELAN}</small>`, 3);
+            jouerSon(S => applaudir(S, S.ctx.currentTime, 2.5, 0.5));
         } else if (maintenant > g.fin && c.phase === 'marche') {
             g.etat = 'parti';
             for (const p of g.membres) fairePartir(p, p.x - g.x, p.y - g.y);
@@ -12663,12 +13256,13 @@ function majObstacles(dt, maintenant) {
     for (const o of c.cordons) {
         o.gyros[0].visible = allume === 0;
         o.gyros[1].visible = allume === 1;
-        // Les policiers font face au cortège qui approche.
+        // Ouvert, ils gagnent les trottoirs ; fermé, ils font face au cortège qui approche.
+        if (o.ouvert) { for (const p of o.policiers) marcherVers(p, p.place[0], p.place[1], 1.5, dt, o.cap + Math.PI / 2); continue; }
         const vers = Math.atan2(t.x - o.x, t.y - o.y);
         if (Math.hypot(t.x - o.x, t.y - o.y) < 120) for (const p of o.policiers) p.cap += ecartAngle(vers, p.cap) * (1 - Math.exp(-dt / 0.5));
     }
-    // Arrêté contre un cordon : le cortège piétine, des gens s'en vont.
-    if (t.bloque && t.bloque.type === 'cordon') c.participants -= c.participants * CORDON_PERTE * dt;
+    // Pressé contre un cordon sans négocier : le cortège piétine, des gens s'en vont.
+    if (t.bloque && t.bloque.type === 'cordon' && !c.negociation) c.participants -= c.participants * CORDON_PERTE * dt;
     // Une barricade : les premiers rangs la démontent. Pas le service
     // d'ordre : occupé par les casseurs, il laissait le cortège devant elle
     // plus de 40 s (République, au pilote).
@@ -12682,8 +13276,8 @@ function majObstacles(dt, maintenant) {
             annoncer('Barricade dégagée<small>le cortège repart</small>', 2);
         }
     }
-    // Une déviation, une ou deux fois : une rue fermée devant le cortège.
-    if (c.deviations < CORDON_DEVIATIONS && maintenant > c.prochaineDeviation) {
+    // Une déviation, une ou deux fois, une de plus si la tension est haute : une rue fermée devant le cortège.
+    if (c.deviations < CORDON_DEVIATIONS + (c.tension > 60 ? 1 : 0) && maintenant > c.prochaineDeviation) {
         c.prochaineDeviation = maintenant + (CORDON_DEVIATION_S[0] + Math.random() * (CORDON_DEVIATION_S[1] - CORDON_DEVIATION_S[0])) * 1000;
         declarerDeviation();
     }
@@ -12842,7 +13436,7 @@ function incident(cs) {
         cs.s = q.s;
         cs.sens = Math.random() < 0.5 ? 1 : -1;
     }
-    const f = creerFoyer(fx, fy, groupeCortege, false);
+    const f = creerFoyer(fx, fy, groupeCortege);
     f.intensite = 0.3;
     f.fin = performance.now() + FEU_CORTEGE_S * 1000;
     c.feux.push(f);
@@ -12854,8 +13448,17 @@ function incident(cs) {
     cs.depuis = 0;
     cs.chemin = [];
     cs.but = null;
-    annoncer('Incident<small>un casseur a mis le feu · gaz lacrymogène sur le cortège</small>', 3.5);
+    c.tension = Math.min(100, c.tension + TENSION_INCIDENT);
+    c.elan = Math.max(0, c.elan - 8);
+    // Une fois sur deux, une barricade en travers de la route, devant la tête.
+    const devant = c.arrivee && Math.random() < 0.5 ? cheminCortege(c.tete, c.arrivee) : null;
+    if (devant && devant.longueur > 80) {
+        const o = surChemin(devant, 30 + Math.random() * 30);
+        if (o && o.arete.longueur >= 10 && !c.barricades.some(b => b.arete === o.arete && !b.degagee)) creerBarricade(o.arete, o.s);
+    }
+    annoncer(`Incident<small>un casseur a mis le feu · gaz lacrymogène sur le cortège · tension +${TENSION_INCIDENT}</small>`, 3.5);
     son('impact');
+    jouerSon(S => { sifflet(S, S.ctx.currentTime + 0.2, 1.2); sirene(S, S.ctx.currentTime + 0.6, 3); });
 }
 
 /** Un nuage de gaz en (x, y), qui s'ouvre après `retard` s : des bouffées pâles, au ras du sol. */
@@ -13111,13 +13714,15 @@ function auSoleil(x, y) {
 }
 
 /**
- * Quelques figures par image, à tour de rôle, au soleil ou à l'ombre ; la
- * part du cortège au soleil en découle. La fatigue monte au soleil, d'autant
- * plus que le soleil est haut et la cadence vive, et redescend à l'ombre et
- * à l'arrêt ; au-delà de FATIGUE_SEUIL, des participants s'en vont.
+ * L'élan et la tension, à chaque image. Quelques figures par image, à tour
+ * de rôle, au soleil ou à l'ombre : la part du cortège au soleil en
+ * découle ; le soleil use l'élan d'autant plus qu'il est haut et la cadence
+ * vive, l'ombre l'épargne. Sous ELAN_BAS, des participants s'en vont. La
+ * tension monte hors du parcours, contre un cordon, avec des casseurs dans
+ * les rangs ; elle retombe sinon. À 100, la préfecture interrompt la marche.
  */
-function majFatigue(dt, avance) {
-    const c = cortege, o = c.ordre;
+function majElan(dt, avance, maintenant) {
+    const c = cortege, o = c.ordre, t = c.tete;
     for (let k = 0; k < OMBRE_TESTS_PAR_IMAGE && o.length; k++) {
         c.rangOmbre = (c.rangOmbre + 1) % o.length;
         const p = o[c.rangOmbre];
@@ -13130,11 +13735,26 @@ function majFatigue(dt, avance) {
     c.distanceOmbre += avance * (1 - c.partSoleil);
     if (c.phase !== 'marche') return;
     const arret = vitesseTete() === 0;
-    const cadence = arret ? 0 : (c.fatigue > FATIGUE_LENTE ? Math.min(c.cadence, 1) : c.cadence);
-    c.fatigue += dt * (FATIGUE_SOLEIL * c.chaleur * c.partSoleil * CORTEGE_EFFORT[cadence]
-                       - FATIGUE_OMBRE * (1 - c.partSoleil) - (arret ? FATIGUE_HALTE : 0));
-    c.fatigue = Math.min(Math.max(c.fatigue, 0), 100);
-    if (c.fatigue > FATIGUE_SEUIL) c.participants -= c.participants * FATIGUE_PERTE * (c.fatigue - FATIGUE_SEUIL) / 50 * dt;
+    const pousse = !!t.bloque && t.bloque.type === 'cordon' && !c.negociation;
+    const gaz = c.nuages.some(n => n.age > 0 && distanceAuCortege(n.x, n.y) < n.r);
+    c.elan += dt * (-ELAN_USURE * (c.negociation ? 0.4 : 1)
+                    - ELAN_SOLEIL * c.chaleur * c.partSoleil * CORTEGE_EFFORT[arret ? 0 : c.cadence]
+                    + ELAN_OMBRE * (1 - c.partSoleil) - (pousse ? ELAN_CORDON : 0) - (gaz ? ELAN_GAZ : 0));
+    c.elan = Math.min(Math.max(c.elan, 0), 100);
+    if (c.elan < ELAN_BAS) c.participants -= c.participants * ELAN_PERTE * (ELAN_BAS - c.elan) / ELAN_BAS * dt;
+    c.horsParcours = !c.parcours.aretes.has(t.arete);
+    const infiltres = c.casseurs.filter(cs => cs.etat === 'infiltre').length;
+    const attise = (c.horsParcours ? TENSION_HORS_PARCOURS : 0) + (pousse ? TENSION_CORDON : 0) + TENSION_INFILTRE * infiltres;
+    c.tension = Math.min(Math.max(c.tension + dt * (attise || -TENSION_DETENTE), 0), 100);
+    c.tensionMax = Math.max(c.tensionMax, c.tension);
+    c.elanCumul += c.elan * dt;
+    c.dureeCumul += dt;
+    if (!c.sommations && c.tension >= TENSION_SOMMATIONS) {
+        c.sommations = true;
+        annoncer('Sommations<small>la préfecture menace d\'interrompre le cortège · « Calme », et revenez sur le parcours</small>', 4);
+        jouerSon(S => sirene(S, S.ctx.currentTime, 3.5));
+    } else if (c.sommations && c.tension < TENSION_SOMMATIONS - 20) c.sommations = false;
+    if (c.tension >= 100) echecCortege('interrompu', maintenant);
 }
 
 /**
@@ -13165,32 +13785,48 @@ function ajusterRangs() {
 const cardinal = az => DIRECTIONS_CARDINALES[Math.round(((az % 360) + 360) % 360 / 45) % 8];
 const coteSimple = r => (Math.abs(r) < 45 ? 'devant' : Math.abs(r) > 135 ? 'derrière' : r > 0 ? 'à droite' : 'à gauche');
 
-/** Ce que dit l'indice : un casseur qui menace, sinon le groupe le plus proche, sinon l'arrivée. */
-function majIndiceCortege(maintenant) {
+/**
+ * Ce que dit l'indice : un casseur qui menace d'abord ; sinon, à tour de
+ * rôle, le groupe le plus proche, la grappe de passants la plus prometteuse
+ * (nombreuse et proche), l'arrivée. Hors du parcours, il le rappelle.
+ */
+function majIndiceCortege(maintenant, tourner = false) {
     const c = cortege, t = c.tete;
     const menace = c.casseurs.filter(cs => cs.etat === 'approche' && !cs.equipe)
         .map(cs => ({ cs, d: distanceAuCortege(cs.p.x, cs.p.y) })).filter(m => m.d < CASSEUR_MENACE_M)
         .sort((u, v) => u.d - v.d)[0];
     const groupe = c.groupes.filter(g => g.etat === 'attend')
-        .map(g => ({ g, d: Math.hypot(g.x - t.x, g.y - t.y) })).sort((u, v) => u.d - v.d)[0];
+        .map(g => ({ g, d: Math.hypot(g.x - t.x, g.y - t.y) })).filter(m => m.d < 400).sort((u, v) => u.d - v.d)[0];
+    const passants = c.passants.filter(g => g.etat !== 'rallie')
+        .map(g => ({ g, d: Math.hypot(g.x - t.x, g.y - t.y), n: g.membres.length * CORTEGE_PAR_FIGURE }))
+        .filter(m => m.d > 20 && m.d < 200).sort((u, v) => v.n / (v.d + 60) - u.n / (u.d + 60))[0];
     let x, y, titre, detail;
     const relatifVers = (px, py) => ecartAngle(Math.atan2(px - t.x, py - t.y), c.capVue) * 180 / Math.PI;
+    const options = [groupe && 'groupe', passants && 'passants', 'arrivee'].filter(Boolean);
+    if (tourner) c.tourIndice = (c.tourIndice || 0) + 1;
+    const choix = options[(c.tourIndice || 0) % options.length];
     if (menace) {
         [x, y] = [menace.cs.p.x, menace.cs.p.y];
         titre = 'Des casseurs approchent';
         detail = `${coteSimple(relatifVers(x, y))}, à ${Math.round(menace.d / 10) * 10} m · `
                + `${AU_DOIGT ? 'S.O.' : 'F'} pour le service d'ordre`;
-    } else if (groupe && groupe.d < 400) {
+    } else if (choix === 'groupe') {
         [x, y] = [groupe.g.x, groupe.g.y];
         titre = `${groupe.g.nom} attendent`;
         detail = `${coteSimple(relatifVers(x, y))}, à ${Math.round(groupe.d / 10) * 10} m`
                + (Number.isFinite(groupe.g.fin) ? ` · encore ${Math.max(0, Math.round((groupe.g.fin - maintenant) / 1000))} s` : '');
+    } else if (choix === 'passants') {
+        [x, y] = [passants.g.x, passants.g.y];
+        titre = `Du monde ${coteSimple(relatifVers(x, y))}`;
+        detail = `${passants.n} passants à ${Math.round(passants.d / 10) * 10} m${passants.g.a.nom ? `, ${passants.g.a.nom}` : ''}`
+               + ' · « Aux passants » pour les appeler';
     } else {
         [x, y] = [c.arrivee.x, c.arrivee.y];
         titre = coteIndice(relatifVers(x, y));
         detail = `arrivée à ${Math.round(Math.hypot(x - t.x, y - t.y) / 10) * 10} m `
                + `${cardinal(Math.atan2(x - t.x, y - t.y) * 180 / Math.PI)}`;
     }
+    if (c.horsParcours) detail += ' · hors du parcours déclaré';
     const fleche = indiceJeu.querySelector('svg');
     fleche.style.display = '';
     fleche.style.transform = `rotate(${relatifVers(x, y).toFixed(0)}deg)`;
@@ -13199,48 +13835,121 @@ function majIndiceCortege(maintenant) {
     if (small.textContent !== detail) small.textContent = detail;
 }
 
+/** Le bandeau : la foule et ses deux jauges, puis la marche ; l'effet du dernier slogan, quelques secondes. */
 function majHudCortege(maintenant) {
     const c = cortege, t = c.tete;
-    const chrono = c.phase === 'marche' || c.phase === 'fin' ? Math.floor(((c.fin ?? maintenant) - c.debut) / 1000) : 0;
-    const morceaux = [`${Math.round(Math.max(c.participants, 0)).toLocaleString('fr-FR')} participants`];
-    if (c.phase === 'choix') morceaux.push(`cliquez l'arrivée · ${Math.max(0, Math.ceil((c.finChoix - maintenant) / 1000))} s`);
-    if (c.arrivee) {
-        const dx = c.arrivee.x - t.x, dy = c.arrivee.y - t.y;
-        const relatif = ecartAngle(Math.atan2(dx, dy), c.capVue) * 180 / Math.PI;
-        morceaux.push(`cadence ${CORTEGE_NOMS_CADENCES[c.cadence]}${t.bloque ? ' (arrêté)' : ''}`);
+    const chrono = c.debut && c.phase !== 'choix' && c.phase !== 'forme' ? Math.floor(((c.fin ?? maintenant) - c.debut) / 1000) : 0;
+    const jauge = (v, classe = '') => `<span class="jauge ${classe}"><i style="width:${Math.round(v)}%"></i></span>`;
+    const haut = [`<b>${Math.round(Math.max(c.participants, 0)).toLocaleString('fr-FR')}</b> participants`,
+                  `élan${jauge(c.elan)}${Math.round(c.elan)}`, `tension${jauge(c.tension, 'tension')}${Math.round(c.tension)}`];
+    if (c.chaleur > 0) haut.push(`☀ ${Math.round(c.partSoleil * 100)} % au soleil`);
+    haut.push(`S.O. ${c.equipes.filter(e => e.etat === 'libre').length}/${SO_EQUIPES}`);
+    if (chrono) haut.push(`${Math.floor(chrono / 60)}:${String(chrono % 60).padStart(2, '0')}`);
+    const bas = [];
+    if (c.phase === 'choix') bas.push(`cliquez l'arrivée · ${Math.max(0, Math.ceil((c.finChoix - maintenant) / 1000))} s`);
+    if (c.arrivee && c.phase === 'marche') {
+        bas.push(`cadence ${CORTEGE_NOMS_CADENCES[c.cadence]}${t.bloque ? ' (arrêté)' : ''}`);
+        if (c.negociation) bas.push(`négociation ${Math.round(c.negociation.progres * 100)} %`);
         const p = c.prochain;
-        if (p && c.phase === 'marche') {
-            morceaux.push(p.choisie
+        if (p) {
+            bas.push(p.choisie
                 ? `carrefour à ${Math.round(p.distance)} m : ${coteVirage(p.choisie.tourne)}${p.choisie.arete.nom ? `, ${p.choisie.arete.nom}` : ''}`
                 : `impasse à ${Math.round(p.distance)} m`);
         }
-        morceaux.push(`<span class="fleche" style="transform:rotate(${relatif.toFixed(0)}deg)">↑</span>arrivée à ${Math.round(Math.hypot(dx, dy))} m`);
+        const dx = c.arrivee.x - t.x, dy = c.arrivee.y - t.y;
+        const relatif = ecartAngle(Math.atan2(dx, dy), c.capVue) * 180 / Math.PI;
+        bas.push(`<span class="fleche" style="transform:rotate(${relatif.toFixed(0)}deg)">↑</span> arrivée à ${Math.round(Math.hypot(dx, dy))} m`);
+        if (c.horsParcours) bas.push('<span class="alerte">hors du parcours déclaré</span>');
+        if (c.sommations) bas.push('<span class="alerte">sommations</span>');
     }
-    morceaux.push(c.chaleur > 0 ? `☀ ${Math.round(c.partSoleil * 100)} % au soleil, fatigue ${Math.round(c.fatigue)} %`
-                                : 'soleil couché, pas de chaleur');
-    const libres = c.equipes.filter(e => e.etat === 'libre').length;
-    morceaux.push(`S.O. ${libres}/${SO_EQUIPES} · ${c.ecartes} écarté${c.ecartes > 1 ? 's' : ''}`);
-    if (chrono) morceaux.push(`${Math.floor(chrono / 60)}:${String(chrono % 60).padStart(2, '0')}`);
-    hudJeu.innerHTML = morceaux.join(' · ');
+    if (c.effetSlogan && maintenant < c.effetSlogan.fin) bas.push(`→ ${c.effetSlogan.texte}`);
+    hudJeu.innerHTML = `<div>${haut.join(' · ')}</div>` + (bas.length ? `<div>${bas.join(' · ')}</div>` : '');
 }
 
-/** La fin : arrivé, ou dispersé ; le bilan, le record, une autre manifestation après CORTEGE_ENTRE_PARTIES_S. */
-function finCortege(reussi, maintenant) {
-    const c = cortege;
-    c.phase = 'fin';
+// --- L'arrivée : le rassemblement, le bilan ---
+
+/**
+ * La tête arrivée : la foule se réunit autour d'un camion sono, en
+ * tournesol sur les places libres ; quatre fumigènes de couleur ; trois
+ * prises de parole, chacune applaudie. Le bilan suit.
+ */
+function debuterRassemblement(maintenant) {
+    const c = cortege, a = c.arrivee;
+    c.phase = 'rassemblement';
     c.fin = maintenant;
+    c.negociation = null;
     indiceJeu.hidden = true;
     for (const m of flechesCarrefour) m.visible = false;
-    const duree = (maintenant - c.debut) / 1000, arrives = Math.round(Math.max(c.participants, 0));
-    if (!reussi) {
-        annoncer(`Le cortège s'est dispersé<small>${arrives} participants restaient sur ${CORTEGE_PARTICIPANTS + c.rallies}`
-                 + ` · nouvelle manifestation dans ${CORTEGE_ENTRE_PARTIES_S} s</small>`, CORTEGE_ENTRE_PARTIES_S);
-        c.relance = maintenant + CORTEGE_ENTRE_PARTIES_S * 1000;
-        return;
+    for (const g of c.passants) if (g.etiquette) g.etiquette.visible = false;
+    const camion = new THREE.Group();
+    const caisse = new THREE.Mesh(new THREE.BoxGeometry(2.3, 2.6, 4.2).translate(0, 1.5, -0.6), MAT_FOURGON);
+    const cabine = new THREE.Mesh(new THREE.BoxGeometry(2.2, 1.9, 1.6).translate(0, 1.15, 2.3), MAT_BANDE);
+    const enceintes = [-0.7, 0.7].map(x => new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.9, 0.5).translate(x, 3.25, -1.8),
+                                                           MAT_DEBRIS));
+    camion.add(caisse, cabine, ...enceintes);
+    camion.position.set(a.x, ySol(...toLonLat(a.x, a.y)), -a.y);
+    camion.rotation.y = -normaleArete(a.arete, a.s).cap;
+    groupeCortege.add(camion);
+    const places = [];
+    for (let k = 0; places.length < c.ordre.length && k < 8 * c.ordre.length + 200; k++) {
+        const r = 7 + 1.15 * Math.sqrt(k), ang = k * 2.39996;
+        const x = a.x + r * Math.cos(ang), y = a.y + r * Math.sin(ang);
+        if (placeLibre(x, y)) places.push([x, y]);
     }
+    c.ordre.forEach((p, k) => { p.place = places[k] || places.at(-1) || [a.x, a.y]; });
+    const bord = 8 + 1.15 * Math.sqrt(places.length);
+    const fumigenes = [0xe74c3c, 0x2ecc71, 0xf1c40f, 0x9b59b6].map((teinte, k) => ({
+        x: a.x + bord * Math.cos(k * Math.PI / 2 + 0.4), y: a.y + bord * Math.sin(k * Math.PI / 2 + 0.4),
+        intensite: 0.1, fumee: [], parent: groupeCortege, teinte, prochaineBouffee: 0 }));
+    c.rassemblement = { debut: maintenant, camion, fumigenes, discours: 0, bravos: [0, 0] };
+    annoncer('Arrivé !<small>le cortège se rassemble · prise de parole</small>', 3.5);
+    jouerSon(S => applaudir(S, S.ctx.currentTime, 4, 0.6));
+}
+
+function majRassemblement(dt, maintenant) {
+    const c = cortege, r = c.rassemblement, t = (maintenant - r.debut) / 1000;
+    // Au pas de course : la queue, 80 m derrière, arrivait après le bilan.
+    for (const p of c.ordre) marcherVers(p, p.place[0], p.place[1], 4, dt, Math.atan2(c.arrivee.x - p.x, c.arrivee.y - p.y));
+    // Des panaches minces : à 6 m et 0,75, quatre boules opaques mangeaient la place.
+    for (const f of r.fumigenes) {
+        if (maintenant > f.prochaineBouffee && t < RASSEMBLEMENT_S - 3) {
+            f.prochaineBouffee = maintenant + 300;
+            bouffee(f, f.teinte, 0.45, 5, 3);
+        }
+        animerFumee(f, dt);
+    }
+    // Une prise de parole toutes les 4,5 s, de 2,5 s, puis les bravos.
+    if (r.discours < 3 && t > 2.5 + r.discours * 4.5) {
+        r.discours++;
+        const syl = discoursAuHasard();
+        const duree = syl.reduce((d, s) => d + s.duree + s.silence, 0) * 0.16;
+        r.bravos = [maintenant + duree * 1000, maintenant + (duree + 2.5) * 1000];
+        jouerSon(S => {
+            const fin = chanter(S, syl, S.ctx.currentTime + 0.05, 0.16, 0.3, true);
+            applaudir(S, fin - 0.35, 2.5, 0.55);
+        });
+    }
+    if (t > RASSEMBLEMENT_S) bilanCortege(maintenant);
+}
+
+/**
+ * Le bilan : des étoiles pour le monde arrivé (rapporté au départ), l'élan
+ * moyen, le calme (la tension la plus haute, les incidents) ; un score, et
+ * le record. Une autre manifestation après CORTEGE_ENTRE_PARTIES_S.
+ */
+function bilanCortege(maintenant) {
+    const c = cortege;
+    c.phase = 'fin';
+    const duree = (c.fin - c.debut) / 1000, arrives = Math.round(Math.max(c.participants, 0));
+    const elanMoyen = c.dureeCumul ? c.elanCumul / c.dureeCumul : c.elan;
     const reference = c.plusCourt / CORTEGE_CADENCES[2] * SCORE_MARGE;
-    const score = Math.max(0, Math.round(arrives + SCORE_ECARTE * c.ecartes - SCORE_RETARD * Math.max(0, duree - reference)));
-    const efficacite = Math.round(100 * Math.min(1, c.plusCourt / Math.max(c.parcouru, 1)));
+    const score = Math.max(0, Math.round(arrives + SCORE_ELAN * elanMoyen + SCORE_ECARTE * c.ecartes
+                                         - SCORE_INCIDENT * c.incidents - SCORE_RETARD * Math.max(0, duree - reference)));
+    const etoiles = n => '★'.repeat(n) + '☆'.repeat(3 - n);
+    const monde = arrives >= 1.5 * CORTEGE_PARTICIPANTS ? 3 : arrives >= 1.1 * CORTEGE_PARTICIPANTS ? 2
+                : arrives >= 0.8 * CORTEGE_PARTICIPANTS ? 1 : 0;
+    const elan = elanMoyen >= 70 ? 3 : elanMoyen >= 55 ? 2 : elanMoyen >= 40 ? 1 : 0;
+    const calme = !c.incidents && c.tensionMax < 40 ? 3 : c.tensionMax < 60 ? 2 : c.tensionMax < 80 ? 1 : 0;
     const ombre = Math.round(100 * c.distanceOmbre / Math.max(c.parcouru, 1));
     let record = null, nouveau = false;
     try {
@@ -13248,13 +13957,44 @@ function finCortege(reussi, maintenant) {
         nouveau = !record || score > record;
         if (nouveau) localStorage.setItem(CLE_RECORD_CORTEGE, String(score));
     } catch (e) { /* navigation privée : pas de record */ }
-    annoncer(`Arrivé ! ${score.toLocaleString('fr-FR')} points${nouveau ? ' · record' : record ? ` · record : ${record.toLocaleString('fr-FR')}` : ''}`
-             + `<small>${arrives.toLocaleString('fr-FR')} participants arrivés (${CORTEGE_PARTICIPANTS.toLocaleString('fr-FR')} au départ`
-             + `${c.rallies ? `, ${c.rallies.toLocaleString('fr-FR')} ralliés` : ''}) · ${enClair(duree)}<br>`
-             + `trajet ${Math.round(c.parcouru)} m, efficacité ${efficacite} % · ${ombre} % à l'ombre · `
-             + `${c.ecartes} casseur${c.ecartes > 1 ? 's' : ''} écarté${c.ecartes > 1 ? 's' : ''}, ${c.incidents} incident${c.incidents > 1 ? 's' : ''}<br>`
-             + `nouvelle manifestation dans ${CORTEGE_ENTRE_PARTIES_S} s</small>`, CORTEGE_ENTRE_PARTIES_S);
-    son('touche');
+    const fr = n => n.toLocaleString('fr-FR'), pluriel = (n, mot) => `${n} ${mot}${n > 1 ? 's' : ''}`;
+    annoncer(`${fr(score)} points${nouveau ? ' · record' : record ? ` · record : ${fr(record)}` : ''}`
+             + `<small>monde ${etoiles(monde)} · élan ${etoiles(elan)} · calme ${etoiles(calme)}<br>`
+             + `${fr(arrives)} participants arrivés (${fr(CORTEGE_PARTICIPANTS)} au départ`
+             + `${c.rallies ? `, ${fr(c.rallies)} des groupes` : ''}${c.passantsRallies ? `, ${fr(c.passantsRallies)} passants` : ''})`
+             + ` · ${enClair(duree)}<br>élan moyen ${Math.round(elanMoyen)} · tension au plus ${Math.round(c.tensionMax)} · `
+             + `${pluriel(c.ecartes, 'casseur')} écarté${c.ecartes > 1 ? 's' : ''}, ${pluriel(c.incidents, 'incident')} · `
+             + `${ombre} % à l'ombre<br>nouvelle manifestation dans ${CORTEGE_ENTRE_PARTIES_S} s</small>`, CORTEGE_ENTRE_PARTIES_S);
+    c.relance = maintenant + CORTEGE_ENTRE_PARTIES_S * 1000;
+}
+
+/**
+ * La défaite : dispersé (trop peu de monde), ou interrompu par la
+ * préfecture (la tension à 100) — le gaz tombe alors sur les rangs, qui
+ * s'en vont. Une autre manifestation après CORTEGE_ENTRE_PARTIES_S.
+ */
+function echecCortege(raison, maintenant) {
+    const c = cortege;
+    c.phase = 'fin';
+    c.fin = maintenant;
+    c.defaite = raison;
+    c.negociation = null;
+    indiceJeu.hidden = true;
+    for (const m of flechesCarrefour) m.visible = false;
+    const restaient = Math.round(Math.max(c.participants, 0));
+    if (raison === 'interrompu') {
+        for (const part of [0.1, 0.4, 0.7]) {
+            pointDeTrace(c.tete.d - c.bQueue * part, c.trace.length - 1);
+            creerNuage(pointCorps.x, pointCorps.y, part * 2);
+        }
+        for (const p of [...c.ordre]) if (p.role === 'marche') fairePartir(p, p.lat || Math.random() - 0.5, Math.random() - 0.5);
+        annoncer(`La préfecture interrompt le cortège<small>la tension a atteint son comble · ${restaient.toLocaleString('fr-FR')} `
+                 + `participants dispersés<br>nouvelle manifestation dans ${CORTEGE_ENTRE_PARTIES_S} s</small>`, CORTEGE_ENTRE_PARTIES_S);
+        jouerSon(S => sirene(S, S.ctx.currentTime, 4));
+    } else {
+        annoncer(`Le cortège s'est dispersé<small>${restaient.toLocaleString('fr-FR')} participants restaient · sans slogan `
+                 + `ni ombre, l'élan retombe<br>nouvelle manifestation dans ${CORTEGE_ENTRE_PARTIES_S} s</small>`, CORTEGE_ENTRE_PARTIES_S);
+    }
     c.relance = maintenant + CORTEGE_ENTRE_PARTIES_S * 1000;
 }
 
@@ -13276,6 +14016,9 @@ function activerCortege() {
     groupeDrone.visible = false;
     hudDrone.hidden = true;
     hudJeu.hidden = false;
+    hudJeu.classList.add('cortege');
+    barreCortege.hidden = false;
+    majBoutonSon();
     padTir.hidden = !TACTILE;
     padTir.textContent = 'S.O.';
     padTir.setAttribute('aria-label', 'Envoyer le service d\'ordre');
@@ -13284,6 +14027,7 @@ function activerCortege() {
     tip.style.display = 'none';
     cortege.capVue = drone.cap;
     focusCortege.copy(controls.target);
+    demarrerSonCortege();
     nouvelleManif();
 }
 
@@ -13292,10 +14036,14 @@ function arreterCortege() {
     cortege.actif = false;
     viderCortege();
     cortege.gens = [];
+    cortege.chant = cortege.bulle = null;
+    arreterSonCortege();
     btnCortege.classList.remove('on');
     groupeCortege.visible = false;
     groupeDrone.visible = droneActif;
     hudJeu.hidden = messageJeu.hidden = indiceJeu.hidden = padTir.hidden = true;
+    hudJeu.classList.remove('cortege');
+    barreCortege.hidden = true;
     padTir.textContent = 'TIR';
     padTir.setAttribute('aria-label', 'Tirer');
     if (droneActif) {
@@ -13334,7 +14082,9 @@ function cliquerCortege(rayon, e, r) {
 function majCortege(dt, maintenant) {
     const c = cortege, t = maintenant / 1000;
     if (c.relance && maintenant > c.relance) nouvelleManif();
-    traiterAppuis();
+    // Lancé de l'URL, sans geste : le son attend le premier.
+    if (!sonCortege.maitre) demarrerSonCortege();
+    traiterAppuis(maintenant);
     if (c.phase === 'choix' && maintenant > c.finChoix) arriveeAuto();
     if (c.phase === 'forme' && maintenant > c.debutMarche) {
         c.phase = 'marche';
@@ -13342,7 +14092,8 @@ function majCortege(dt, maintenant) {
         c.prochaineVague = maintenant + CASSEURS_PREMIERE_S * 1000;
         c.prochaineDeviation = maintenant + (CORDON_DEVIATION_S[0] + Math.random() * (CORDON_DEVIATION_S[1] - CORDON_DEVIATION_S[0])) * 1000;
         c.prochainIndice = maintenant + JEU_INDICE_PREMIER_S * 1000;
-        annoncer(`En marche !<small>${AU_DOIGT ? '↶ ↷' : '← →'} la branche au prochain carrefour · ↑ ↓ la cadence</small>`, 3);
+        annoncer(`En marche !<small>${AU_DOIGT ? '↶ ↷' : '← →'} la branche · ↑ ↓ la cadence · `
+                 + `${AU_DOIGT ? 'les slogans, en bas' : '1 à 4 les slogans'} : sans eux, l'élan retombe</small>`, 3.5);
     }
     let v = 0;
     if (c.phase === 'marche') {
@@ -13350,7 +14101,8 @@ function majCortege(dt, maintenant) {
         const avant = c.parcouru;
         avancerTete(v * dt);
         majTrace();
-        majFatigue(dt, c.parcouru - avant);
+        majNegociation(dt, maintenant);
+        majElan(dt, c.parcouru - avant, maintenant);
         majGroupes(maintenant);
         majObstacles(dt, maintenant);
         if (maintenant > c.prochaineVague) {
@@ -13358,10 +14110,15 @@ function majCortege(dt, maintenant) {
             vagueCasseurs();
         }
         ajusterRangs();
-        if (Math.hypot(c.arrivee.x - c.tete.x, c.arrivee.y - c.tete.y) < CORTEGE_ARRIVE_M) finCortege(true, maintenant);
-        else if (c.participants < CORTEGE_DISPERSE * CORTEGE_PARTICIPANTS) finCortege(false, maintenant);
-    } else majFatigue(dt, 0);
+        if (c.phase === 'marche') {
+            if (Math.hypot(c.arrivee.x - c.tete.x, c.arrivee.y - c.tete.y) < CORTEGE_ARRIVE_M) debuterRassemblement(maintenant);
+            else if (c.participants < CORTEGE_DISPERSE * CORTEGE_PARTICIPANTS) echecCortege('disperse', maintenant);
+        }
+    } else majElan(dt, 0, maintenant);
+    if (c.phase === 'rassemblement') majRassemblement(dt, maintenant);
+    majChant(maintenant);
     majCorps(dt, t, v);
+    majPassants();
     majCasseurs(dt, maintenant);
     majServiceOrdre(dt, maintenant);
     majGaz(dt);
@@ -13371,11 +14128,17 @@ function majCortege(dt, maintenant) {
     if (c.phase === 'marche') majProchain(); else for (const m of flechesCarrefour) m.visible = false;
     marqueArrivee.userData.colonne.visible = Math.hypot(camera.position.x - marqueArrivee.position.x,
                                                         camera.position.z - marqueArrivee.position.z) > 40;
+    if (sonCortege.maitre) {
+        const marche = c.phase === 'marche' && !c.tete.bloque;
+        majSonCortege(sonCortege, { foule: c.phase === 'fin' && c.defaite ? 0 : c.participants, elan: c.elan / 100,
+                                    bpm: c.phase === 'rassemblement' ? 132 : marche ? CORTEGE_TAMBOURS[c.cadence] : 0,
+                                    proche: Math.min(1, 70 / Math.max(camera.position.distanceTo(focusCortege), 70)) });
+    }
 
     if (c.phase === 'marche' && messageJeu.hidden && maintenant > c.prochainIndice) {
         c.prochainIndice = maintenant + JEU_INDICE_S * 1000;
         c.finIndice = maintenant + JEU_INDICE_DUREE_S * 1000;
-        majIndiceCortege(maintenant);
+        majIndiceCortege(maintenant, true);
         indiceJeu.hidden = false;
         son('indice');
     }
@@ -13385,6 +14148,7 @@ function majCortege(dt, maintenant) {
         c.hud = maintenant;
         if (!indiceJeu.hidden) majIndiceCortege(maintenant);
         majHudCortege(maintenant);
+        majBarreCortege(maintenant);
     }
 }
 
@@ -13392,8 +14156,9 @@ function majCortege(dt, maintenant) {
  * La caméra : le drone qui filme le cortège. Au choix de l'arrivée, haut
  * au-dessus de la place, pour voir la zone ; en marche, derrière la tête,
  * plongeant à 52°, tournée comme la marche lissée sur deux secondes — un
- * carrefour ne fait pas pivoter la vue d'un coup. La molette règle la
- * distance, comme le recul du drone ; jamais sous un toit.
+ * carrefour ne fait pas pivoter la vue d'un coup ; au rassemblement, elle
+ * tourne lentement autour de la place. La molette règle la distance, comme
+ * le recul du drone ; jamais sous un toit.
  */
 const focusCortege = new THREE.Vector3(), focusVoulu = new THREE.Vector3(), cameraVoulueCortege = new THREE.Vector3();
 function cameraCortege(dt) {
@@ -13404,6 +14169,12 @@ function cameraCortege(dt) {
         fy = c.depart ? c.depart.y : 0;
         distance = Math.min(1300, 0.8 * ZONE);
         plongee = 62 * Math.PI / 180;
+    } else if (c.rassemblement && !c.defaite) {
+        c.capVue += dt * 0.12;
+        fx = c.arrivee.x;
+        fy = c.arrivee.y;
+        distance = 40 + 4 * drone.recul;
+        plongee = 46 * Math.PI / 180;
     } else {
         c.capVue += ecartAngle(c.cap, c.capVue) * (1 - Math.exp(-dt / 2));
         fx = c.tete.x + Math.sin(c.capVue) * 3;
@@ -13518,8 +14289,6 @@ renderer.domElement.addEventListener('pointerup', e => {
     raycaster.setFromCamera(souris, camera);
     // Pendant la traque, un clic tire là où il désigne.
     if (jeu.actif) { tirerSelonRayon(raycaster.ray); return; }
-    // Aux incendies, un clic largue l'eau : elle tombe du drone, pas là où l'on clique.
-    if (feux.actif) { larguer(performance.now()); return; }
     // Au cortège, il pose l'arrivée, puis envoie le service d'ordre.
     if (cortege.actif) { cliquerCortege(raycaster.ray, e, r); return; }
     const hit = raycaster.intersectObjects(ciblesSurvol, false)[0];
@@ -14011,7 +14780,6 @@ function boucle(maintenant) {
     else if (droneActif) majDrone(dt, maintenant);
     else controls.update();
     if (jeu.actif) majJeu(dt, maintenant);
-    if (feux.actif) majIncendies(dt, maintenant);
     majHorizon(maintenant);
     if (horizonActif) {
         ciel.position.copy(camera.position);

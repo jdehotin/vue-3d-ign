@@ -15,39 +15,72 @@ messages de commit et dans les commentaires des modules.
 
 ### Ajouté
 
-- **Un troisième jeu : le cortège**, par le bouton **Cortège** en vol (ou
+- **Un second jeu : le cortège**, par le bouton **Cortège** en vol (ou
   `?jeu=cortege`). Il s'agit de mener une marche pacifique, de la place de
-  la scène jusqu'à son arrivée, par les rues de la BD TOPO, en gardant le
-  plus de monde.
-  - **L'arrivée et la caméra.** On clique l'arrivée ; sans clic au bout de
-    10 s, la page choisit une place dégagée, à 400 à 700 m par les rues. Le
-    drone suit la tête et filme.
-  - **Les commandes.** **← →** choisissent la branche au prochain
-    carrefour, qu'une flèche au sol annonce, avec le nom de la rue. **↑ ↓**
-    règlent la cadence. **↓** à l'arrêt fait demi-tour : la queue passe en
-    tête.
-  - **La ville réelle.** Une rue étroite étire le cortège et le ralentit ;
-    un boulevard le resserre ; une montée le ralentit aussi.
-  - **Le soleil.** À l'heure et au jour du panneau Soleil, le cortège se
-    fatigue au soleil et perd du monde. À l'ombre des immeubles et des
-    arbres, il récupère.
-  - **En route.** Trois groupes attendent, à quelques rues, qu'on passe les
-    prendre. Des cordons de police ferment des rues : deux sur le plus
-    court chemin, et une ou deux déviations en marche. Des barricades en
-    barrent d'autres.
-  - **Les casseurs.** Ils approchent par les rues voisines pour
-    s'infiltrer. **F**, ou un clic sur eux, envoie le service d'ordre les
-    escorter dehors. Un casseur laissé faire met le feu, et le gaz qui
+  la scène jusqu'à son arrivée, par les rues de la BD TOPO, avec le plus de
+  monde, sans que la préfecture l'interrompe. Refait de fond en comble le
+  jour de sa sortie : la première version se jouait presque seule, et elle
+  était muette.
+  - **L'arrivée et le parcours déclaré.** On clique l'arrivée ; sans clic
+    au bout de 10 s, la page choisit une place dégagée, à 400 à 700 m par
+    les rues. Le plus court chemin devient le parcours déclaré, tracé en
+    tirets verts au sol. Le drone suit la tête et filme.
+  - **Deux jauges.** L'**élan**, l'énergie de la foule : haut, il presse le
+    pas et entraîne les passants ; sous 30, des gens rentrent chez eux. Le
+    silence, le soleil, l'attente et le gaz l'usent. La **tension**, la
+    patience de la préfecture : elle monte hors du parcours déclaré, contre
+    un cordon, avec des casseurs dans les rangs ; à 70, les sommations ; à
+    100, la préfecture interrompt le cortège.
+  - **Les slogans**, touches **1** à **4** ou boutons en bas de la vue :
+    l'ambiance (élan), l'appel aux passants, le calme (tension, casseurs
+    isolés, négociation), et ceux de la ville, au nom de la commune et des
+    rues (« Gordes, debout ! »), quand l'élan dépasse 60. Chacun a sa
+    recharge ; le même registre deux fois de suite porte moitié moins.
+  - **Le son**, tout de synthèse : un brouhaha qui suit la foule et son
+    élan, des tambours au pas, des sifflets, et chaque slogan lancé au
+    mégaphone puis repris en chœur, sur son rythme et ses voyelles, le
+    texte affiché au-dessus de la tête. **M** le coupe.
+  - **Les passants**, par grappes sur les trottoirs, d'autant plus nombreux
+    que la rue est bordée de logements et de commerces (BD TOPO). Leur
+    nombre s'affiche au-dessus d'eux ; « Aux passants » les appelle, et une
+    tête pleine d'élan les entraîne. Le parcours le plus court n'est pas le
+    plus peuplé.
+  - **Les cordons.** La préfecture ferme d'emblée quelques rues qui partent
+    du parcours, puis une ou deux devant le cortège en marche. Arrêté
+    devant, on négocie (**N**) : un sit-in, qui aboutit d'autant plus vite
+    que la tension est basse ; ou l'on fait demi-tour (**↓**).
+  - **Les groupes** (lycéens, soignants, gilets jaunes, agriculteurs,
+    habitants du quartier : trois par partie) attendent à quelques rues
+    qu'on passe les prendre.
+  - **Les casseurs** approchent pour s'infiltrer. **F**, ou un clic sur
+    eux, envoie le service d'ordre les escorter dehors. Un casseur laissé
+    faire met le feu, parfois une barricade devant la tête ; le gaz qui
     répond disperse ceux qui s'y trouvent.
   - **Personne n'est frappé.** Les cordons bloquent sans charger, et le gaz
     ne répond qu'aux incidents.
-  - **Le score** compte les participants arrivés, les casseurs écartés et
-    le temps ; le meilleur est gardé dans le navigateur.
-  - **Une partie jouée au pilote**, place de la République le 21 juin à
-    14 h : 1 012 participants sur 1 200 à l'arrivée, en 4 min 49 s.
+  - **À l'arrivée, un rassemblement** autour d'un camion sono : prises de
+    parole, applaudissements, fumigènes de couleur. Puis le bilan : des
+    étoiles pour le monde arrivé, l'élan moyen et le calme, un score, le
+    record gardé dans le navigateur.
+  - **Les commandes de la marche** ne changent pas : **← →** la branche au
+    prochain carrefour, qu'une flèche au sol annonce avec le nom de la
+    rue ; **↑ ↓** la cadence ; **↓** à l'arrêt fait demi-tour. Une rue
+    étroite étire le cortège et le ralentit, un boulevard le resserre, une
+    montée le ralentit.
+  - **Des parties au pilote**, à midi le 19 octobre. Place de la République,
+    en variant les slogans : 1 330 participants à l'arrivée sur 1 200 au
+    départ (130 passants), élan moyen 77, en 1 min 58 s. À Gordes, sans
+    un slogan : 571 à l'arrivée, élan moyen 13, en 3 min 36 s ; avec :
+    1 340, élan moyen 66.
+  - Les enjeux sont ceux des manifestations de l'automne 2026 : un parcours
+    négocié avec la préfecture, des cortèges débordés par des casseurs et
+    interrompus avant leur terme.
   - Rien dans la scène ni dans le cache. Le film `cortege carre`
     (`outils/demo-video.mjs`) en joue une partie, de la place de la
-    République au canal Saint-Martin.
+    République au canal Saint-Martin, **avec le son du jeu** : le film étant
+    capturé image par image, la page y reçoit un `OfflineAudioContext` réglé
+    sur l'heure du film, et la piste, rendue à la fin et ramenée à −16 LUFS,
+    est montée sous la vidéo. `SON=0` la retire.
 - **Un logo, la Tuile** : une carte de neuf cases en perspective
   isométrique, dont celle du centre se lève en volume, à l'orange de la page.
   Il remplace l'arbre du favicon, sert d'icône à la page ajoutée à l'écran
@@ -62,20 +95,6 @@ messages de commit et dans les commentaires des modules.
   1 Go par défaut de `container`, et garde les scènes dans le volume
   `vue-3d-ign-scenes`. Pas de CoreML : les détecteurs y tournent au
   processeur, comme sous Docker.
-- **Un second jeu en drone : les incendies**, par le bouton **Feux** en vol
-  (ou `?jeu=1`) ; la traque a désormais le sien, **Traque**. Six incendies se déclarent un à un aux
-  carrefours de la ville, une manifestation autour de chacun : une trentaine
-  de manifestants qui scandent, pancartes levées. Le drone les éteint en
-  larguant de l'eau (**F**, un clic, ou **EAU** au doigt) ; elle tombe en
-  gardant la vitesse du drone, et un réticule bleu montre où elle arrivera.
-  Un foyer grandit tant qu'on le laisse : quatre largages l'éteignent au plus
-  fort, et 45 s au plus fort le rendent hors de contrôle. La réserve de
-  douze largages se remplit à la base, d'où le drone a décollé, ou au ras de
-  l'eau de la BD TOPO. Les manifestants s'écartent d'une eau tombée près
-  d'eux, applaudissent le feu éteint, puis se dispersent. Une colonne de
-  fumée signale chaque foyer de loin, et l'indice des 15 s pointe vers le
-  plus proche, ou vers la base quand la réserve est vide. Rien dans la
-  scène ni dans le cache.
 - **Un jeu en drone : la traque.** En vol, le bouton **Traque** lâche dans la
   scène un petit bonhomme, Vladimir, une figurine, qui court sur les
   routes BD TOPO de véhicule en véhicule : il en choisit un à 30 à 150 m par
@@ -256,6 +275,10 @@ messages de commit et dans les commentaires des modules.
 
 ### Modifié
 
+- **Le jeu des incendies est retiré**, un jour après son arrivée : son
+  bouton **Feux** disparaît, `?jeu=1` ouvre de nouveau la traque, et le film
+  `feux` quitte `outils/demo-video.mjs`. Le cortège garde ses figures, ses
+  flammes et sa fumée.
 - **À l'ouverture, la scène entière est dans le cadre.** La caméra se tenait
   à 180 m du point, réglés pour l'ancienne emprise de 356 m : en zone de
   1 000 m, on ne voyait que le centre. Elle recule désormais, sous le même
@@ -297,6 +320,11 @@ messages de commit et dans les commentaires des modules.
 
 ### Corrigé
 
+- **Les boutons de la vue tiennent sur un petit écran.** En vol, leur
+  colonne descendait à 464 px du haut ; avec le pad du drone, il fallait
+  650 px. Sur un téléphone en paysage (390 px), Cortège et « ? » sortaient
+  de l'écran, et un bouton passait sous la flèche ▶. La colonne s'arrête
+  désormais au-dessus des crédits, ou du pad, et se poursuit à sa gauche.
 - **« Ma position » recentre la scène quand on en est sorti.** Rappuyer sur
   le bouton pendant le suivi l'arrêtait, et la scène restait où elle était :
   dans une Tesla en marche, on ne se retrouvait plus. Hors de la scène, le
