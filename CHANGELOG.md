@@ -15,6 +15,39 @@ messages de commit et dans les commentaires des modules.
 
 ### Ajouté
 
+- **Un troisième jeu : le cortège**, par le bouton **Cortège** en vol (ou
+  `?jeu=cortege`). Il s'agit de mener une marche pacifique, de la place de
+  la scène jusqu'à son arrivée, par les rues de la BD TOPO, en gardant le
+  plus de monde.
+  - **L'arrivée et la caméra.** On clique l'arrivée ; sans clic au bout de
+    10 s, la page choisit une place dégagée, à 400 à 700 m par les rues. Le
+    drone suit la tête et filme.
+  - **Les commandes.** **← →** choisissent la branche au prochain
+    carrefour, qu'une flèche au sol annonce, avec le nom de la rue. **↑ ↓**
+    règlent la cadence. **↓** à l'arrêt fait demi-tour : la queue passe en
+    tête.
+  - **La ville réelle.** Une rue étroite étire le cortège et le ralentit ;
+    un boulevard le resserre ; une montée le ralentit aussi.
+  - **Le soleil.** À l'heure et au jour du panneau Soleil, le cortège se
+    fatigue au soleil et perd du monde. À l'ombre des immeubles et des
+    arbres, il récupère.
+  - **En route.** Trois groupes attendent, à quelques rues, qu'on passe les
+    prendre. Des cordons de police ferment des rues : deux sur le plus
+    court chemin, et une ou deux déviations en marche. Des barricades en
+    barrent d'autres.
+  - **Les casseurs.** Ils approchent par les rues voisines pour
+    s'infiltrer. **F**, ou un clic sur eux, envoie le service d'ordre les
+    escorter dehors. Un casseur laissé faire met le feu, et le gaz qui
+    répond disperse ceux qui s'y trouvent.
+  - **Personne n'est frappé.** Les cordons bloquent sans charger, et le gaz
+    ne répond qu'aux incidents.
+  - **Le score** compte les participants arrivés, les casseurs écartés et
+    le temps ; le meilleur est gardé dans le navigateur.
+  - **Une partie jouée au pilote**, place de la République le 21 juin à
+    14 h : 1 012 participants sur 1 200 à l'arrivée, en 4 min 49 s.
+  - Rien dans la scène ni dans le cache. Le film `cortege carre`
+    (`outils/demo-video.mjs`) en joue une partie, de la place de la
+    République au canal Saint-Martin.
 - **Un logo, la Tuile** : une carte de neuf cases en perspective
   isométrique, dont celle du centre se lève en volume, à l'orange de la page.
   Il remplace l'arbre du favicon, sert d'icône à la page ajoutée à l'écran

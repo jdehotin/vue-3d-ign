@@ -571,11 +571,13 @@
                     <rect x="10" y="10" width="4" height="4" rx="1"/>
                 </svg>
             </button>
-            <!-- Les deux jeux du drone, visibles en vol ; chacun s'arrête par son bouton. -->
+            <!-- Les jeux du drone, visibles en vol ; chacun s'arrête par son bouton. -->
             <button type="button" id="t-jeu" class="bouton-vue texte" hidden aria-label="Jeu des incendies"
                     title="Jeu : éteindre depuis le drone les incendies qui se déclarent dans la ville, au milieu des manifestations">Feux</button>
             <button type="button" id="t-traque" class="bouton-vue texte" hidden aria-label="Jeu de la traque"
                     title="Jeu : retrouver Vladimir, qui court sur les routes entre les véhicules, et le toucher depuis le drone">Traque</button>
+            <button type="button" id="t-cortege" class="bouton-vue texte" hidden aria-label="Jeu du cortège"
+                    title="Jeu : mener une marche pacifique jusqu'à son arrivée par les vraies rues, en écartant les casseurs qui s'y infiltrent">Cortège</button>
             <button type="button" id="btn-aide" class="bouton-vue" aria-label="Prise en main"
                     aria-haspopup="dialog" aria-controls="tuto" title="Prise en main : les gestes, et ce que montre la vue">
                 <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -9599,7 +9601,7 @@ function objetSous(touche) {
 
 renderer.domElement.addEventListener('pointermove', e => {
     // Pendant la traque, pas d'infobulle sous le viseur (activerJeu la ferme).
-    if (tipEpingle || jeu.actif || feux.actif) return;
+    if (tipEpingle || jeu.actif || feux.actif || cortege.actif) return;
     const r = renderer.domElement.getBoundingClientRect();
     souris.x = ((e.clientX - r.left) / r.width) * 2 - 1;
     souris.y = -((e.clientY - r.top) / r.height) * 2 + 1;
@@ -9892,6 +9894,7 @@ for (const b of padDrone.querySelectorAll('button')) {
         e.preventDefault();
         b.setPointerCapture(e.pointerId);
         touchesDrone.add(b.dataset.touche);
+        if (cortege.actif) cortege.appuis.push(b.dataset.touche);
         b.classList.add('appui');
     });
     for (const fin of ['pointerup', 'pointercancel', 'lostpointercapture']) b.addEventListener(fin, relacher);
@@ -9993,13 +9996,12 @@ function entrerDrone() {
     hudDrone.hidden = false;
     padDrone.hidden = !TACTILE;
     decalage.hidden = true;
-    btnJeu.hidden = btnTraque.hidden = false;
+    btnJeu.hidden = btnTraque.hidden = btnCortege.hidden = false;
 }
 
 function sortirDrone() {
-    arreterJeu();
-    arreterIncendies();
-    btnJeu.hidden = btnTraque.hidden = true;
+    arreterLesJeux();
+    btnJeu.hidden = btnTraque.hidden = btnCortege.hidden = true;
     droneActif = false;
     btnDrone.classList.remove('on');
     controls.enabled = true;
@@ -10028,6 +10030,9 @@ window.addEventListener('keydown', e => {
     if (!TOUCHES_DRONE.has(e.code) || e.metaKey || e.ctrlKey || e.altKey) return;
     e.preventDefault();
     touchesDrone.add(e.code);
+    // Le cortège compte les appuis, pas les touches tenues : un appui bref
+    // tiendrait parfois entre deux images, sur une scène lourde.
+    if (cortege.actif && !e.repeat) cortege.appuis.push(e.code);
 });
 window.addEventListener('keyup', e => touchesDrone.delete(e.code));
 // Une touche relâchée hors de la fenêtre n'envoie pas de keyup.
@@ -10121,9 +10126,9 @@ function majDrone(dt, maintenant) {
 // lui, sous le réticule rouge ; un clic, ou un toucher, vise ce qu'il
 // désigne. Les valeurs ci-dessous sont des réglages de jeu, pas des mesures.
 const JEU_DEMANDE = PARAMS.has('jeu') && PARAMS.get('jeu') !== '0';
-// Le jeu que lance ?jeu= : les incendies, sauf ?jeu=traque. En vol, chaque
-// jeu a son bouton (Feux, Traque).
-const choixJeu = { type: PARAMS.get('jeu') === 'traque' ? 'traque' : 'incendies' };
+// Le jeu que lance ?jeu= : les incendies, sauf ?jeu=traque et ?jeu=cortege.
+// En vol, chaque jeu a son bouton (Feux, Traque, Cortège).
+const choixJeu = { type: ['traque', 'cortege'].includes(PARAMS.get('jeu')) ? PARAMS.get('jeu') : 'incendies' };
 const JEU_ECHELLE = 1.5;                    // 2,6 m : plus grand que nature, pour se voir du ciel
 const JEU_VITESSE = 3.2;                    // m/s, au petit trot
 const JEU_VITESSE_FUITE = 6.5;              // m/s, le drone à moins de JEU_ALERTE
@@ -10241,12 +10246,30 @@ const GEO_BALLE = new THREE.SphereGeometry(0.3, 10, 8);
 const MAT_BALLE = new THREE.MeshBasicMaterial({ color: 0xffd23f });
 const GEO_SOUFFLE = new THREE.SphereGeometry(1, 16, 12);
 
+// Le nom d'une voie, pour le cortège : celui de la BAN (« Rue sainte barbe »),
+// en minuscules sans accents, remis en capitales de nom propre ; le nom
+// collaboratif (« R SAINTE-BARBE ») est abrégé et tout en capitales.
+const PETITS_MOTS = new Set(['de', 'du', 'des', 'la', 'le', 'les', 'et', 'en', 'au', 'aux', 'sur', 'sous']);
+function nomDeVoie(p) {
+    const brut = String(p.nom_voie_ban_gauche || p.nom_voie_ban_droite || '').trim();
+    if (!brut) return '';
+    return brut.split(' ').map((mot, i) => {
+        if (i > 0 && PETITS_MOTS.has(mot)) return mot;
+        // « d'aix », « l'abbaye » : l'article reste en minuscule.
+        const m = /^([dl]')(.+)$/.exec(mot);
+        if (i > 0 && m) return m[1] + m[2][0].toUpperCase() + m[2].slice(1);
+        return mot[0].toUpperCase() + mot.slice(1);
+    }).join(' ');
+}
+
 /**
  * Graphe des routes au niveau du sol, en mètres locaux, réduit à sa plus
  * grande composante : un bout de chemin isolé l'enfermerait sur quelques
- * mètres. Les nœuds sont les extrémités des tronçons, à 0,5 m près.
+ * mètres. Les nœuds sont les extrémités des tronçons, à 0,5 m près. Chaque
+ * arête garde la largeur de sa chaussée et le nom de sa voie (le cortège) ;
+ * `exclues`, des natures BD TOPO laissées hors du graphe.
  */
-function grapheJeu() {
+function grapheJeu(exclues = null) {
     const [ox, oy] = toLocal(BORNES.o, BORNES.s), [ex, ey] = toLocal(BORNES.e, BORNES.n);
     const dedans = ([x, y]) => x > ox + 2 && x < ex - 2 && y > oy + 2 && y < ey - 2;
     const noeuds = new Map(), aretes = [];
@@ -10255,13 +10278,14 @@ function grapheJeu() {
         if (!noeuds.has(cle)) noeuds.set(cle, { x, y, aretes: [] });
         return noeuds.get(cle);
     };
-    const ajouter = pts => {
+    const ajouter = (pts, largeur, nom) => {
         const cum = [0];
         for (let i = 1; i < pts.length; i++) {
             cum.push(cum[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
         }
         if (cum.at(-1) < 1) return;
-        const arete = { pts, cum, longueur: cum.at(-1), a: noeud(pts[0]), b: noeud(pts.at(-1)), attrait: null };
+        const arete = { pts, cum, longueur: cum.at(-1), a: noeud(pts[0]), b: noeud(pts.at(-1)), attrait: null,
+                        largeur, nom };
         arete.a.aretes.push(arete);
         if (arete.b !== arete.a) arete.b.aretes.push(arete);
         aretes.push(arete);
@@ -10269,19 +10293,23 @@ function grapheJeu() {
     for (const f of (ARTEFACT && ARTEFACT.routes && ARTEFACT.routes.features) || []) {
         const p = f.properties || {};
         if (p.fictif || String(p.position_par_rapport_au_sol ?? '0') !== '0') continue;
+        if (exclues && exclues.has(p.nature)) continue;
         const g = f.geometry || {};
         const lignes = g.type === 'LineString' ? [g.coordinates]
                      : g.type === 'MultiLineString' ? g.coordinates : [];
+        const largeur = p.largeur_de_chaussee > 0 ? p.largeur_de_chaussee
+                      : (LARGEUR_ROUTE_PAR_NATURE[p.nature] || 3);
+        const nom = nomDeVoie(p);
         for (const ligne of lignes) {
             // Coupée au bord : chaque morceau dans l'emprise est une arête.
             let morceau = [];
             for (const [lo, la] of ligne) {
                 const q = toLocal(lo, la);
                 if (dedans(q)) { morceau.push(q); continue; }
-                if (morceau.length > 1) ajouter(morceau);
+                if (morceau.length > 1) ajouter(morceau, largeur, nom);
                 morceau = [];
             }
-            if (morceau.length > 1) ajouter(morceau);
+            if (morceau.length > 1) ajouter(morceau, largeur, nom);
         }
     }
     const vues = new Set();
@@ -10332,43 +10360,57 @@ function pointArete(a, s) {
 // un but. Refait quand un détecteur en apporte d'autres (ajouterVehicules) :
 // la traque peut commencer avant eux.
 const MAILLE_JEU = 25;
-function accesVehicules() {
-    const g = jeu.graphe, liste = VEHICULES.vehicules;
-    if (g.acces && g.acces.n === liste.length) return g.acces.points;
-    if (!g.segments) {
-        g.segments = new Map();
-        for (const arete of g.aretes) {
-            for (let i = 1; i < arete.pts.length; i++) {
-                const [x0, y0] = arete.pts[i - 1], [x1, y1] = arete.pts[i];
-                for (let gx = Math.floor(Math.min(x0, x1) / MAILLE_JEU); gx <= Math.floor(Math.max(x0, x1) / MAILLE_JEU); gx++) {
-                    for (let gy = Math.floor(Math.min(y0, y1) / MAILLE_JEU); gy <= Math.floor(Math.max(y0, y1) / MAILLE_JEU); gy++) {
-                        const cle = `${gx},${gy}`;
-                        if (!g.segments.has(cle)) g.segments.set(cle, []);
-                        g.segments.get(cle).push([arete, i]);
-                    }
+/** Les segments du graphe `g`, rangés par maille de MAILLE_JEU m : gardés sur le graphe. */
+function segmentsGraphe(g) {
+    if (g.segments) return g.segments;
+    g.segments = new Map();
+    for (const arete of g.aretes) {
+        for (let i = 1; i < arete.pts.length; i++) {
+            const [x0, y0] = arete.pts[i - 1], [x1, y1] = arete.pts[i];
+            for (let gx = Math.floor(Math.min(x0, x1) / MAILLE_JEU); gx <= Math.floor(Math.max(x0, x1) / MAILLE_JEU); gx++) {
+                for (let gy = Math.floor(Math.min(y0, y1) / MAILLE_JEU); gy <= Math.floor(Math.max(y0, y1) / MAILLE_JEU); gy++) {
+                    const cle = `${gx},${gy}`;
+                    if (!g.segments.has(cle)) g.segments.set(cle, []);
+                    g.segments.get(cle).push([arete, i]);
                 }
             }
         }
     }
-    const points = [];
-    for (const v of liste) {
-        const [x, y] = toLocal(v[0], v[1]);
-        const gx = Math.floor(x / MAILLE_JEU), gy = Math.floor(y / MAILLE_JEU);
-        let meilleur = null;
-        for (let i = gx - 1; i <= gx + 1; i++) {
-            for (let j = gy - 1; j <= gy + 1; j++) {
-                for (const [arete, k] of g.segments.get(`${i},${j}`) || []) {
-                    const [x0, y0] = arete.pts[k - 1], [x1, y1] = arete.pts[k];
-                    const dx = x1 - x0, dy = y1 - y0, l2 = dx * dx + dy * dy || 1;
-                    const t = Math.min(Math.max(((x - x0) * dx + (y - y0) * dy) / l2, 0), 1);
-                    const d = Math.hypot(x0 + dx * t - x, y0 + dy * t - y);
-                    if (!meilleur || d < meilleur.d) {
-                        meilleur = { d, arete, s: arete.cum[k - 1] + t * (arete.cum[k] - arete.cum[k - 1]), x, y };
-                    }
+    return g.segments;
+}
+
+/**
+ * Le point de route du graphe `g` le plus proche de (x, y), local : { d,
+ * arete, s, x, y }, ou null au-delà de `rayon` m — MAILLE_JEU au plus sûr,
+ * au-delà les mailles voisines suffisent rarement.
+ */
+function projeterSurRoute(g, x, y, rayon) {
+    const segments = segmentsGraphe(g), n = Math.max(1, Math.ceil(rayon / MAILLE_JEU));
+    const gx = Math.floor(x / MAILLE_JEU), gy = Math.floor(y / MAILLE_JEU);
+    let meilleur = null;
+    for (let i = gx - n; i <= gx + n; i++) {
+        for (let j = gy - n; j <= gy + n; j++) {
+            for (const [arete, k] of segments.get(`${i},${j}`) || []) {
+                const [x0, y0] = arete.pts[k - 1], [x1, y1] = arete.pts[k];
+                const dx = x1 - x0, dy = y1 - y0, l2 = dx * dx + dy * dy || 1;
+                const t = Math.min(Math.max(((x - x0) * dx + (y - y0) * dy) / l2, 0), 1);
+                const d = Math.hypot(x0 + dx * t - x, y0 + dy * t - y);
+                if (!meilleur || d < meilleur.d) {
+                    meilleur = { d, arete, s: arete.cum[k - 1] + t * (arete.cum[k] - arete.cum[k - 1]), x, y };
                 }
             }
         }
-        if (meilleur && meilleur.d < JEU_ACCES_M) points.push(meilleur);
+    }
+    return meilleur && meilleur.d < rayon ? meilleur : null;
+}
+
+function accesVehicules() {
+    const g = jeu.graphe, liste = VEHICULES.vehicules;
+    if (g.acces && g.acces.n === liste.length) return g.acces.points;
+    const points = [];
+    for (const v of liste) {
+        const p = projeterSurRoute(g, ...toLocal(v[0], v[1]), JEU_ACCES_M);
+        if (p) points.push(p);
     }
     g.acces = { n: liste.length, points };
     return points;
@@ -10377,8 +10419,9 @@ function accesVehicules() {
 /**
  * Distance par la route du coureur à chaque nœud, et l'arête par laquelle on
  * y arrive (Dijkstra) : demi-tour permis, il part vers l'un ou l'autre bout.
+ * `bloquees` : des arêtes où l'on ne passe pas (les cordons du cortège).
  */
-function distancesRoute(c) {
+function distancesRoute(c, bloquees = null) {
     const dist = new Map(), tas = [];
     const pousser = (n, d, arete, prec) => {
         const connu = dist.get(n);
@@ -10413,9 +10456,26 @@ function distancesRoute(c) {
     while (tas.length) {
         const [d, n] = extraire();
         if (d > dist.get(n).d) continue;
-        for (const a of n.aretes) pousser(a.a === n ? a.b : a.a, d + a.longueur, a, n);
+        for (const a of n.aretes) {
+            if (bloquees && bloquees.has(a)) continue;
+            pousser(a.a === n ? a.b : a.a, d + a.longueur, a, n);
+        }
     }
     return dist;
+}
+
+/**
+ * Le chemin jusqu'au nœud `n` d'après `dist` (distancesRoute) : les arêtes à
+ * prendre aux nœuds, dans l'ordre, et le premier nœud, celui par lequel on
+ * quitte l'arête de départ.
+ */
+function cheminVers(dist, n) {
+    const aretes = [];
+    while (dist.get(n).prec) {
+        aretes.unshift(dist.get(n).arete);
+        n = dist.get(n).prec;
+    }
+    return { aretes, premier: n };
 }
 
 /**
@@ -10441,13 +10501,9 @@ function choisirBut(c) {
     c.chemin = [];
     if (choix.p.arete === c.arete) { c.sens = choix.p.s >= c.s ? 1 : -1; return true; }
     // Du nœud d'arrivée, en remontant jusqu'au premier, atteint par l'arête où il court.
-    let n = choix.fin;
-    c.chemin.push(choix.p.arete);
-    while (dist.get(n).prec) {
-        c.chemin.unshift(dist.get(n).arete);
-        n = dist.get(n).prec;
-    }
-    c.sens = n === c.arete.b ? 1 : -1;
+    const { aretes, premier } = cheminVers(dist, choix.fin);
+    c.chemin = [...aretes, choix.p.arete];
+    c.sens = premier === c.arete.b ? 1 : -1;
     return true;
 }
 
@@ -10699,7 +10755,7 @@ function annoncer(html, duree) {
     // tournage à horloge figée (outils/demo-video.mjs) fait filer trois à
     // quatre fois plus vite que celui du film. Hors traque, une minuterie.
     jeu.finMessage = performance.now() + duree * 1000;
-    if (!jeu.actif && !feux.actif) finAnnonce = setTimeout(() => { messageJeu.hidden = true; }, duree * 1000);
+    if (!jeu.actif && !feux.actif && !cortege.actif) finAnnonce = setTimeout(() => { messageJeu.hidden = true; }, duree * 1000);
 }
 
 const DIRECTIONS_CARDINALES = ['au nord', 'au nord-est', "à l'est", 'au sud-est',
@@ -10829,19 +10885,25 @@ function arreterJeu() {
     if (droneActif) aideVue.textContent = AIDE_DRONE;
 }
 
-// Un bouton par jeu : il lance le sien, ou l'arrête ; pendant l'autre jeu, il
+// Un bouton par jeu : il lance le sien, ou l'arrête ; pendant un autre jeu, il
 // change de jeu.
+function arreterLesJeux() {
+    arreterJeu();
+    arreterIncendies();
+    arreterCortege();
+}
 btnJeu.addEventListener('click', () => {
-    if (feux.actif) arreterIncendies(); else { arreterJeu(); activerIncendies(); }
+    if (feux.actif) arreterIncendies(); else { arreterLesJeux(); activerIncendies(); }
     // Comme le drone : l'espace, qui fait monter, presserait encore le bouton.
     btnJeu.blur();
 });
 btnTraque.addEventListener('click', () => {
-    if (jeu.actif) arreterJeu(); else { arreterIncendies(); activerJeu(); }
+    if (jeu.actif) arreterJeu(); else { arreterLesJeux(); activerJeu(); }
     btnTraque.blur();
 });
 if (JEU_DEMANDE) Promise.allSettled([sceneConstruite, reliefCharge])
-    .then(() => (choixJeu.type === 'traque' ? activerJeu() : activerIncendies()));
+    .then(() => (choixJeu.type === 'traque' ? activerJeu()
+               : choixJeu.type === 'cortege' ? activerCortege() : activerIncendies()));
 
 const busteJeu = new THREE.Vector3(), trajet = new THREE.Line3(), surTrajet = new THREE.Vector3();
 function majJeu(dt, maintenant) {
@@ -10966,30 +11028,45 @@ scene.add(groupeFeux);
 // La foule : une figure par manifestant, en maillages instanciés (jambes,
 // torse, tête, bâton et pancarte), couleurs tirées par personne. Pas d'ombre
 // portée, comme le drone. Un emplacement par manifestant possible, libéré à
-// sa dispersion.
+// sa dispersion. Le cortège a la sienne, faite de même (nouvelleFoule).
 const FOULE_MAX = FEU_PAR_PARTIE * FEU_FOULE;
-const foule = (() => {
-    const materiau = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85 });
-    const parties = {
-        jambes: new THREE.BoxGeometry(0.34, 0.8, 0.22).translate(0, 0.4, 0),
-        torse: new THREE.BoxGeometry(0.44, 0.62, 0.26).translate(0, 1.11, 0),
-        tete: new THREE.SphereGeometry(0.12, 10, 8).scale(0.95, 1.1, 1).translate(0, 1.58, 0),
-        baton: new THREE.BoxGeometry(0.03, 0.9, 0.03).translate(0, 0.45, 0),
-        pancarte: new THREE.BoxGeometry(0.62, 0.42, 0.03).translate(0, 0.95, 0),
-    };
+const MAT_FOULE = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85 });
+const PARTIES_FIGURE = {
+    jambes: new THREE.BoxGeometry(0.34, 0.8, 0.22).translate(0, 0.4, 0),
+    torse: new THREE.BoxGeometry(0.44, 0.62, 0.26).translate(0, 1.11, 0),
+    tete: new THREE.SphereGeometry(0.12, 10, 8).scale(0.95, 1.1, 1).translate(0, 1.58, 0),
+    baton: new THREE.BoxGeometry(0.03, 0.9, 0.03).translate(0, 0.45, 0),
+    pancarte: new THREE.BoxGeometry(0.62, 0.42, 0.03).translate(0, 0.95, 0),
+};
+const FIGURE_NULLE = new THREE.Matrix4().makeScale(0, 0, 0);
+/** Une foule de `max` figures au plus, dans `parent`, toutes masquées. */
+function nouvelleFoule(max, parent) {
     const maillages = {};
-    const blanc = new THREE.Color(0xffffff), nul = new THREE.Matrix4().makeScale(0, 0, 0);
-    for (const [nom, geo] of Object.entries(parties)) {
-        const m = new THREE.InstancedMesh(geo, materiau, FOULE_MAX);
+    const blanc = new THREE.Color(0xffffff);
+    for (const [nom, geo] of Object.entries(PARTIES_FIGURE)) {
+        const m = new THREE.InstancedMesh(geo, MAT_FOULE, max);
         // Ses bornes sont celles d'une figure à l'origine : la foule, loin
         // de là, serait écartée du rendu.
         m.frustumCulled = false;
-        for (let i = 0; i < FOULE_MAX; i++) { m.setMatrixAt(i, nul); m.setColorAt(i, blanc); }
+        for (let i = 0; i < max; i++) { m.setMatrixAt(i, FIGURE_NULLE); m.setColorAt(i, blanc); }
         maillages[nom] = m;
-        groupeFeux.add(m);
+        parent.add(m);
     }
-    return { maillages, gens: new Array(FOULE_MAX).fill(null), nul };
-})();
+    return { maillages, gens: new Array(max).fill(null), nul: FIGURE_NULLE };
+}
+const foule = nouvelleFoule(FOULE_MAX, groupeFeux);
+
+/** Les couleurs de la figure `i` : { torse, jambes, tete, baton, pancarte }. */
+const couleurFigure = new THREE.Color();
+function habiller(f, i, teintes) {
+    for (const [partie, teinte] of Object.entries(teintes)) f.maillages[partie].setColorAt(i, couleurFigure.set(teinte));
+}
+
+/** La figure `i` de `f` masquée, son emplacement libre. */
+function libererFigure(f, i) {
+    f.gens[i] = null;
+    for (const m of Object.values(f.maillages)) { m.setMatrixAt(i, f.nul); m.instanceMatrix.needsUpdate = true; }
+}
 const TEINTES_HABITS = [0xc0392b, 0x2e86c1, 0xf1c40f, 0x27ae60, 0x8e44ad, 0xe67e22, 0xecf0f1, 0x34495e, 0x16a085, 0xd35400];
 const TEINTES_JAMBES = [0x1f2a44, 0x2c3e50, 0x3b3b3b, 0x5d6d7e, 0x1b2631];
 const TEINTES_PEAU = [0xf1c27d, 0xe0ac69, 0xc68642, 0x8d5524, 0xffdbac];
@@ -11089,7 +11166,8 @@ function declarerFoyer() {
     return f;
 }
 
-function creerFoyer(x, y) {
+/** Un foyer en (x, y) local, dans `parent` ; `avecFoule` : sa manifestation autour (les incendies). */
+function creerFoyer(x, y, parent = groupeFeux, avecFoule = true) {
     const groupe = new THREE.Group();
     const sol = new THREE.Mesh(GEO_DISQUE, MAT_BRULE);
     sol.rotation.x = -Math.PI / 2;
@@ -11109,10 +11187,10 @@ function creerFoyer(x, y) {
                        l: 0.6 + 0.5 * Math.random(), phase: Math.random() * 10 });
         groupe.add(m);
     }
-    groupeFeux.add(groupe);
+    parent.add(groupe);
     const f = { x, y, groupe, sol, flammes, fumee: [], intensite: FEU_INTENSITE_DEPART, auMax: 0,
-                etat: 'brule', fin: 0, prochaineBouffee: 0, gens: [] };
-    placerFoule(f);
+                etat: 'brule', fin: 0, prochaineBouffee: 0, gens: [], parent };
+    if (avecFoule) placerFoule(f);
     return f;
 }
 
@@ -11120,7 +11198,7 @@ function creerFoyer(x, y) {
 function placerFoule(f) {
     const libres = [];
     for (let i = 0; i < FOULE_MAX && libres.length < FEU_FOULE; i++) if (!foule.gens[i]) libres.push(i);
-    const couleur = new THREE.Color(), pris = [];
+    const pris = [];
     for (let essai = 0; essai < 4 * FEU_FOULE && pris.length < libres.length; essai++) {
         const a = Math.random() * 2 * Math.PI;
         const r = FEU_FOULE_RAYON[0] + Math.random() * (FEU_FOULE_RAYON[1] - FEU_FOULE_RAYON[0]);
@@ -11129,27 +11207,53 @@ function placerFoule(f) {
         const i = libres[pris.length];
         const p = { i, foyer: f, x, y, phase: Math.random() * 10, pancarte: Math.random() < 0.55,
                     etat: 'scande', depuis: 0, ex: 0, ey: 0, vx: 0, vy: 0, echelle: FEU_ECHELLE_FOULE };
-        const tire = l => l[Math.floor(Math.random() * l.length)];
-        const m = foule.maillages;
-        m.torse.setColorAt(i, couleur.set(tire(TEINTES_HABITS)));
-        m.jambes.setColorAt(i, couleur.set(tire(TEINTES_JAMBES)));
-        m.tete.setColorAt(i, couleur.set(tire(TEINTES_PEAU)));
-        m.baton.setColorAt(i, couleur.set(0x7a5230));
-        m.pancarte.setColorAt(i, couleur.set(tire(TEINTES_PANCARTES)));
+        habiller(foule, i, { torse: tire(TEINTES_HABITS), jambes: tire(TEINTES_JAMBES), tete: tire(TEINTES_PEAU),
+                             baton: 0x7a5230, pancarte: tire(TEINTES_PANCARTES) });
         foule.gens[i] = p;
         pris.push(p);
     }
     for (const m of Object.values(foule.maillages)) m.instanceColor.needsUpdate = true;
     f.gens = pris;
 }
+const tire = l => l[Math.floor(Math.random() * l.length)];
 
 function libererPersonne(p) {
-    foule.gens[p.i] = null;
-    for (const m of Object.values(foule.maillages)) { m.setMatrixAt(p.i, foule.nul); m.instanceMatrix.needsUpdate = true; }
+    libererFigure(foule, p.i);
 }
 
 const mFigure = new THREE.Matrix4(), mPancarte = new THREE.Matrix4(), mLocal = new THREE.Matrix4();
 const qFigure = new THREE.Quaternion(), eFigure = new THREE.Euler(), vFigure = new THREE.Vector3(), sFigure = new THREE.Vector3();
+/**
+ * La figure `i` de `f`, debout au sol en (x, y) local, tournée vers `cap`
+ * (rad, depuis le nord, vers l'est), haussée de `saut` m. `pancarte` : son
+ * balancement en rad, ou null sans pancarte ; `bouclier` : la pancarte
+ * devient un bouclier tenu devant la poitrine, sans bâton.
+ */
+function poserFigure(f, i, x, y, cap, saut, echelle, pancarte = null, bouclier = false) {
+    const m = f.maillages;
+    mFigure.compose(vFigure.set(x, ySol(...toLonLat(x, y)) + saut, -y), qFigure.setFromEuler(eFigure.set(0, -cap, 0)),
+                    sFigure.setScalar(echelle));
+    m.jambes.setMatrixAt(i, mFigure);
+    m.torse.setMatrixAt(i, mFigure);
+    m.tete.setMatrixAt(i, mFigure);
+    if (pancarte !== null) {
+        // La pancarte brandie à bout de bras, qui se balance.
+        mLocal.makeRotationZ(pancarte).setPosition(0.18, 1.3, -0.12);
+        mPancarte.multiplyMatrices(mFigure, mLocal);
+        m.baton.setMatrixAt(i, mPancarte);
+        m.pancarte.setMatrixAt(i, mPancarte);
+    } else if (bouclier) {
+        // 0,56 × 1 m, centré à 0,95 m du sol, 30 cm devant lui.
+        mLocal.makeScale(0.9, 2.4, 1).setPosition(0, -1.33, -0.3);
+        mPancarte.multiplyMatrices(mFigure, mLocal);
+        m.baton.setMatrixAt(i, f.nul);
+        m.pancarte.setMatrixAt(i, mPancarte);
+    } else {
+        m.baton.setMatrixAt(i, f.nul);
+        m.pancarte.setMatrixAt(i, f.nul);
+    }
+}
+
 /** La foule à l'image suivante : elle scande, s'écarte de l'eau, applaudit, puis s'en va. */
 function majFoule(dt, t) {
     const m = foule.maillages;
@@ -11172,21 +11276,8 @@ function majFoule(dt, t) {
         const saut = p.etat === 'applaudit' ? Math.abs(Math.sin(t * 9 + p.phase)) * 0.45
                    : p.etat === 'scande' ? Math.abs(Math.sin(t * 4 + p.phase)) * 0.1 : Math.abs(Math.sin(t * 7 + p.phase)) * 0.05;
         const cap = p.etat === 'part' ? Math.atan2(x - p.foyer.x, y - p.foyer.y) : Math.atan2(p.foyer.x - x, p.foyer.y - y);
-        mFigure.compose(vFigure.set(x, ySol(...toLonLat(x, y)) + saut, -y), qFigure.setFromEuler(eFigure.set(0, -cap, 0)),
-                        sFigure.setScalar(echelle));
-        m.jambes.setMatrixAt(p.i, mFigure);
-        m.torse.setMatrixAt(p.i, mFigure);
-        m.tete.setMatrixAt(p.i, mFigure);
-        if (p.pancarte && p.etat !== 'part') {
-            // La pancarte brandie à bout de bras, qui se balance.
-            mLocal.makeRotationZ(Math.sin(t * 2.2 + p.phase) * (p.etat === 'applaudit' ? 0.5 : 0.25)).setPosition(0.18, 1.3, -0.12);
-            mPancarte.multiplyMatrices(mFigure, mLocal);
-            m.baton.setMatrixAt(p.i, mPancarte);
-            m.pancarte.setMatrixAt(p.i, mPancarte);
-        } else {
-            m.baton.setMatrixAt(p.i, foule.nul);
-            m.pancarte.setMatrixAt(p.i, foule.nul);
-        }
+        poserFigure(foule, p.i, x, y, cap, saut, echelle, p.pancarte && p.etat !== 'part'
+            ? Math.sin(t * 2.2 + p.phase) * (p.etat === 'applaudit' ? 0.5 : 0.25) : null);
     }
     for (const mm of Object.values(m)) mm.instanceMatrix.needsUpdate = true;
 }
@@ -11202,17 +11293,8 @@ function majFoyer(f, dt, t, maintenant) {
             if (f.auMax > FEU_PERDU_S) perdreFoyer(f);
         }
     }
-    const r = rayonFeu(f);
-    f.sol.scale.setScalar(r + 1);
     const allume = f.etat === 'brule' || f.etat === 'perdu';
-    for (const fl of f.flammes) {
-        fl.m.visible = allume;
-        if (!allume) continue;
-        const vacille = 0.8 + 0.25 * Math.sin(t * 9 + fl.phase) * Math.sin(t * 5.3 + 2 * fl.phase);
-        const h = (2 + 6 * f.intensite) * fl.h * vacille, l = (0.5 + 1.1 * f.intensite) * fl.l;
-        fl.m.position.set(fl.ax * r * 0.55, 0.2, fl.az * r * 0.55);
-        fl.m.scale.set(l, h, l);
-    }
+    animerFlammes(f, t, allume);
     // Une bouffée toutes les 0,25 s au plus fort, plus rarement au début ;
     // de la vapeur blanche, en rafale, à l'extinction. Une toutes les 0,6 s
     // ne faisait que trois bouffées à la fois au départ : pas de colonne, et
@@ -11221,6 +11303,30 @@ function majFoyer(f, dt, t, maintenant) {
         f.prochaineBouffee = maintenant + 250 / Math.max(f.intensite, 0.3);
         bouffee(f, 0x5c5c5c, 0.7, 20);
     }
+    animerFumee(f, dt);
+    // Éteint ou perdu depuis un moment, la foule partie : le foyer s'efface.
+    if ((f.etat === 'eteint' && maintenant > f.fin) && !f.fumee.length) {
+        groupeFeux.remove(f.groupe);
+        f.etat = 'fini';
+    }
+}
+
+/** Les flammes d'un foyer qui vacillent, à la mesure de son intensité ; éteintes si `allume` est faux. */
+function animerFlammes(f, t, allume) {
+    const r = rayonFeu(f);
+    f.sol.scale.setScalar(r + 1);
+    for (const fl of f.flammes) {
+        fl.m.visible = allume;
+        if (!allume) continue;
+        const vacille = 0.8 + 0.25 * Math.sin(t * 9 + fl.phase) * Math.sin(t * 5.3 + 2 * fl.phase);
+        const h = (2 + 6 * f.intensite) * fl.h * vacille, l = (0.5 + 1.1 * f.intensite) * fl.l;
+        fl.m.position.set(fl.ax * r * 0.55, 0.2, fl.az * r * 0.55);
+        fl.m.scale.set(l, h, l);
+    }
+}
+
+/** La fumée d'un foyer qui monte, grandit et se dissipe ; les bouffées finies retirées. */
+function animerFumee(f, dt) {
     for (const b of f.fumee) {
         b.age += dt;
         const k = b.age / b.vie;
@@ -11231,15 +11337,10 @@ function majFoyer(f, dt, t, maintenant) {
     }
     f.fumee = f.fumee.filter(b => {
         if (b.age < b.vie) return true;
-        groupeFeux.remove(b.m);
+        (f.parent || groupeFeux).remove(b.m);
         b.m.material.dispose();
         return false;
     });
-    // Éteint ou perdu depuis un moment, la foule partie : le foyer s'efface.
-    if ((f.etat === 'eteint' && maintenant > f.fin) && !f.fumee.length) {
-        groupeFeux.remove(f.groupe);
-        f.etat = 'fini';
-    }
 }
 
 /** Une bouffée de fumée ou de vapeur : `taille`, son rayon final en m ; à défaut, d'après le foyer. */
@@ -11248,7 +11349,7 @@ function bouffee(f, couleur, opacite, vie, taille) {
         opacity: 0, depthWrite: false }));
     const y0 = ySol(...toLonLat(f.x, f.y));
     m.position.set(f.x + (Math.random() - 0.5) * 2, y0 + 2 + 3 * f.intensite, -f.y + (Math.random() - 0.5) * 2);
-    groupeFeux.add(m);
+    (f.parent || groupeFeux).add(m);
     f.fumee.push({ m, age: 0, vie, o: opacite, r0: 1.5 + 1.5 * f.intensite, r1: taille ?? 12 + 8 * f.intensite,
                    v: new THREE.Vector3(VENT.x + (Math.random() - 0.5), 3.2 + Math.random(), VENT.z + (Math.random() - 0.5)) });
 }
@@ -11548,6 +11649,1780 @@ function majIncendies(dt, maintenant) {
     }
 }
 
+// --- Jeu : le cortège ------------------------------------------------------------
+// Le troisième jeu du drone, au bouton « Cortège » (ou ?jeu=cortege) : mener
+// une marche pacifique de la place de la scène jusqu'à son arrivée, par les
+// rues BD TOPO, en gardant le plus de monde. Le drone ne se pilote plus : il
+// suit la tête et filme. ← → choisissent la branche au prochain carrefour,
+// ↑ ↓ la cadence, ↓ à l'arrêt fait demi-tour.
+//
+// La ville réelle compte. Une rue étroite étire le cortège et le ralentit,
+// un boulevard le resserre ; une montée le ralentit aussi. Au soleil, à
+// l'heure et au jour du panneau Soleil, il se fatigue et perd du monde ; à
+// l'ombre des immeubles et des arbres, il récupère. En route, des groupes
+// attendent qu'il passe les prendre ; des cordons de police ferment des
+// rues, des barricades en barrent d'autres ; des casseurs approchent par les
+// rues voisines pour s'y infiltrer, et le service d'ordre les escorte
+// dehors. Un casseur laissé faire met le feu, et le gaz qui répond disperse
+// ceux qui s'y trouvent. Personne n'est frappé : les cordons bloquent sans
+// charger, le gaz ne répond qu'aux incidents. Rien dans la scène ni dans le
+// cache. Les valeurs ci-dessous sont des réglages de jeu, pas des mesures.
+const CORTEGE_EXCLUES = new Set(['Bac ou liaison maritime', 'Type autoroutier', 'Bretelle']);
+const CORTEGE_PARTICIPANTS = 1200;
+const CORTEGE_PAR_FIGURE = 10;              // participants par figure
+const CORTEGE_FIGURES_MAX = 240;            // dans les rangs
+const CORTEGE_FOULE_MAX = 360;              // avec les groupes, les cordons, les casseurs, le service d'ordre
+const CORTEGE_ECHELLE = 1.3;                // comme la foule des incendies
+const CORTEGE_CADENCES = [0, 1.5, 3, 4.5];  // m/s : halte, lent, normal, rapide ; le temps du jeu file
+const CORTEGE_NOMS_CADENCES = ['halte', 'lent', 'normal', 'rapide'];
+const CORTEGE_EFFORT = [0, 0.6, 1, 1.6];    // ce que chaque cadence coûte au soleil
+const CORTEGE_TROTTOIRS_M = 4;              // ajoutés à la chaussée : le cortège tient la rue de façade à façade
+const CORTEGE_LARGEUR_MAX = 14;
+// Par figure, au sol : 1,7 m² faisait un bloc de 12 m sur 17 sur le boulevard de
+// la place de la République, pas un cortège ; à 4 m², il s'étire sur 37 m.
+const CORTEGE_SURFACE_M2 = 4;
+const CORTEGE_TETE_M = 1.2;                 // de la banderole au premier rang
+const CORTEGE_TRACE_DEPART_M = 160;         // la rue où il se forme, derrière la place
+const CORTEGE_ARRIVEE_M = [400, 700];       // par la route, l'arrivée tirée d'office
+const CORTEGE_ARRIVEE_MIN_M = 300;          // au moins, une arrivée cliquée
+const CORTEGE_CHOIX_S = 10;                 // pour cliquer l'arrivée
+const CORTEGE_FORMATION_S = 4;
+const CORTEGE_ARRIVE_M = 15;
+const CORTEGE_DISPERSE = 0.2;               // du départ : en dessous, le cortège s'est dispersé
+const CORTEGE_ENTRE_PARTIES_S = 10;
+const CORTEGE_VIRAGE = 25 * Math.PI / 180;  // en deçà, c'est tout droit
+// La fatigue, en points de pourcentage par seconde.
+// À 1,2, le 21 juin à 14 h, République perdait 40 % du cortège en 50 s ; à
+// 0,7, avec 0,006 de pertes, 70 % en six minutes au pilote.
+const FATIGUE_SOLEIL = 0.6;                 // plein soleil au zénith, cadence normale
+const FATIGUE_OMBRE = 0.5;                  // regagnés à l'ombre
+const FATIGUE_HALTE = 0.8;                  // regagnés à l'arrêt
+const FATIGUE_SEUIL = 50;                   // au-delà, des participants s'en vont
+const FATIGUE_PERTE = 0.004;                // part des participants par seconde, à 100 %
+const FATIGUE_LENTE = 80;                   // au-delà, lent au plus
+const OMBRE_PORTEE_M = 300;
+const OMBRE_TESTS_PAR_IMAGE = 3;
+const MAILLE_ARBRES = 20;
+// Les points de mobilisation : des groupes qui attendent le cortège.
+const GROUPES_CORTEGE = [{ nom: 'Les étudiants', teinte: 0xf1c40f }, { nom: 'Les soignants', teinte: 0x3498db },
+                         { nom: 'Les habitants du quartier', teinte: 0x27ae60 }];
+const GROUPE_FIGURES = [18, 24];
+const GROUPE_ECART_M = [40, 180];           // du plus court chemin
+const GROUPE_ATTENTE_S = [120, 200];
+const GROUPE_RALLIE_M = 25;
+// Les cordons et les barricades.
+const CORDON_POLICIERS = 9;
+const CORDON_CONTACT_M = 8;
+const CORDON_PERTE = 0.008;                 // part des participants par seconde, arrêté devant
+const CORDON_DEVIATIONS = 2;
+const CORDON_DEVIATION_S = [50, 110];       // de la marche à la première déviation, puis entre deux
+const CORDON_DEVIATION_M = [120, 250];      // devant la tête, par la route
+// Le détour qu'impose un cordon, au plus : sans limite, une déviation à
+// République portait le reste du trajet de 821 à 1 146 m.
+const CORDON_DETOUR_M = 250;
+const BARRICADE_CONTACT_M = 3;
+const BARRICADE_ARRET_S = 6;
+// Les casseurs et le service d'ordre.
+const CASSEURS_PAR_PARTIE = 10;
+const CASSEURS_SIMULTANES = 5;
+const CASSEURS_VAGUE = [2, 3];
+const CASSEURS_PREMIERE_S = 20;
+const CASSEURS_INTERVALLE_S = 25;
+const CASSEUR_DEPART_M = [70, 150];         // du milieu du cortège
+const CASSEUR_VITESSE = 2.8;
+const CASSEUR_INFILTRE_M = 10;
+const CASSEUR_INCIDENT_S = [10, 15];        // infiltré, avant l'incident
+const CASSEUR_MENACE_M = 120;
+const SO_EQUIPES = 3;
+const SO_VITESSE = 5;
+const SO_DIRECT_M = 15;                     // plus près, il court droit sur lui
+const SO_PRISE_M = 1.5;
+const SO_ESCORTE_S = 5;
+const SO_RETOUR_S = 10;
+// Le gaz et les feux, après un incident.
+const GAZ_NUAGES = 3;
+// Trois nuages de 14 m, à 0,25 par seconde, faisaient partir la moitié du
+// cortège sur la place de la République (1 200 à 580, film du cortège) : un
+// incident en coûtait plus que toute la chaleur d'un après-midi de juin.
+const GAZ_RAYON_M = [3, 11];
+const GAZ_CROISSANCE_S = 4;
+const GAZ_VIE_S = 25;
+const GAZ_DEPART = 0.05;                    // chance par seconde qu'une figure dans le gaz s'en aille
+const FEU_CORTEGE_S = 40;
+const FEU_GENE_M = 8;                       // la tête plus près ralentit
+const FEU_ECART_FIGURES_M = 6;
+const SCORE_ECARTE = 100;
+const SCORE_RETARD = 2;                     // points par seconde au-delà du temps de référence
+const SCORE_MARGE = 1.3;                    // le temps de référence : le plus court chemin, cadence normale
+const CLE_RECORD_CORTEGE = 'vue3d.cortege-record';
+const AIDE_CORTEGE = AU_DOIGT
+    ? 'Cortège : ↶ ↷ la branche au prochain carrefour · ↑ ↓ la cadence, ↓ à l\'arrêt pour demi-tour · '
+      + 'S.O., ou toucher un casseur, pour le service d\'ordre · le bouton Cortège pour arrêter'
+    : 'Cortège : ← → la branche au prochain carrefour · ↑ ↓ la cadence, ↓ à l\'arrêt pour demi-tour · '
+      + 'F, ou un clic sur un casseur, pour le service d\'ordre · molette pour la vue · '
+      + 'l\'heure du panneau Soleil déplace les ombres · Échap pour sortir';
+
+const btnCortege = document.getElementById('t-cortege');
+const groupeCortege = new THREE.Group();
+groupeCortege.visible = false;
+scene.add(groupeCortege);
+const fouleCortege = nouvelleFoule(CORTEGE_FOULE_MAX, groupeCortege);
+const cortege = { actif: false, phase: null, graphe: null, appuis: [], arbres: null, capVue: 0 };
+
+const TEINTES_POLICE = { torse: 0x1d2a44, jambes: 0x1a2236, tete: 0x22304d, baton: 0x1a2236, pancarte: 0xaab6c2 };
+const TEINTES_CASSEUR = { torse: 0x121212, jambes: 0x161616, tete: 0x1b1b1b, baton: 0x121212, pancarte: 0x121212 };
+
+/** Une texture de texte, sur fond `fond` ; `l` × `h` px. */
+function texteTexture(texte, couleur, fond, l, h, police) {
+    const c = document.createElement('canvas');
+    c.width = l;
+    c.height = h;
+    const g = c.getContext('2d');
+    g.fillStyle = fond;
+    g.fillRect(0, 0, l, h);
+    g.fillStyle = couleur;
+    g.font = police;
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.fillText(texte, l / 2, h / 2 + 2, l - 16);
+    const t = new THREE.CanvasTexture(c);
+    t.colorSpace = THREE.SRGBColorSpace;
+    return t;
+}
+
+/** Une étiquette qui garde sa taille à l'écran : `hauteur`, en part de la hauteur de la vue. */
+function etiquette(texte, fond, hauteur = 0.035) {
+    const l = Math.max(160, 30 * texte.length + 40);
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: texteTexture(texte, '#ffffff', fond, l, 64, '600 38px system-ui, sans-serif'),
+        sizeAttenuation: false, depthTest: false, transparent: true }));
+    s.center.set(0.5, 0);
+    s.scale.set(hauteur * l / 64, hauteur, 1);
+    s.renderOrder = 11;
+    return s;
+}
+
+// La banderole de tête, lisible des deux côtés, entre deux hampes.
+const banderole = (() => {
+    const g = new THREE.Group();
+    const texture = texteTexture('MARCHE PACIFIQUE', '#c0392b', '#fbfbf7', 1024, 128, '800 82px system-ui, sans-serif');
+    const toile = new THREE.MeshStandardMaterial({ map: texture, roughness: 0.9 });
+    for (const sens of [0, Math.PI]) {
+        const m = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), toile);
+        m.rotation.y = sens;
+        m.position.set(0, 2.05, sens ? -0.01 : 0.01);
+        g.add(m);
+    }
+    const hampe = new THREE.MeshStandardMaterial({ color: 0x7a5230, roughness: 0.8 });
+    g.userData.hampes = [-1, 1].map(s => {
+        const h = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 2.8, 6).translate(0, 1.4, 0), hampe);
+        g.add(h);
+        return h;
+    });
+    g.userData.toiles = g.children.slice(0, 2);
+    groupeCortege.add(g);
+    return g;
+})();
+
+// L'arrivée : un anneau vert au sol, une colonne qui se voit de loin, son nom.
+const marqueArrivee = (() => {
+    const g = new THREE.Group();
+    const vert = new THREE.MeshBasicMaterial({ color: 0x2ecc71, transparent: true, opacity: 0.85, depthWrite: false,
+        polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 });
+    const anneau = new THREE.Mesh(new THREE.RingGeometry(9, 10.5, 48), vert);
+    anneau.rotation.x = -Math.PI / 2;
+    anneau.position.y = 0.1;
+    const colonne = new THREE.Mesh(new THREE.CylinderGeometry(3, 3, 80, 20, 1, true).translate(0, 40, 0),
+        new THREE.MeshBasicMaterial({ color: 0x2ecc71, transparent: true, opacity: 0.2, depthWrite: false,
+                                      side: THREE.DoubleSide }));
+    const nom = etiquette('Arrivée', 'rgba(39,174,96,.92)');
+    nom.position.y = 82;
+    g.add(anneau, colonne, nom);
+    g.userData.colonne = colonne;
+    g.visible = false;
+    groupeCortege.add(g);
+    return g;
+})();
+
+// Les flèches du prochain carrefour, à plat, vues à travers tout : la branche
+// choisie en blanc, les autres pâles.
+const GEO_FLECHE = (() => {
+    const f = new THREE.Shape();
+    for (const [x, y] of [[-0.55, 0], [0.55, 0], [0.55, 3.4], [1.5, 3.4], [0, 5.6], [-1.5, 3.4], [-0.55, 3.4]]) {
+        if (x === -0.55 && y === 0) f.moveTo(x, y); else f.lineTo(x, y);
+    }
+    f.closePath();
+    return new THREE.ShapeGeometry(f).rotateX(-Math.PI / 2);
+})();
+const flechesCarrefour = Array.from({ length: 6 }, () => {
+    const m = new THREE.Mesh(GEO_FLECHE, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true,
+        opacity: 0.35, depthTest: false, depthWrite: false }));
+    m.renderOrder = 9;
+    m.visible = false;
+    groupeCortege.add(m);
+    return m;
+});
+
+// Un fourgon de police : caisse blanche, bande bleue, deux gyrophares.
+const MAT_FOURGON = new THREE.MeshStandardMaterial({ color: 0xf4f6f8, roughness: 0.5 });
+const MAT_BANDE = new THREE.MeshStandardMaterial({ color: 0x1f4e9c, roughness: 0.5 });
+const MAT_GYRO = [0, 1].map(() => new THREE.MeshBasicMaterial({ color: 0x2f7bff }));
+const GEO_FOURGON = new THREE.BoxGeometry(2.2, 2.3, 5.4).translate(0, 1.15, 0);
+const GEO_BANDE = new THREE.BoxGeometry(2.24, 0.3, 5.44).translate(0, 1.0, 0);
+const GEO_GYRO = new THREE.SphereGeometry(0.2, 10, 8);
+const GEO_MARQUE = new THREE.ConeGeometry(0.55, 1.1, 4).rotateX(Math.PI);
+const MAT_MARQUE = new THREE.MeshBasicMaterial({ color: 0xff3b2f, depthTest: false, depthWrite: false, transparent: true });
+const GEO_MAT_DRAPEAU = new THREE.CylinderGeometry(0.05, 0.05, 6.5, 6).translate(0, 3.25, 0);
+const GEO_DRAPEAU = new THREE.PlaneGeometry(1.8, 1.1).translate(0.9, 5.9, 0);
+
+const ecartAngle = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
+const largeurUtile = a => Math.min(a.largeur + CORTEGE_TROTTOIRS_M, CORTEGE_LARGEUR_MAX);
+
+/** Les nœuds d'un graphe des routes, gardés sur lui. */
+function noeudsGraphe(g) {
+    if (g.noeuds) return g.noeuds;
+    const vus = new Set();
+    for (const a of g.aretes) { vus.add(a.a); vus.add(a.b); }
+    return g.noeuds = [...vus];
+}
+
+/** Le cap (depuis le nord, vers l'est) en quittant `n` par l'arête `a`, mesuré sur ses `l` premiers mètres. */
+function capIssue(n, a, l = 6) {
+    const [x, y] = pointArete(a, a.a === n ? Math.min(l, a.longueur) : Math.max(a.longueur - l, 0));
+    return Math.atan2(x - n.x, y - n.y);
+}
+/** Le cap en arrivant au bout de l'arête `a`, parcourue dans le sens `sens`. */
+function capArrivee(a, sens, l = 6) {
+    const n = sens > 0 ? a.b : a.a;
+    const [x, y] = pointArete(a, sens > 0 ? Math.max(a.longueur - l, 0) : Math.min(l, a.longueur));
+    return Math.atan2(n.x - x, n.y - y);
+}
+
+/**
+ * La branche prise au nœud `n`, venu par `venue` dans le sens `sens` : celle
+ * que désigne le choix du joueur (−1 à gauche, 0 tout droit, 1 à droite),
+ * sinon la plus droite ; null dans une impasse. `tourne` : l'angle du virage,
+ * positif à droite.
+ */
+function brancheCortege(n, venue, sens, choix) {
+    const options = n.aretes.filter(a => a !== venue);
+    if (!options.length) return null;
+    const arrivee = capArrivee(venue, sens);
+    const branches = options.map(a => ({ arete: a, tourne: ecartAngle(capIssue(n, a), arrivee) }));
+    const droite = branches.reduce((u, v) => (Math.abs(v.tourne) < Math.abs(u.tourne) ? v : u));
+    if (choix > 0) {
+        const b = branches.reduce((u, v) => (v.tourne > u.tourne ? v : u));
+        if (b.tourne > CORTEGE_VIRAGE) return b;
+    } else if (choix < 0) {
+        const b = branches.reduce((u, v) => (v.tourne < u.tourne ? v : u));
+        if (b.tourne < -CORTEGE_VIRAGE) return b;
+    }
+    return droite;
+}
+
+/** Le côté d'un virage, en clair. */
+const coteVirage = tourne => (tourne > CORTEGE_VIRAGE ? 'à droite' : tourne < -CORTEGE_VIRAGE ? 'à gauche' : 'tout droit');
+
+/** Un échantillon de la trace, là où est `t` ({ arete, s, sens, d }) : la direction est celle de la marche. */
+function echantillonTrace(t) {
+    const [x, y, dx, dy] = pointArete(t.arete, t.s);
+    const n = Math.hypot(dx, dy) || 1;
+    return { x, y, dx: dx * t.sens / n, dy: dy * t.sens / n, l: largeurUtile(t.arete),
+             arete: t.arete, s: t.s, sens: t.sens, d: t.d };
+}
+
+/** La distance par la route jusqu'à `cible` ({ arete, s }) d'après `dist`, et le nœud par lequel on y entre. */
+function routeVers(dist, cible) {
+    const da = dist.get(cible.arete.a), db = dist.get(cible.arete.b);
+    const parA = da ? da.d + cible.s : Infinity, parB = db ? db.d + cible.arete.longueur - cible.s : Infinity;
+    return parA <= parB ? { d: parA, fin: cible.arete.a } : { d: parB, fin: cible.arete.b };
+}
+
+/**
+ * Le chemin de la tête (`t`) jusqu'à `cible`, en morceaux d'arêtes
+ * { arete, de, a } (abscisses), et sa longueur ; null sans chemin.
+ */
+function cheminCortege(t, cible, bloquees = null) {
+    if (t.arete === cible.arete && !(bloquees && bloquees.has(t.arete))) {
+        return { morceaux: [{ arete: t.arete, de: t.s, a: cible.s }], longueur: Math.abs(cible.s - t.s) };
+    }
+    const dist = distancesRoute(t, bloquees);
+    const { d, fin } = routeVers(dist, cible);
+    if (!Number.isFinite(d)) return null;
+    const { aretes, premier } = cheminVers(dist, fin);
+    const morceaux = [{ arete: t.arete, de: t.s, a: premier === t.arete.b ? t.arete.longueur : 0 }];
+    let n = premier;
+    for (const a of aretes) {
+        const versB = a.a === n;
+        morceaux.push({ arete: a, de: versB ? 0 : a.longueur, a: versB ? a.longueur : 0 });
+        n = versB ? a.b : a.a;
+    }
+    morceaux.push({ arete: cible.arete, de: fin === cible.arete.a ? 0 : cible.arete.longueur, a: cible.s });
+    return { morceaux, longueur: d };
+}
+
+/** Le point à `x` m le long d'un chemin (cheminCortege) : { arete, s, x, y }. */
+function surChemin(chemin, x) {
+    let reste = x;
+    for (const m of chemin.morceaux) {
+        const l = Math.abs(m.a - m.de);
+        if (reste <= l || m === chemin.morceaux.at(-1)) {
+            const s = m.de + Math.sign(m.a - m.de) * Math.min(reste, l);
+            const [px, py] = pointArete(m.arete, s);
+            return { arete: m.arete, s, x: px, y: py };
+        }
+        reste -= l;
+    }
+    return null;
+}
+
+// --- Les figures du jeu : une par personne, dans fouleCortege ---
+
+/** Une personne de plus, de rôle `role`, en (x, y) : null si la foule est pleine. */
+function nouvellePersonne(role, x, y, teintes, extra = {}) {
+    const i = fouleCortege.gens.indexOf(null);
+    if (i < 0) return null;
+    const p = { i, role, x, y, cap: 0, phase: Math.random() * 10, pancarte: false, lat: 0,
+                echelle: CORTEGE_ECHELLE, apparition: 1, ...extra };
+    habiller(fouleCortege, i, teintes);
+    fouleCortege.gens[i] = p;
+    cortege.gens.push(p);
+    cortege.couleurs = true;
+    return p;
+}
+
+function retirerPersonne(p) {
+    if (fouleCortege.gens[p.i] === p) libererFigure(fouleCortege, p.i);
+    p.retire = true;
+}
+
+/** Un manifestant : habits, pancarte une fois sur deux. */
+function nouveauManifestant(x, y, teinteHabit = null) {
+    const p = nouvellePersonne('marche', x, y, { torse: teinteHabit ?? tire(TEINTES_HABITS), jambes: tire(TEINTES_JAMBES),
+                                                 tete: tire(TEINTES_PEAU), baton: 0x7a5230, pancarte: tire(TEINTES_PANCARTES) });
+    if (p) p.pancarte = Math.random() < 0.5;
+    return p;
+}
+
+/** Il quitte le cortège : il s'écarte vers le bord de la rue, puis s'efface. */
+function fairePartir(p, dx, dy) {
+    const l = Math.hypot(dx, dy) || 1;
+    p.role = 'part';
+    p.depuis = 0;
+    p.vx = dx / l * 1.4;
+    p.vy = dy / l * 1.4;
+    p.pancarte = false;
+    const k = cortege.ordre.indexOf(p);
+    if (k >= 0) cortege.ordre.splice(k, 1);
+}
+
+// --- Une manifestation ---
+
+function etatNeuf() {
+    return { phase: 'choix', depart: null, arrivee: null, tete: null, trace: [], ordre: [], gens: [],
+             participants: CORTEGE_PARTICIPANTS, rallies: 0, cadence: 2, choix: 0, fatigue: 0,
+             partSoleil: 0, chaleur: 0, distanceOmbre: 0, parcouru: 0, cordons: [], barricades: [], groupes: [],
+             casseurs: [], equipes: [], nuages: [], feux: [], lances: 0, ecartes: 0, incidents: 0,
+             prochaineVague: Infinity, deviations: 0, prochaineDeviation: Infinity, debut: 0, finChoix: 0,
+             debutMarche: 0, relance: null, hud: 0, prochainIndice: Infinity, finIndice: 0, plusCourt: 0,
+             prochain: null, rangOmbre: 0, bQueue: 0, couleurs: true, cap: cortege.capVue, fin: null };
+}
+
+/** Une manifestation neuve : la foule se rassemble sur la place, l'arrivée reste à choisir. */
+function nouvelleManif() {
+    viderCortege();
+    Object.assign(cortege, etatNeuf());
+    const g = cortege.graphe;
+    // Le départ : la rue la plus proche du point de la scène, la place cherchée.
+    const p = projeterSurRoute(g, 0, 0, 150) || projeterSurRoute(g, 0, 0, 600);
+    const a = p ? p.arete : g.aretes[0], s = p ? p.s : a.longueur / 2;
+    const [x, y] = pointArete(a, s);
+    cortege.depart = { arete: a, s, x, y };
+    cortege.tete = { arete: a, s, sens: 1, d: 0, bloque: null, x, y };
+    // Rassemblés en tournesol autour du départ, hors des bâtiments.
+    const n = Math.ceil(CORTEGE_PARTICIPANTS / CORTEGE_PAR_FIGURE);
+    for (let k = 0, pris = 0; pris < n && k < 6 * n; k++) {
+        const r = 1.1 * Math.sqrt(k + 1), ang = k * 2.39996;
+        const px = x + r * Math.cos(ang), py = y + r * Math.sin(ang);
+        if (!placeLibre(px, py) && k < 5 * n) continue;
+        const m = nouveauManifestant(px, py);
+        if (!m) break;
+        m.place = [px, py];
+        m.lat = ((cortege.ordre.length * 0.6180339) % 1) * 2 - 1;
+        cortege.ordre.push(m);
+        pris++;
+    }
+    // Le service d'ordre : trois équipes de deux, gilets orange, autour.
+    for (let e = 0; e < SO_EQUIPES; e++) {
+        const membres = [0, 1].map(k => {
+            const ang = (e * 2 + k) / (2 * SO_EQUIPES) * 2 * Math.PI, r = 1.1 * Math.sqrt(n) + 2;
+            const m = nouvellePersonne('so', x + r * Math.cos(ang), y + r * Math.sin(ang),
+                { torse: 0xff7a00, jambes: 0x2c3e50, tete: tire(TEINTES_PEAU), baton: 0x2c3e50, pancarte: 0x2c3e50 });
+            if (m) m.place = [m.x, m.y];
+            return m;
+        }).filter(Boolean);
+        cortege.equipes.push({ membres, etat: 'libre', cible: null, c: null, x, y, depuis: 0, prochainPlan: 0 });
+    }
+    cortege.finChoix = performance.now() + CORTEGE_CHOIX_S * 1000;
+    marqueArrivee.visible = false;
+    banderole.visible = false;
+    const h = soleilEnDegres();
+    annoncer(`Où va le cortège ?<small>cliquez son arrivée dans les rues · sinon une place est choisie dans `
+             + `${CORTEGE_CHOIX_S} s<br>${document.getElementById('s-heure').textContent}, soleil `
+             + `${h > 0 ? `à ${Math.round(h)}° : ${h > 35 ? 'cherchez l\'ombre' : 'la chaleur reste supportable'}` : 'couché : pas de chaleur'}</small>`,
+             CORTEGE_CHOIX_S);
+}
+
+/** La hauteur du soleil, en degrés, d'après la lumière de la scène. */
+function soleilEnDegres() {
+    return Math.asin(Math.min(1, soleil.position.y / soleil.position.length())) * 180 / Math.PI;
+}
+
+/** Tout ce qu'une manifestation a posé dans la scène, retiré. */
+function viderCortege() {
+    for (const p of cortege.gens || []) retirerPersonne(p);
+    for (const o of [...(cortege.cordons || []), ...(cortege.barricades || []), ...(cortege.groupes || [])]) {
+        if (o.objet) groupeCortege.remove(o.objet);
+    }
+    for (const c of cortege.casseurs || []) groupeCortege.remove(c.marque);
+    for (const n of cortege.nuages || []) { for (const b of n.bouffees) groupeCortege.remove(b); n.materiau.dispose(); }
+    for (const f of cortege.feux || []) {
+        groupeCortege.remove(f.groupe);
+        for (const b of f.fumee) { groupeCortege.remove(b.m); b.m.material.dispose(); }
+    }
+    for (const m of flechesCarrefour) m.visible = false;
+}
+
+/** Le clic pendant le choix : l'arrivée, là où il désigne, sur une rue à CORTEGE_ARRIVEE_MIN_M au moins. */
+function cliquerArrivee(rayon) {
+    const p = pointVise(rayon.origin, rayon.direction);
+    const q = p && projeterSurRoute(cortege.graphe, p.x, -p.z, 40);
+    if (!q) { annoncer('Pas de rue ici<small>cliquez sur une rue de la zone chargée</small>', 2.5); return; }
+    const chemin = cheminCortege(cortege.tete, q);
+    if (!chemin) { annoncer('Inaccessible<small>aucune rue n\'y mène depuis la place</small>', 2.5); return; }
+    if (chemin.longueur < CORTEGE_ARRIVEE_MIN_M) {
+        annoncer(`Trop près<small>${Math.round(chemin.longueur)} m par les rues : il en faut ${CORTEGE_ARRIVEE_MIN_M} au moins</small>`, 2.5);
+        return;
+    }
+    choisirArrivee(q);
+}
+
+/**
+ * L'arrivée d'office : un carrefour à CORTEGE_ARRIVEE_M par la route, le plus
+ * dégagé d'une vingtaine tirés au hasard, comme le foyer d'un incendie ; à
+ * défaut, le nœud le plus loin à portée.
+ */
+function arriveeAuto() {
+    const dist = distancesRoute(cortege.tete);
+    const noeuds = noeudsGraphe(cortege.graphe).filter(n => dist.has(n));
+    const loin = noeuds.filter(n => dist.get(n).d >= CORTEGE_ARRIVEE_M[0] && dist.get(n).d <= CORTEGE_ARRIVEE_M[1]);
+    const carrefours = loin.filter(n => n.aretes.length >= 3);
+    const candidats = carrefours.length ? carrefours : loin;
+    let meilleur = null;
+    for (let k = 0; k < 25 && candidats.length; k++) {
+        const n = candidats[Math.floor(Math.random() * candidats.length)];
+        let libres = 0;
+        for (let i = 0; i < 12; i++) {
+            const a = i / 12 * 2 * Math.PI;
+            if (placeLibre(n.x + 12 * Math.cos(a), n.y + 12 * Math.sin(a))) libres++;
+        }
+        if (!meilleur || libres + Math.random() > meilleur.libres) meilleur = { n, libres };
+    }
+    let n = meilleur && meilleur.n;
+    if (!n) {
+        const portee = noeuds.filter(m => dist.get(m).d <= CORTEGE_ARRIVEE_M[1]);
+        n = portee.reduce((u, v) => (!u || dist.get(v).d > dist.get(u).d ? v : u), null);
+    }
+    if (!n || dist.get(n).d < 50) {
+        annoncer('Pas de cortège ici<small>trop peu de rues dans cette scène</small>', 5);
+        cortege.phase = 'fin';
+        return;
+    }
+    const a = n.aretes[0];
+    choisirArrivee({ arete: a, s: a.a === n ? 0 : a.longueur, x: n.x, y: n.y });
+}
+
+/** L'arrivée posée : le cortège se forme dans la rue, tourné vers elle, et les obstacles se placent. */
+function choisirArrivee(q) {
+    const [x, y] = pointArete(q.arete, q.s);
+    cortege.arrivee = { arete: q.arete, s: q.s, x, y };
+    marqueArrivee.position.set(x, ySol(...toLonLat(x, y)), -y);
+    marqueArrivee.visible = true;
+    const t = cortege.tete;
+    const chemin = cheminCortege(t, cortege.arrivee);
+    cortege.plusCourt = chemin.longueur;
+    // Tourné vers le premier pas du plus court chemin.
+    const m = chemin.morceaux[0];
+    t.sens = m.a >= m.de ? 1 : -1;
+    formerTrace();
+    placerObstacles(chemin);
+    cortege.phase = 'forme';
+    cortege.debutMarche = performance.now() + CORTEGE_FORMATION_S * 1000;
+    banderole.visible = true;
+    annoncer(`Le cortège se forme<small>arrivée à ${Math.round(chemin.longueur / 10) * 10} m par les rues · `
+             + `${cortege.groupes.length} groupe${cortege.groupes.length > 1 ? 's' : ''} attendent qu'on passe les prendre</small>`,
+             CORTEGE_FORMATION_S);
+}
+
+/**
+ * La trace de départ : la rue derrière la place, sur CORTEGE_TRACE_DEPART_M,
+ * en remontant tout droit aux carrefours. Le cortège s'y range, la tête sur
+ * la place ; dans une impasse, la trace s'arrête plus tôt et la queue se
+ * serre au bout.
+ */
+function formerTrace() {
+    const t = cortege.tete;
+    const recul = { arete: t.arete, s: t.s, sens: -t.sens };
+    const pts = [echantillonTrace({ ...recul, sens: -recul.sens, d: 0 })];
+    let parcouru = 0;
+    for (let k = 0; k < 2000 && parcouru < CORTEGE_TRACE_DEPART_M; k++) {
+        const fin = recul.sens > 0 ? recul.arete.longueur - recul.s : recul.s;
+        if (fin < 1e-6) {
+            const n = recul.sens > 0 ? recul.arete.b : recul.arete.a;
+            const b = brancheCortege(n, recul.arete, recul.sens, 0);
+            if (!b) break;
+            recul.sens = b.arete.a === n ? 1 : -1;
+            recul.s = recul.sens > 0 ? 0 : b.arete.longueur;
+            recul.arete = b.arete;
+            continue;
+        }
+        const pas = Math.min(1, fin);
+        recul.s += recul.sens * pas;
+        parcouru += pas;
+        pts.push(echantillonTrace({ arete: recul.arete, s: recul.s, sens: -recul.sens, d: -parcouru }));
+    }
+    pts.reverse();
+    for (const p of pts) p.d += parcouru;
+    cortege.trace = pts;
+    t.d = parcouru;
+    const e = pts.at(-1);
+    [t.x, t.y] = [e.x, e.y];
+    cortege.cap = Math.atan2(e.dx, e.dy);
+}
+
+/**
+ * Les obstacles d'une manifestation, d'après le plus court chemin : deux
+ * cordons dessus, à 35 % et 65 %, s'il reste un détour de CORDON_DETOUR_M au plus ; deux barricades sur
+ * le chemin qui les évite ; trois groupes à quelques rues de lui.
+ */
+function placerObstacles(chemin) {
+    const t = cortege.tete, arr = cortege.arrivee;
+    const pres = (o, d) => Math.hypot(o.x - t.x, o.y - t.y) < d || Math.hypot(o.x - arr.x, o.y - arr.y) < d;
+    const bloquees = new Set();
+    const libre = a => a !== t.arete && a !== arr.arete && a.longueur >= 16 && !bloquees.has(a)
+                       && !cortege.barricades.some(b => b.arete === a);
+    for (const part of [0.35, 0.65]) {
+        for (const decale of [0, 0.06, -0.06, 0.12, -0.12]) {
+            const o = surChemin(chemin, (part + decale) * chemin.longueur);
+            if (!o || !libre(o.arete) || pres(o, 60)) continue;
+            bloquees.add(o.arete);
+            const detour = cheminCortege(t, arr, bloquees);
+            if (detour && detour.longueur <= chemin.longueur + CORDON_DETOUR_M) { creerCordon(o.arete, o.s); break; }
+            bloquees.delete(o.arete);
+        }
+    }
+    const evite = cheminCortege(t, arr, bloquees) || chemin;
+    for (const part of [0.3, 0.7]) {
+        const o = surChemin(evite, part * evite.longueur);
+        if (o && libre(o.arete) && !pres(o, 50)) creerBarricade(o.arete, o.s);
+    }
+    // Les groupes : à des carrefours à GROUPE_ECART_M du plus court chemin,
+    // entre 15 et 85 % du trajet, à 120 m au moins l'un de l'autre.
+    const jalons = [];
+    for (let x = 0; x <= chemin.longueur; x += 10) jalons.push(surChemin(chemin, x));
+    const candidats = [];
+    for (const n of noeudsGraphe(cortege.graphe)) {
+        if (n.aretes.length < 3) continue;
+        let d = Infinity, k = 0;
+        jalons.forEach((j, i) => { const e = Math.hypot(j.x - n.x, j.y - n.y); if (e < d) { d = e; k = i; } });
+        const avance = k / Math.max(jalons.length - 1, 1);
+        if (d >= GROUPE_ECART_M[0] && d <= GROUPE_ECART_M[1] && avance >= 0.15 && avance <= 0.85 && !pres(n, 60)) {
+            candidats.push({ n, avance });
+        }
+    }
+    for (const modele of GROUPES_CORTEGE) {
+        const restants = candidats.filter(c => cortege.groupes.every(g => Math.hypot(g.x - c.n.x, g.y - c.n.y) >= 120));
+        if (!restants.length) break;
+        const c = restants[Math.floor(Math.random() * restants.length)];
+        creerGroupe(modele, c.n.x, c.n.y);
+    }
+}
+
+/** Le côté droit de la rue, à l'abscisse `s` de l'arête, pour la direction des abscisses croissantes. */
+function normaleArete(a, s) {
+    const [x, y, dx, dy] = pointArete(a, s);
+    const l = Math.hypot(dx, dy) || 1;
+    return { x, y, nx: dy / l, ny: -dx / l, cap: Math.atan2(dx, dy) };
+}
+
+/** Un cordon de police en travers de l'arête `a`, à `s` : une rangée de boucliers, un fourgon derrière. */
+function creerCordon(a, s, annonce = false) {
+    const { x, y, nx, ny, cap } = normaleArete(a, s);
+    const l = Math.max(largeurUtile(a) - 1.2, 3);
+    const objet = new THREE.Group();
+    // Le fourgon, du côté le plus loin du départ.
+    const [dx, dy] = [Math.sin(cap), Math.cos(cap)];
+    const cote = (cortege.depart.x - x) * dx + (cortege.depart.y - y) * dy > 0 ? -1 : 1;
+    const fx = x + dx * cote * 6, fy = y + dy * cote * 6;
+    const fourgon = new THREE.Group();
+    fourgon.add(new THREE.Mesh(GEO_FOURGON, MAT_FOURGON), new THREE.Mesh(GEO_BANDE, MAT_BANDE));
+    const gyros = [-0.5, 0.5].map((gx, k) => {
+        const m = new THREE.Mesh(GEO_GYRO, MAT_GYRO[k]);
+        m.position.set(gx, 2.45, -1.8);
+        fourgon.add(m);
+        return m;
+    });
+    fourgon.position.set(fx, ySol(...toLonLat(fx, fy)), -fy);
+    fourgon.rotation.y = -cap;
+    objet.add(fourgon);
+    groupeCortege.add(objet);
+    const o = { type: 'cordon', arete: a, s, x, y, nx, ny, cap, cote, objet, gyros, policiers: [], contact: CORDON_CONTACT_M };
+    for (let k = 0; k < CORDON_POLICIERS; k++) {
+        const u = (k / (CORDON_POLICIERS - 1) - 0.5) * l;
+        const p = nouvellePersonne('police', x + nx * u, y + ny * u, TEINTES_POLICE, { cordon: o, bouclier: true });
+        if (p) { p.cap = cap + (cote > 0 ? Math.PI : 0); o.policiers.push(p); }
+    }
+    cortege.cordons.push(o);
+    if (annonce) {
+        annoncer(`Déviation<small>un cordon ferme ${a.nom || 'la rue'} devant le cortège</small>`, 3.5);
+        son('indice');
+    }
+    return o;
+}
+
+/** Une barricade de débris en travers de l'arête `a`, à `s`. */
+function creerBarricade(a, s) {
+    const { x, y, nx, ny, cap } = normaleArete(a, s);
+    const l = Math.max(largeurUtile(a) - 2, 3), objet = new THREE.Group();
+    const n = Math.max(3, Math.round(l / 1.4));
+    for (let k = 0; k < n + 2; k++) {
+        const u = ((k % n) / Math.max(n - 1, 1) - 0.5) * l + (Math.random() - 0.5) * 0.6;
+        const m = new THREE.Mesh(GEO_DEBRIS, MAT_DEBRIS);
+        const px = x + nx * u, py = y + ny * u;
+        m.position.set(px, ySol(...toLonLat(px, py)) + 0.25 + (k >= n ? 0.5 : 0), -py);
+        m.rotation.y = -cap + Math.PI / 2 + (Math.random() - 0.5) * 0.8;
+        objet.add(m);
+    }
+    groupeCortege.add(objet);
+    cortege.barricades.push({ type: 'barricade', arete: a, s, x, y, objet, contact: BARRICADE_CONTACT_M,
+                              degagee: false, reste: BARRICADE_ARRET_S });
+}
+
+/** Un groupe qui attend au carrefour (x, y), son drapeau levé. */
+function creerGroupe(modele, x, y) {
+    const n = GROUPE_FIGURES[0] + Math.floor(Math.random() * (GROUPE_FIGURES[1] - GROUPE_FIGURES[0] + 1));
+    const objet = new THREE.Group();
+    const mat = new THREE.Mesh(GEO_MAT_DRAPEAU, new THREE.MeshStandardMaterial({ color: 0x8a8f94, roughness: 0.6 }));
+    const drapeau = new THREE.Mesh(GEO_DRAPEAU, new THREE.MeshStandardMaterial({ color: modele.teinte, roughness: 0.8,
+                                                                                side: THREE.DoubleSide }));
+    const nom = etiquette(modele.nom, `#${modele.teinte.toString(16).padStart(6, '0')}`, 0.03);
+    nom.position.y = 7.2;
+    objet.add(mat, drapeau, nom);
+    objet.position.set(x, ySol(...toLonLat(x, y)), -y);
+    groupeCortege.add(objet);
+    const g = { ...modele, x, y, objet, drapeau, membres: [], etat: 'attend',
+                fin: performance.now() + (GROUPE_ATTENTE_S[0] + Math.random() * (GROUPE_ATTENTE_S[1] - GROUPE_ATTENTE_S[0])) * 1000 };
+    for (let k = 0, pris = 0; pris < n && k < 6 * n; k++) {
+        const r = 1.6 + 1.0 * Math.sqrt(k), ang = k * 2.39996;
+        const px = x + r * Math.cos(ang), py = y + r * Math.sin(ang);
+        if (!placeLibre(px, py)) continue;
+        const p = nouveauManifestant(px, py, Math.random() < 0.7 ? modele.teinte : null);
+        if (!p) break;
+        p.role = 'groupe';
+        p.place = [px, py];
+        p.cap = Math.atan2(x - px, y - py);
+        g.membres.push(p);
+        pris++;
+    }
+    cortege.groupes.push(g);
+}
+
+// --- La marche ---
+
+/** Les appuis de la file : la branche, la cadence, le demi-tour, le service d'ordre. */
+function traiterAppuis() {
+    const c = cortege;
+    for (const code of c.appuis.splice(0)) {
+        if (code === 'KeyF') { if (c.phase === 'marche') envoyerVersMenace(); continue; }
+        if (c.phase !== 'marche' && c.phase !== 'forme') continue;
+        if (code === 'ArrowLeft' || code === 'KeyA') c.choix = Math.max(c.choix - 1, -1);
+        else if (code === 'ArrowRight' || code === 'KeyD') c.choix = Math.min(c.choix + 1, 1);
+        else if (code === 'ArrowUp' || code === 'KeyW') c.cadence = Math.min(c.cadence + 1, CORTEGE_CADENCES.length - 1);
+        else if (code === 'ArrowDown' || code === 'KeyS') {
+            if (c.phase === 'marche' && (c.cadence === 0 || (c.tete.bloque && c.tete.bloque.type === 'cordon'))) demiTour('Demi-tour');
+            else c.cadence = Math.max(c.cadence - 1, 0);
+        }
+    }
+}
+
+/** L'obstacle le plus proche devant la tête, sur son arête : { o, ecart }. */
+function obstacleDevant(t) {
+    let meilleur = null;
+    for (const o of cortege.cordons.concat(cortege.barricades)) {
+        if (o.arete !== t.arete || o.degagee) continue;
+        const ecart = (o.s - t.s) * t.sens;
+        if (ecart < -0.5) continue;
+        if (!meilleur || ecart < meilleur.ecart) meilleur = { o, ecart };
+    }
+    return meilleur;
+}
+
+/**
+ * La tête avance de `distance` m sur le graphe : aux carrefours, la branche
+ * choisie ; contre un obstacle, elle s'arrête ; dans une impasse ou au bord
+ * de la zone, le cortège fait demi-tour.
+ */
+function avancerTete(distance) {
+    const c = cortege, t = c.tete;
+    let reste = distance;
+    for (let k = 0; k < 50 && reste > 1e-6; k++) {
+        const ob = obstacleDevant(t);
+        if (ob && ob.ecart - ob.o.contact <= reste) {
+            const pas = Math.max(0, ob.ecart - ob.o.contact);
+            t.s += t.sens * pas;
+            t.d += pas;
+            c.parcouru += pas;
+            arreter(ob.o);
+            return;
+        }
+        const fin = t.sens > 0 ? t.arete.longueur - t.s : t.s;
+        if (reste < fin) {
+            t.s += t.sens * reste;
+            t.d += reste;
+            c.parcouru += reste;
+            return;
+        }
+        reste -= fin;
+        t.d += fin;
+        c.parcouru += fin;
+        t.s = t.sens > 0 ? t.arete.longueur : 0;
+        const n = t.sens > 0 ? t.arete.b : t.arete.a;
+        const options = n.aretes.filter(a => a !== t.arete).length;
+        const b = brancheCortege(n, t.arete, t.sens, options >= 2 ? c.choix : 0);
+        if (!b) {
+            majTrace();
+            demiTour(bordDeZone(n) ? 'Bord de la zone chargée' : 'Impasse');
+            return;
+        }
+        if (options >= 2) c.choix = 0;
+        t.sens = b.arete.a === n ? 1 : -1;
+        t.s = t.sens > 0 ? 0 : b.arete.longueur;
+        t.arete = b.arete;
+    }
+}
+
+function bordDeZone(n) {
+    const [o, s] = toLocal(BORNES.o, BORNES.s), [e, nn] = toLocal(BORNES.e, BORNES.n);
+    return n.x < o + 4 || n.x > e - 4 || n.y < s + 4 || n.y > nn - 4;
+}
+
+/** Arrêté contre un obstacle : piétiner devant un cordon, attendre qu'on dégage une barricade. */
+function arreter(o) {
+    const t = cortege.tete;
+    if (t.bloque === o) return;
+    t.bloque = o;
+    if (o.type === 'cordon') {
+        annoncer(`Cordon de police<small>la rue est fermée · le cortège piétine et perd du monde · `
+                 + '↓ à l\'arrêt pour faire demi-tour</small>', 4);
+    } else {
+        annoncer('Barricade<small>les premiers rangs la démontent · quelques secondes d\'arrêt</small>', 3);
+    }
+    son('indice');
+}
+
+/** La trace : son dernier échantillon suit la tête, un nouveau tous les mètres ; la queue d'avant oubliée. */
+function majTrace() {
+    const c = cortege, tr = c.trace, t = c.tete;
+    const e = echantillonTrace(t);
+    if (tr.length < 2 || t.d - tr[tr.length - 2].d >= 1) tr.push(e); else tr[tr.length - 1] = e;
+    [t.x, t.y] = [e.x, e.y];
+    c.cap = Math.atan2(e.dx, e.dy);
+    const garde = t.d - c.bQueue - 40;
+    let k = 0;
+    while (k < tr.length - 2 && tr[k + 1].d < garde) k++;
+    if (k) tr.splice(0, k);
+}
+
+/**
+ * Demi-tour : la queue devient la tête. La trace est retournée et l'ordre des
+ * rangs aussi ; la position de la queue sur le graphe est celle de son
+ * échantillon, en sens inverse. La banderole passe devant.
+ */
+function demiTour(raison) {
+    const c = cortege, tr = c.trace, t = c.tete;
+    const dQueue = t.d - c.bQueue;
+    let k = 0;
+    while (k < tr.length - 1 && tr[k].d < dQueue) k++;
+    const corps = tr.slice(k).reverse();
+    const d0 = t.d;
+    c.trace = corps.map(e => ({ ...e, dx: -e.dx, dy: -e.dy, sens: -e.sens, d: d0 - e.d }));
+    const queue = c.trace.at(-1);
+    c.tete = { arete: queue.arete, s: queue.s, sens: queue.sens, d: queue.d, bloque: null, x: queue.x, y: queue.y };
+    c.ordre.reverse();
+    c.choix = 0;
+    if (c.cadence === 0) c.cadence = 1;
+    c.cap = Math.atan2(queue.dx, queue.dy);
+    annoncer(`${raison}<small>la queue du cortège passe en tête</small>`, 2.5);
+}
+
+/** La vitesse de la tête : la cadence, la largeur de la rue, la pente, la fatigue, un feu tout près. */
+function vitesseTete() {
+    const c = cortege, t = c.tete;
+    if (t.bloque) return 0;
+    let cadence = c.cadence;
+    if (c.fatigue > FATIGUE_LENTE) cadence = Math.min(cadence, 1);
+    let v = CORTEGE_CADENCES[cadence];
+    if (!v) return 0;
+    v *= Math.min(Math.max((largeurUtile(t.arete) - 1) / 6, 0.45), 1);
+    // La pente, sur 3 m devant, hors de l'exagération du relief.
+    const s2 = Math.min(Math.max(t.s + t.sens * 3, 0), t.arete.longueur);
+    const [x2, y2] = pointArete(t.arete, s2);
+    const l = Math.abs(s2 - t.s);
+    if (l > 0.5 && exagVert > 0) {
+        const pente = (ySol(...toLonLat(x2, y2)) - ySol(...toLonLat(t.x, t.y))) / exagVert / l;
+        v *= 1 - Math.min(Math.max(pente * 5, 0), 0.5);
+    }
+    if (c.feux.some(f => f.etat === 'brule' && Math.hypot(f.x - t.x, f.y - t.y) < FEU_GENE_M)) v *= 0.6;
+    return v;
+}
+
+const pointCorps = { x: 0, y: 0, dx: 0, dy: 1, l: 6 };
+/** Le point de la trace à la distance `D` (celle de la tête) : interpolé, `k` l'indice où chercher, en descendant. */
+function pointDeTrace(D, k) {
+    const tr = cortege.trace;
+    while (k > 0 && tr[k].d > D) k--;
+    const e0 = tr[k], e1 = tr[Math.min(k + 1, tr.length - 1)];
+    const u = e1 === e0 || D <= e0.d ? 0 : Math.min((D - e0.d) / ((e1.d - e0.d) || 1), 1);
+    pointCorps.x = e0.x + (e1.x - e0.x) * u;
+    pointCorps.y = e0.y + (e1.y - e0.y) * u;
+    pointCorps.dx = u < 0.5 ? e0.dx : e1.dx;
+    pointCorps.dy = u < 0.5 ? e0.dy : e1.dy;
+    pointCorps.l = Math.min(e0.l, e1.l);
+    return k;
+}
+
+/**
+ * Le corps du cortège : chaque figure vise un point de la trace, en retard
+ * sur la précédente de la surface d'une figure divisée par la largeur de la
+ * rue, décalée sur le côté d'une fraction fixe. Une rue étroite l'étire, un
+ * boulevard le resserre. Elle y va à pied, un peu plus vite que la tête.
+ */
+function majCorps(dt, t, vTete) {
+    const c = cortege, tr = c.trace;
+    const formee = c.phase !== 'choix';
+    let b = CORTEGE_TETE_M, k = tr.length - 1;
+    // En formation, chacun gagne vite sa place dans la rue.
+    const pas = (c.phase === 'forme' ? 6 : vTete + 2.5) * dt;
+    for (const p of c.ordre) {
+        let tx, ty, cap;
+        if (formee && tr.length) {
+            k = pointDeTrace(c.tete.d - b, k);
+            const { x, y, dx, dy, l } = pointCorps;
+            // À droite de la marche : (dy, −dx).
+            let lat = p.lat * Math.max(l / 2 - 0.5, 0.4);
+            tx = x + dy * lat;
+            ty = y - dx * lat;
+            // Un feu tout près : il passe de l'autre côté de la rue.
+            for (const f of c.feux) {
+                if (f.etat !== 'brule' || Math.hypot(f.x - tx, f.y - ty) > FEU_ECART_FIGURES_M) continue;
+                const cote = (f.x - x) * dy - (f.y - y) * dx > 0 ? -1 : 1;
+                lat = cote * Math.max(l / 2 - 0.5, 0.4);
+                tx = x + dy * lat;
+                ty = y - dx * lat;
+            }
+            cap = Math.atan2(dx, dy);
+            b += CORTEGE_SURFACE_M2 / Math.max(l - 1, 1.2);
+        } else {
+            [tx, ty] = p.place;
+            cap = Math.atan2(c.depart.x - p.x, c.depart.y - p.y);
+        }
+        const ex = tx - p.x, ey = ty - p.y, e = Math.hypot(ex, ey);
+        const avance = Math.min(e, pas);
+        if (e > 1e-3) { p.x += ex / e * avance; p.y += ey / e * avance; }
+        p.vitesse = avance / Math.max(dt, 1e-3);
+        // Loin de sa place, il regarde où il va.
+        p.cap = e > 2 ? Math.atan2(ex, ey) : cap;
+    }
+    c.bQueue = b;
+}
+
+/** Les figures à l'image : chacun selon son rôle, une foulée en marchant. */
+function poserGens(dt, t) {
+    const c = cortege;
+    for (const p of c.gens) {
+        if (p.retire) continue;
+        if (p.role === 'part') {
+            p.depuis += dt;
+            p.x += p.vx * dt;
+            p.y += p.vy * dt;
+            p.cap = Math.atan2(p.vx, p.vy);
+            p.vitesse = 1.4;
+            if (p.depuis > 6) { retirerPersonne(p); continue; }
+        }
+        p.apparition = Math.min(1, p.apparition + dt * 2);
+        const efface = p.role === 'part' ? Math.min(1, Math.max(0, 6 - p.depuis)) : p.cache ? 0 : 1;
+        const marche = (p.vitesse || 0) > 0.3;
+        const saut = marche ? Math.abs(Math.sin(t * 7 + p.phase)) * 0.06
+                   : p.role === 'groupe' || (p.role === 'marche' && c.phase !== 'marche') ? Math.abs(Math.sin(t * 4 + p.phase)) * 0.1 : 0;
+        const pancarte = p.pancarte ? Math.sin(t * 2.2 + p.phase) * 0.25 : null;
+        poserFigure(fouleCortege, p.i, p.x, p.y, p.cap, saut, p.echelle * efface * p.apparition, pancarte, !!p.bouclier);
+    }
+    c.gens = c.gens.filter(p => !p.retire);
+    for (const m of Object.values(fouleCortege.maillages)) {
+        m.instanceMatrix.needsUpdate = true;
+        if (c.couleurs) m.instanceColor.needsUpdate = true;
+    }
+    c.couleurs = false;
+}
+
+/** La banderole devant le premier rang, de la largeur de la rue. */
+function majBanderole() {
+    const c = cortege;
+    if (!banderole.visible || !c.trace.length) return;
+    pointDeTrace(c.tete.d - 0.3, c.trace.length - 1);
+    const { x, y, dx, dy, l } = pointCorps;
+    const w = Math.min(Math.max(l - 1.5, 3), 8);
+    banderole.position.set(x, ySol(...toLonLat(x, y)), -y);
+    banderole.rotation.y = -Math.atan2(dx, dy);
+    for (const m of banderole.userData.toiles) m.scale.set(w, 1, 1);
+    banderole.userData.hampes[0].position.x = -w / 2;
+    banderole.userData.hampes[1].position.x = w / 2;
+}
+
+/**
+ * Le prochain vrai carrefour devant la tête, à 400 m au plus : celui où il
+ * faudra choisir (deux issues ou plus), ou l'impasse. Les flèches au sol y
+ * montrent les branches, celle qui sera prise en blanc.
+ */
+function majProchain() {
+    const c = cortege, t = c.tete;
+    let arete = t.arete, sens = t.sens, distance = sens > 0 ? arete.longueur - t.s : t.s;
+    c.prochain = null;
+    for (let k = 0; k < 30 && distance < 400; k++) {
+        const n = sens > 0 ? arete.b : arete.a;
+        const options = n.aretes.filter(a => a !== arete);
+        if (options.length !== 1) {
+            const choisie = brancheCortege(n, arete, sens, c.choix);
+            const arrivee = capArrivee(arete, sens);
+            c.prochain = { n, venue: arete, sens, distance, choisie, branches: options.map(a => ({ arete: a, cap: capIssue(n, a),
+                                                                               tourne: ecartAngle(capIssue(n, a), arrivee) })) };
+            break;
+        }
+        const a = options[0];
+        sens = a.a === n ? 1 : -1;
+        arete = a;
+        distance += a.longueur;
+    }
+    const p = c.prochain;
+    flechesCarrefour.forEach((m, i) => {
+        const b = p && c.phase === 'marche' ? p.branches[i] : null;
+        m.visible = !!b;
+        if (!b) return;
+        const prise = p.choisie && b.arete === p.choisie.arete;
+        const x = p.n.x + Math.sin(b.cap) * 4, y = p.n.y + Math.cos(b.cap) * 4;
+        m.position.set(x, ySol(...toLonLat(x, y)) + 0.4, -y);
+        m.rotation.y = -b.cap;
+        m.scale.setScalar(prise ? 1.25 : 0.9);
+        m.material.opacity = prise ? 0.95 : 0.3;
+    });
+}
+
+// --- Les groupes, les cordons, les barricades ---
+
+function majGroupes(maintenant) {
+    const c = cortege, t = c.tete;
+    for (const g of c.groupes) {
+        if (g.etat !== 'attend') continue;
+        g.drapeau.rotation.y = Math.sin(maintenant / 600 + g.x) * 0.25;
+        if (c.phase === 'marche' && Math.hypot(g.x - t.x, g.y - t.y) < GROUPE_RALLIE_M) {
+            // Ils rejoignent les rangs près de la tête, et marchent jusqu'à leur place.
+            g.etat = 'rallie';
+            const n = g.membres.length;
+            for (const [k, p] of g.membres.entries()) {
+                p.role = 'marche';
+                p.lat = (((c.ordre.length + k) * 0.6180339) % 1) * 2 - 1;
+            }
+            c.ordre.splice(Math.min(10, c.ordre.length), 0, ...g.membres);
+            c.participants += n * CORTEGE_PAR_FIGURE;
+            c.rallies += n * CORTEGE_PAR_FIGURE;
+            groupeCortege.remove(g.objet);
+            annoncer(`+${n * CORTEGE_PAR_FIGURE} participants<small>${g.nom.toLowerCase()} rejoignent le cortège</small>`, 3);
+            son('touche');
+        } else if (maintenant > g.fin && c.phase === 'marche') {
+            g.etat = 'parti';
+            for (const p of g.membres) fairePartir(p, p.x - g.x, p.y - g.y);
+            groupeCortege.remove(g.objet);
+            annoncer(`${g.nom} sont repartis<small>le cortège n'est pas venu les chercher</small>`, 3);
+        }
+    }
+}
+
+function majObstacles(dt, maintenant) {
+    const c = cortege, t = c.tete;
+    const allume = Math.floor(maintenant / 250) % 2;
+    for (const o of c.cordons) {
+        o.gyros[0].visible = allume === 0;
+        o.gyros[1].visible = allume === 1;
+        // Les policiers font face au cortège qui approche.
+        const vers = Math.atan2(t.x - o.x, t.y - o.y);
+        if (Math.hypot(t.x - o.x, t.y - o.y) < 120) for (const p of o.policiers) p.cap += ecartAngle(vers, p.cap) * (1 - Math.exp(-dt / 0.5));
+    }
+    // Arrêté contre un cordon : le cortège piétine, des gens s'en vont.
+    if (t.bloque && t.bloque.type === 'cordon') c.participants -= c.participants * CORDON_PERTE * dt;
+    // Une barricade : les premiers rangs la démontent. Pas le service
+    // d'ordre : occupé par les casseurs, il laissait le cortège devant elle
+    // plus de 40 s (République, au pilote).
+    if (t.bloque && t.bloque.type === 'barricade') {
+        const b = t.bloque;
+        b.reste -= dt;
+        if (b.reste <= 0) {
+            b.degagee = true;
+            groupeCortege.remove(b.objet);
+            t.bloque = null;
+            annoncer('Barricade dégagée<small>le cortège repart</small>', 2);
+        }
+    }
+    // Une déviation, une ou deux fois : une rue fermée devant le cortège.
+    if (c.deviations < CORDON_DEVIATIONS && maintenant > c.prochaineDeviation) {
+        c.prochaineDeviation = maintenant + (CORDON_DEVIATION_S[0] + Math.random() * (CORDON_DEVIATION_S[1] - CORDON_DEVIATION_S[0])) * 1000;
+        declarerDeviation();
+    }
+}
+
+/** Une rue fermée sur le chemin de la tête, à CORDON_DEVIATION_M devant elle, s'il reste un détour de CORDON_DETOUR_M au plus. */
+function declarerDeviation() {
+    const c = cortege, t = c.tete;
+    const bloquees = new Set(c.cordons.map(o => o.arete));
+    const chemin = cheminCortege(t, c.arrivee, bloquees);
+    if (!chemin) return;
+    for (let k = 0; k < 8; k++) {
+        const x = CORDON_DEVIATION_M[0] + Math.random() * (CORDON_DEVIATION_M[1] - CORDON_DEVIATION_M[0]);
+        if (x > chemin.longueur - 60) continue;
+        const o = surChemin(chemin, x);
+        if (!o || o.arete === t.arete || o.arete === c.arrivee.arete || o.arete.longueur < 16
+            || c.barricades.some(b => b.arete === o.arete && !b.degagee)) continue;
+        bloquees.add(o.arete);
+        const detour = cheminCortege(t, c.arrivee, bloquees);
+        if (detour && detour.longueur <= chemin.longueur + CORDON_DETOUR_M) {
+            c.deviations++;
+            creerCordon(o.arete, o.s, true);
+            return;
+        }
+        bloquees.delete(o.arete);
+    }
+}
+
+// --- Les casseurs, le service d'ordre, le gaz, les feux ---
+
+/**
+ * Une vague de casseurs, à quelques rues du milieu du cortège, hors de sa
+ * trace ; `autour` ({ x, y, rayon }) : dans ce rayon plutôt (la mise en scène
+ * d'un film), `n` : combien.
+ */
+function vagueCasseurs(autour = null, n = null) {
+    const c = cortege;
+    n = n ?? CASSEURS_VAGUE[0] + Math.floor(Math.random() * (CASSEURS_VAGUE[1] - CASSEURS_VAGUE[0] + 1));
+    pointDeTrace(c.tete.d - c.bQueue / 2, c.trace.length - 1);
+    const mx = pointCorps.x, my = pointCorps.y;
+    const noeuds = noeudsGraphe(c.graphe);
+    const loin = autour ? nd => Math.hypot(nd.x - autour.x, nd.y - autour.y) > autour.rayon
+                        : nd => { const d = Math.hypot(nd.x - mx, nd.y - my); return d < CASSEUR_DEPART_M[0] || d > CASSEUR_DEPART_M[1]; };
+    let lances = 0;
+    for (let k = 0; k < 200 && lances < n; k++) {
+        if (c.lances >= CASSEURS_PAR_PARTIE || c.casseurs.length >= CASSEURS_SIMULTANES) break;
+        const nd = noeuds[Math.floor(Math.random() * noeuds.length)];
+        if (loin(nd)) continue;
+        if (c.trace.some(e => Math.hypot(e.x - nd.x, e.y - nd.y) < 25)) continue;
+        const a = nd.aretes[Math.floor(Math.random() * nd.aretes.length)];
+        const p = nouvellePersonne('casseur', nd.x, nd.y, TEINTES_CASSEUR);
+        if (!p) break;
+        const marque = new THREE.Mesh(GEO_MARQUE, MAT_MARQUE);
+        marque.renderOrder = 10;
+        groupeCortege.add(marque);
+        const cs = { p, marque, etat: 'approche', arete: a, s: a.a === nd ? 0 : a.longueur, sens: a.a === nd ? 1 : -1,
+                     but: null, chemin: [], fuite: false, prochainPlan: 0, incident: 0, equipe: null };
+        c.casseurs.push(cs);
+        c.lances++;
+        lances++;
+    }
+    if (lances) {
+        annoncer(`Des casseurs approchent<small>${AU_DOIGT ? 'S.O., ou les toucher' : 'F, ou un clic sur eux'} : `
+                 + 'le service d\'ordre les écarte avant qu\'ils s\'infiltrent</small>', 3.5);
+        son('indice');
+    }
+}
+
+/** La distance d'un point au cortège, mesurée à un rang sur trois. */
+function distanceAuCortege(x, y) {
+    let d = Math.hypot(x - cortege.tete.x, y - cortege.tete.y);
+    const o = cortege.ordre;
+    for (let k = 0; k < o.length; k += 3) d = Math.min(d, Math.hypot(x - o[k].x, y - o[k].y));
+    return d;
+}
+
+function majCasseurs(dt, maintenant) {
+    const c = cortege;
+    for (const cs of c.casseurs) {
+        const p = cs.p;
+        if (cs.etat === 'approche') {
+            // Toutes les 2 s, le plus court chemin vers la tête du cortège.
+            if (maintenant > cs.prochainPlan) {
+                cs.prochainPlan = maintenant + 2000;
+                const dist = distancesRoute(cs);
+                const { d, fin } = routeVers(dist, c.tete);
+                if (Number.isFinite(d) && cs.arete !== c.tete.arete) {
+                    const { aretes, premier } = cheminVers(dist, fin);
+                    cs.chemin = [...aretes, c.tete.arete];
+                    cs.sens = premier === cs.arete.b ? 1 : -1;
+                } else if (cs.arete === c.tete.arete) {
+                    cs.chemin = [];
+                    cs.sens = c.tete.s >= cs.s ? 1 : -1;
+                }
+            }
+            avancerCoureur(cs, CASSEUR_VITESSE * dt);
+            const [x, y, dx, dy] = pointArete(cs.arete, cs.s);
+            p.x = x;
+            p.y = y;
+            p.cap = Math.atan2(dx * cs.sens, dy * cs.sens);
+            p.vitesse = CASSEUR_VITESSE;
+            if (distanceAuCortege(x, y) < CASSEUR_INFILTRE_M) {
+                // Infiltré : il entre dans les rangs, près de celui qu'il a rejoint.
+                cs.etat = 'infiltre';
+                cs.incident = maintenant + (CASSEUR_INCIDENT_S[0] + Math.random() * (CASSEUR_INCIDENT_S[1] - CASSEUR_INCIDENT_S[0])) * 1000;
+                let k = 0, d = Infinity;
+                c.ordre.forEach((q, i) => { const e = Math.hypot(q.x - x, q.y - y); if (e < d) { d = e; k = i; } });
+                p.lat = Math.random() * 2 - 1;
+                c.ordre.splice(k, 0, p);
+            }
+        } else if (cs.etat === 'infiltre' && maintenant > cs.incident && !cs.equipe) {
+            incident(cs);
+        } else if (cs.etat === 'fuite') {
+            avancerCoureur(cs, 5 * dt);
+            const [x, y, dx, dy] = pointArete(cs.arete, cs.s);
+            p.x = x;
+            p.y = y;
+            p.cap = Math.atan2(dx * cs.sens, dy * cs.sens);
+            p.vitesse = 5;
+            cs.depuis += dt;
+            if (cs.depuis > 6) { cs.fini = true; retirerPersonne(p); }
+        } else if (cs.etat === 'escorte') {
+            cs.depuis += dt;
+            p.x += cs.vx * dt;
+            p.y += cs.vy * dt;
+            p.cap = Math.atan2(cs.vx, cs.vy);
+            p.vitesse = 1.5;
+            if (cs.depuis > SO_ESCORTE_S) { cs.fini = true; retirerPersonne(p); }
+        }
+        cs.marque.visible = !cs.fini && (cs.etat === 'approche' || cs.etat === 'infiltre');
+        if (cs.marque.visible) {
+            const echelle = Math.max(1, camera.position.distanceTo(cs.marque.position) / 60);
+            cs.marque.position.set(p.x, ySol(...toLonLat(p.x, p.y)) + 3.4 + 0.25 * echelle + Math.sin(maintenant / 200) * 0.2, -p.y);
+            cs.marque.scale.setScalar(echelle);
+        }
+    }
+    for (const cs of c.casseurs) if (cs.fini) groupeCortege.remove(cs.marque);
+    c.casseurs = c.casseurs.filter(cs => !cs.fini);
+}
+
+/** Le casseur passe à l'acte : un feu au bord de la rue, le gaz qui répond, et il s'enfuit. */
+function incident(cs) {
+    const c = cortege, p = cs.p;
+    c.incidents++;
+    const k = c.ordre.indexOf(p);
+    if (k >= 0) c.ordre.splice(k, 1);
+    // Au bord de la rue, de son côté.
+    const q = projeterSurRoute(c.graphe, p.x, p.y, 30);
+    let fx = p.x, fy = p.y;
+    if (q) {
+        const { x, y, nx, ny } = normaleArete(q.arete, q.s);
+        const cote = (p.x - x) * nx + (p.y - y) * ny >= 0 ? 1 : -1, l = largeurUtile(q.arete) / 2 - 1;
+        fx = x + nx * cote * l;
+        fy = y + ny * cote * l;
+        cs.arete = q.arete;
+        cs.s = q.s;
+        cs.sens = Math.random() < 0.5 ? 1 : -1;
+    }
+    const f = creerFoyer(fx, fy, groupeCortege, false);
+    f.intensite = 0.3;
+    f.fin = performance.now() + FEU_CORTEGE_S * 1000;
+    c.feux.push(f);
+    for (let i = 0; i < GAZ_NUAGES; i++) {
+        const a = Math.random() * 2 * Math.PI, r = 4 + Math.random() * 8;
+        creerNuage(fx + r * Math.cos(a), fy + r * Math.sin(a), i * 0.6);
+    }
+    cs.etat = 'fuite';
+    cs.depuis = 0;
+    cs.chemin = [];
+    cs.but = null;
+    annoncer('Incident<small>un casseur a mis le feu · gaz lacrymogène sur le cortège</small>', 3.5);
+    son('impact');
+}
+
+/** Un nuage de gaz en (x, y), qui s'ouvre après `retard` s : des bouffées pâles, au ras du sol. */
+function creerNuage(x, y, retard) {
+    const materiau = new THREE.MeshBasicMaterial({ color: 0xe9ebd6, transparent: true, opacity: 0, depthWrite: false });
+    const bouffees = [];
+    for (let k = 0; k < 6; k++) {
+        const m = new THREE.Mesh(GEO_BOUFFEE, materiau);
+        m.userData.decale = [(Math.random() - 0.5) * 1.1, (Math.random() - 0.5) * 1.1, 0.5 + Math.random() * 0.4];
+        groupeCortege.add(m);
+        bouffees.push(m);
+    }
+    cortege.nuages.push({ x, y, age: -retard, r: GAZ_RAYON_M[0], materiau, bouffees });
+}
+
+function majGaz(dt) {
+    const c = cortege;
+    for (const n of c.nuages) {
+        n.age += dt;
+        if (n.age < 0) continue;
+        n.x += VENT.x * dt;
+        n.y -= VENT.z * dt;
+        n.r = GAZ_RAYON_M[0] + (GAZ_RAYON_M[1] - GAZ_RAYON_M[0]) * Math.min(n.age / GAZ_CROISSANCE_S, 1);
+        n.materiau.opacity = 0.32 * Math.min(1, n.age * 2) * Math.min(1, (GAZ_VIE_S - n.age) / 8);
+        const y0 = ySol(...toLonLat(n.x, n.y));
+        for (const m of n.bouffees) {
+            const [u, v, e] = m.userData.decale;
+            m.position.set(n.x + u * n.r, y0 + n.r * 0.3 * e, -(n.y + v * n.r));
+            m.scale.set(n.r * e, n.r * e * 0.45, n.r * e);
+        }
+        // Dans le gaz, on quitte le cortège.
+        if (c.phase !== 'marche') continue;
+        for (const p of [...c.ordre]) {
+            if (p.role !== 'marche' || Math.hypot(p.x - n.x, p.y - n.y) > n.r) continue;
+            if (Math.random() < GAZ_DEPART * dt) {
+                fairePartir(p, p.x - n.x, p.y - n.y);
+                c.participants -= CORTEGE_PAR_FIGURE;
+            }
+        }
+    }
+    for (const n of c.nuages) if (n.age >= GAZ_VIE_S) { for (const b of n.bouffees) groupeCortege.remove(b); n.materiau.dispose(); }
+    c.nuages = c.nuages.filter(n => n.age < GAZ_VIE_S);
+}
+
+function majFeuxCortege(dt, t, maintenant) {
+    const c = cortege;
+    for (const f of c.feux) {
+        f.groupe.position.set(f.x, ySol(...toLonLat(f.x, f.y)), -f.y);
+        if (f.etat === 'brule' && maintenant > f.fin) f.etat = 'eteint';
+        const allume = f.etat === 'brule';
+        animerFlammes(f, t, allume);
+        if (allume && maintenant > f.prochaineBouffee) {
+            f.prochaineBouffee = maintenant + 400;
+            bouffee(f, 0x4a4a4a, 0.6, 14, 8);
+        }
+        animerFumee(f, dt);
+        if (!allume && !f.fumee.length) { groupeCortege.remove(f.groupe); f.etat = 'fini'; }
+    }
+    c.feux = c.feux.filter(f => f.etat !== 'fini');
+}
+
+/** F, ou S.O. : une équipe vers le casseur le plus près du cortège. */
+function envoyerVersMenace() {
+    const c = cortege;
+    const cibles = c.casseurs.filter(cs => (cs.etat === 'approche' || cs.etat === 'infiltre') && !cs.equipe);
+    if (!cibles.length) { annoncer('Aucun casseur en vue<small>le service d\'ordre reste sur les flancs</small>', 2); return; }
+    const cs = cibles.reduce((u, v) => (distanceAuCortege(v.p.x, v.p.y) < distanceAuCortege(u.p.x, u.p.y) ? v : u));
+    envoyerServiceOrdre(cs);
+}
+
+function envoyerServiceOrdre(cs) {
+    const c = cortege;
+    if (cs.equipe || (cs.etat !== 'approche' && cs.etat !== 'infiltre')) return;
+    const e = c.equipes.find(q => q.etat === 'libre');
+    if (!e) { annoncer('Service d\'ordre occupé<small>les trois équipes sont déjà parties</small>', 2); return; }
+    e.etat = 'envoyee';
+    e.cible = cs;
+    cs.equipe = e;
+    e.x = e.membres[0]?.x ?? c.tete.x;
+    e.y = e.membres[0]?.y ?? c.tete.y;
+    e.c = null;
+    e.prochainPlan = 0;
+    son('indice');
+}
+
+/**
+ * Les équipes du service d'ordre : libres, sur les flancs du cortège ;
+ * envoyées, elles courent au casseur par les rues, puis droit sur lui ; il
+ * est escorté hors du cortège, et l'équipe revient SO_RETOUR_S plus tard.
+ */
+function majServiceOrdre(dt, maintenant) {
+    const c = cortege, formee = c.phase !== 'choix' && c.trace.length;
+    c.equipes.forEach((e, k) => {
+        if (e.etat === 'libre') {
+            // Sur un flanc, au quart, à la moitié, aux trois quarts du cortège.
+            if (formee) {
+                pointDeTrace(c.tete.d - c.bQueue * (0.25 + 0.25 * k), c.trace.length - 1);
+                const { x, y, dx, dy, l } = pointCorps;
+                const cote = k % 2 ? -1 : 1, lat = cote * (l / 2 - 0.2);
+                e.membres.forEach((p, j) => {
+                    const tx = x + dy * lat - dx * j * 1.2, ty = y - dx * lat - dy * j * 1.2;
+                    marcherVers(p, tx, ty, CORTEGE_CADENCES[3] + 1.5, dt, Math.atan2(dx, dy));
+                });
+            } else e.membres.forEach(p => marcherVers(p, p.place[0], p.place[1], 2, dt, p.cap));
+            e.membres.forEach(p => { p.cache = false; });
+        } else if (e.etat === 'envoyee') {
+            const cible = e.cible.p;
+            if (e.cible.etat === 'fuite' || e.cible.fini) { e.etat = 'libre'; e.cible = null; return; }
+            const d = Math.hypot(cible.x - e.x, cible.y - e.y);
+            if (d > SO_DIRECT_M) {
+                // Par les rues : son point de route, et le plus court chemin, revu chaque seconde.
+                if (!e.c) {
+                    const q = projeterSurRoute(c.graphe, e.x, e.y, 40);
+                    e.c = q ? { arete: q.arete, s: q.s, sens: 1, but: null, chemin: [], fuite: false } : null;
+                }
+                if (e.c && maintenant > e.prochainPlan) {
+                    e.prochainPlan = maintenant + 1000;
+                    const q = e.cible.etat === 'approche' ? { arete: e.cible.arete, s: e.cible.s }
+                            : projeterSurRoute(c.graphe, cible.x, cible.y, 40);
+                    if (q) {
+                        if (q.arete === e.c.arete) { e.c.chemin = []; e.c.sens = q.s >= e.c.s ? 1 : -1; }
+                        else {
+                            const dist = distancesRoute(e.c);
+                            const { d: dd, fin } = routeVers(dist, q);
+                            if (Number.isFinite(dd)) {
+                                const { aretes, premier } = cheminVers(dist, fin);
+                                e.c.chemin = [...aretes, q.arete];
+                                e.c.sens = premier === e.c.arete.b ? 1 : -1;
+                            }
+                        }
+                    }
+                }
+                if (e.c) {
+                    avancerCoureur(e.c, SO_VITESSE * dt);
+                    [e.x, e.y] = pointArete(e.c.arete, e.c.s);
+                } else {
+                    e.x += (cible.x - e.x) / d * SO_VITESSE * dt;
+                    e.y += (cible.y - e.y) / d * SO_VITESSE * dt;
+                }
+            } else if (d > 0.01) {
+                const pas = Math.min(d, SO_VITESSE * dt);
+                e.x += (cible.x - e.x) / d * pas;
+                e.y += (cible.y - e.y) / d * pas;
+                e.c = null;
+            }
+            const cap = Math.atan2(cible.x - e.x, cible.y - e.y);
+            e.membres.forEach((p, j) => {
+                const u = j ? 0.5 : -0.5;
+                marcherVers(p, e.x + Math.cos(cap) * u, e.y - Math.sin(cap) * u, SO_VITESSE + 3, dt, cap);
+            });
+            if (Math.hypot(cible.x - e.x, cible.y - e.y) < SO_PRISE_M) escorter(e);
+        } else if (e.etat === 'escorte') {
+            e.depuis += dt;
+            const cs = e.cible;
+            e.membres.forEach((p, j) => {
+                const u = j ? 0.6 : -0.6, cap = Math.atan2(cs.vx, cs.vy);
+                marcherVers(p, cs.p.x + Math.cos(cap) * u, cs.p.y - Math.sin(cap) * u, 3, dt, cap);
+            });
+            if (e.depuis > SO_ESCORTE_S) { e.etat = 'retour'; e.depuis = 0; e.membres.forEach(p => { p.cache = true; }); }
+        } else if (e.etat === 'retour') {
+            e.depuis += dt;
+            if (e.depuis > SO_RETOUR_S) {
+                e.etat = 'libre';
+                e.cible = null;
+                // De retour sur son flanc, d'où il réapparaît.
+                if (formee) {
+                    pointDeTrace(c.tete.d - c.bQueue * (0.25 + 0.25 * k), c.trace.length - 1);
+                    e.membres.forEach(p => { p.x = pointCorps.x; p.y = pointCorps.y; p.apparition = 0; });
+                }
+            }
+        }
+    });
+}
+
+/** Une figure qui va vers (tx, ty) à `vmax` m/s au plus ; tournée vers `cap` une fois arrivée. */
+function marcherVers(p, tx, ty, vmax, dt, cap) {
+    const ex = tx - p.x, ey = ty - p.y, e = Math.hypot(ex, ey);
+    const pas = Math.min(e, vmax * dt);
+    if (e > 1e-3) { p.x += ex / e * pas; p.y += ey / e * pas; }
+    p.vitesse = pas / Math.max(dt, 1e-3);
+    p.cap = e > 1.5 ? Math.atan2(ex, ey) : cap;
+}
+
+/** Le casseur pris : l'équipe l'escorte hors du cortège, loin de la trace. */
+function escorter(e) {
+    const c = cortege, cs = e.cible;
+    const k = c.ordre.indexOf(cs.p);
+    if (k >= 0) c.ordre.splice(k, 1);
+    // Loin du cortège : à l'opposé du rang le plus proche, sinon de la tête.
+    let dx = cs.p.x - c.tete.x, dy = cs.p.y - c.tete.y;
+    const proche = c.ordre.reduce((u, q) => (!u || Math.hypot(q.x - cs.p.x, q.y - cs.p.y) < Math.hypot(u.x - cs.p.x, u.y - cs.p.y) ? q : u), null);
+    if (proche && Math.hypot(cs.p.x - proche.x, cs.p.y - proche.y) > 0.5) { dx = cs.p.x - proche.x; dy = cs.p.y - proche.y; }
+    const l = Math.hypot(dx, dy) || 1;
+    cs.vx = dx / l * 1.5;
+    cs.vy = dy / l * 1.5;
+    cs.etat = 'escorte';
+    cs.depuis = 0;
+    e.etat = 'escorte';
+    e.depuis = 0;
+    c.ecartes++;
+    annoncer(`Casseur écarté<small>le service d'ordre l'escorte hors du cortège · ${c.ecartes} écarté${c.ecartes > 1 ? 's' : ''}</small>`, 2.5);
+    son('touche');
+}
+
+// --- Le soleil : chaleur et ombre ---
+
+/** Les houppiers rangés par maille de MAILLE_ARBRES m, une fois : ce qui fait de l'ombre hors des bâtiments. */
+function grilleArbres() {
+    if (cortege.arbres && cortege.arbres.n === vegElements.length) return cortege.arbres;
+    const g = new Map();
+    for (const e of vegElements) {
+        if (e.classe !== 'vegetation' || !(e.h > 2)) continue;
+        const cle = `${Math.floor(e.x / MAILLE_ARBRES)},${Math.floor(e.y / MAILLE_ARBRES)}`;
+        if (!g.has(cle)) g.set(cle, []);
+        g.get(cle).push(e);
+    }
+    const hMax = vegElements.reduce((m, e) => Math.max(m, e.h || 0), 10);
+    return cortege.arbres = { n: vegElements.length, g, hMax };
+}
+
+const rayonOmbre = new THREE.Raycaster(), origineOmbre = new THREE.Vector3(), versSoleil = new THREE.Vector3(), versArbre = new THREE.Vector3();
+/**
+ * Au soleil, en (x, y) local ? Un rayon part de 1,6 m vers le soleil : il
+ * rencontre un bâtiment, ou le houppier d'un arbre, pris comme une sphère de
+ * rayon moyen sous sa cime. Faux la nuit.
+ */
+function auSoleil(x, y) {
+    if (!soleil.castShadow) return false;
+    versSoleil.copy(soleil.position).normalize();
+    if (versSoleil.y < 0.02) return false;
+    const y0 = ySol(...toLonLat(x, y));
+    origineOmbre.set(x, y0 + 1.6, -y);
+    rayonOmbre.set(origineOmbre, versSoleil);
+    rayonOmbre.far = OMBRE_PORTEE_M;
+    if (rayonOmbre.intersectObjects(groupeBatiments.children, true).length) return false;
+    const arbres = grilleArbres();
+    const horizontal = Math.hypot(versSoleil.x, versSoleil.z) || 1e-6;
+    const portee = Math.min(OMBRE_PORTEE_M, arbres.hMax / Math.max(versSoleil.y / horizontal, 0.05));
+    const vus = new Set();
+    for (let d = 0; d <= portee + MAILLE_ARBRES; d += MAILLE_ARBRES / 2) {
+        const px = x + versSoleil.x / horizontal * d, py = y - versSoleil.z / horizontal * d;
+        const cle = `${Math.floor(px / MAILLE_ARBRES)},${Math.floor(py / MAILLE_ARBRES)}`;
+        if (vus.has(cle)) continue;
+        vus.add(cle);
+        for (const e of arbres.g.get(cle) || []) {
+            const r = ((e.r || 1) + (e.r_max || e.r || 1)) / 2;
+            versArbre.set(e.x, ySol(...toLonLat(e.x, e.y)) + Math.max(e.h - r, e.h / 2), -e.y).sub(origineOmbre);
+            const t = versArbre.dot(versSoleil);
+            if (t > 0 && versArbre.lengthSq() - t * t < r * r) return false;
+        }
+    }
+    return true;
+}
+
+/**
+ * Quelques figures par image, à tour de rôle, au soleil ou à l'ombre ; la
+ * part du cortège au soleil en découle. La fatigue monte au soleil, d'autant
+ * plus que le soleil est haut et la cadence vive, et redescend à l'ombre et
+ * à l'arrêt ; au-delà de FATIGUE_SEUIL, des participants s'en vont.
+ */
+function majFatigue(dt, avance) {
+    const c = cortege, o = c.ordre;
+    for (let k = 0; k < OMBRE_TESTS_PAR_IMAGE && o.length; k++) {
+        c.rangOmbre = (c.rangOmbre + 1) % o.length;
+        const p = o[c.rangOmbre];
+        p.soleil = auSoleil(p.x, p.y);
+    }
+    let vus = 0, auSoleilN = 0;
+    for (const p of o) if (p.soleil !== undefined) { vus++; if (p.soleil) auSoleilN++; }
+    c.partSoleil = vus ? auSoleilN / vus : 0;
+    c.chaleur = soleil.castShadow ? Math.max(0, versSoleil.copy(soleil.position).normalize().y) : 0;
+    c.distanceOmbre += avance * (1 - c.partSoleil);
+    if (c.phase !== 'marche') return;
+    const arret = vitesseTete() === 0;
+    const cadence = arret ? 0 : (c.fatigue > FATIGUE_LENTE ? Math.min(c.cadence, 1) : c.cadence);
+    c.fatigue += dt * (FATIGUE_SOLEIL * c.chaleur * c.partSoleil * CORTEGE_EFFORT[cadence]
+                       - FATIGUE_OMBRE * (1 - c.partSoleil) - (arret ? FATIGUE_HALTE : 0));
+    c.fatigue = Math.min(Math.max(c.fatigue, 0), 100);
+    if (c.fatigue > FATIGUE_SEUIL) c.participants -= c.participants * FATIGUE_PERTE * (c.fatigue - FATIGUE_SEUIL) / 50 * dt;
+}
+
+/**
+ * Les rangs suivent les participants : une figure pour CORTEGE_PAR_FIGURE.
+ * Quand il en part, ce sont d'abord ceux qui sont au soleil, en queue.
+ */
+function ajusterRangs() {
+    const c = cortege;
+    const voulues = Math.min(CORTEGE_FIGURES_MAX, Math.ceil(Math.max(c.participants, 0) / CORTEGE_PAR_FIGURE));
+    let n = c.ordre.filter(p => p.role === 'marche').length;
+    while (n > voulues) {
+        let p = null;
+        for (let k = c.ordre.length - 1; k >= 0; k--) {
+            const q = c.ordre[k];
+            if (q.role !== 'marche') continue;
+            if (!p) p = q;
+            if (q.soleil) { p = q; break; }
+        }
+        if (!p) break;
+        pointDeTrace(c.tete.d - c.bQueue, c.trace.length - 1);
+        fairePartir(p, p.lat * pointCorps.dy || 1, -p.lat * pointCorps.dx || 0);
+        n--;
+    }
+}
+
+// --- L'indice, le bandeau, la fin ---
+
+const cardinal = az => DIRECTIONS_CARDINALES[Math.round(((az % 360) + 360) % 360 / 45) % 8];
+const coteSimple = r => (Math.abs(r) < 45 ? 'devant' : Math.abs(r) > 135 ? 'derrière' : r > 0 ? 'à droite' : 'à gauche');
+
+/** Ce que dit l'indice : un casseur qui menace, sinon le groupe le plus proche, sinon l'arrivée. */
+function majIndiceCortege(maintenant) {
+    const c = cortege, t = c.tete;
+    const menace = c.casseurs.filter(cs => cs.etat === 'approche' && !cs.equipe)
+        .map(cs => ({ cs, d: distanceAuCortege(cs.p.x, cs.p.y) })).filter(m => m.d < CASSEUR_MENACE_M)
+        .sort((u, v) => u.d - v.d)[0];
+    const groupe = c.groupes.filter(g => g.etat === 'attend')
+        .map(g => ({ g, d: Math.hypot(g.x - t.x, g.y - t.y) })).sort((u, v) => u.d - v.d)[0];
+    let x, y, titre, detail;
+    const relatifVers = (px, py) => ecartAngle(Math.atan2(px - t.x, py - t.y), c.capVue) * 180 / Math.PI;
+    if (menace) {
+        [x, y] = [menace.cs.p.x, menace.cs.p.y];
+        titre = 'Des casseurs approchent';
+        detail = `${coteSimple(relatifVers(x, y))}, à ${Math.round(menace.d / 10) * 10} m · `
+               + `${AU_DOIGT ? 'S.O.' : 'F'} pour le service d'ordre`;
+    } else if (groupe && groupe.d < 400) {
+        [x, y] = [groupe.g.x, groupe.g.y];
+        titre = `${groupe.g.nom} attendent`;
+        detail = `${coteSimple(relatifVers(x, y))}, à ${Math.round(groupe.d / 10) * 10} m`
+               + (Number.isFinite(groupe.g.fin) ? ` · encore ${Math.max(0, Math.round((groupe.g.fin - maintenant) / 1000))} s` : '');
+    } else {
+        [x, y] = [c.arrivee.x, c.arrivee.y];
+        titre = coteIndice(relatifVers(x, y));
+        detail = `arrivée à ${Math.round(Math.hypot(x - t.x, y - t.y) / 10) * 10} m `
+               + `${cardinal(Math.atan2(x - t.x, y - t.y) * 180 / Math.PI)}`;
+    }
+    const fleche = indiceJeu.querySelector('svg');
+    fleche.style.display = '';
+    fleche.style.transform = `rotate(${relatifVers(x, y).toFixed(0)}deg)`;
+    const [span, small] = [indiceJeu.querySelector('span'), indiceJeu.querySelector('small')];
+    if (span.textContent !== titre) span.textContent = titre;
+    if (small.textContent !== detail) small.textContent = detail;
+}
+
+function majHudCortege(maintenant) {
+    const c = cortege, t = c.tete;
+    const chrono = c.phase === 'marche' || c.phase === 'fin' ? Math.floor(((c.fin ?? maintenant) - c.debut) / 1000) : 0;
+    const morceaux = [`${Math.round(Math.max(c.participants, 0)).toLocaleString('fr-FR')} participants`];
+    if (c.phase === 'choix') morceaux.push(`cliquez l'arrivée · ${Math.max(0, Math.ceil((c.finChoix - maintenant) / 1000))} s`);
+    if (c.arrivee) {
+        const dx = c.arrivee.x - t.x, dy = c.arrivee.y - t.y;
+        const relatif = ecartAngle(Math.atan2(dx, dy), c.capVue) * 180 / Math.PI;
+        morceaux.push(`cadence ${CORTEGE_NOMS_CADENCES[c.cadence]}${t.bloque ? ' (arrêté)' : ''}`);
+        const p = c.prochain;
+        if (p && c.phase === 'marche') {
+            morceaux.push(p.choisie
+                ? `carrefour à ${Math.round(p.distance)} m : ${coteVirage(p.choisie.tourne)}${p.choisie.arete.nom ? `, ${p.choisie.arete.nom}` : ''}`
+                : `impasse à ${Math.round(p.distance)} m`);
+        }
+        morceaux.push(`<span class="fleche" style="transform:rotate(${relatif.toFixed(0)}deg)">↑</span>arrivée à ${Math.round(Math.hypot(dx, dy))} m`);
+    }
+    morceaux.push(c.chaleur > 0 ? `☀ ${Math.round(c.partSoleil * 100)} % au soleil, fatigue ${Math.round(c.fatigue)} %`
+                                : 'soleil couché, pas de chaleur');
+    const libres = c.equipes.filter(e => e.etat === 'libre').length;
+    morceaux.push(`S.O. ${libres}/${SO_EQUIPES} · ${c.ecartes} écarté${c.ecartes > 1 ? 's' : ''}`);
+    if (chrono) morceaux.push(`${Math.floor(chrono / 60)}:${String(chrono % 60).padStart(2, '0')}`);
+    hudJeu.innerHTML = morceaux.join(' · ');
+}
+
+/** La fin : arrivé, ou dispersé ; le bilan, le record, une autre manifestation après CORTEGE_ENTRE_PARTIES_S. */
+function finCortege(reussi, maintenant) {
+    const c = cortege;
+    c.phase = 'fin';
+    c.fin = maintenant;
+    indiceJeu.hidden = true;
+    for (const m of flechesCarrefour) m.visible = false;
+    const duree = (maintenant - c.debut) / 1000, arrives = Math.round(Math.max(c.participants, 0));
+    if (!reussi) {
+        annoncer(`Le cortège s'est dispersé<small>${arrives} participants restaient sur ${CORTEGE_PARTICIPANTS + c.rallies}`
+                 + ` · nouvelle manifestation dans ${CORTEGE_ENTRE_PARTIES_S} s</small>`, CORTEGE_ENTRE_PARTIES_S);
+        c.relance = maintenant + CORTEGE_ENTRE_PARTIES_S * 1000;
+        return;
+    }
+    const reference = c.plusCourt / CORTEGE_CADENCES[2] * SCORE_MARGE;
+    const score = Math.max(0, Math.round(arrives + SCORE_ECARTE * c.ecartes - SCORE_RETARD * Math.max(0, duree - reference)));
+    const efficacite = Math.round(100 * Math.min(1, c.plusCourt / Math.max(c.parcouru, 1)));
+    const ombre = Math.round(100 * c.distanceOmbre / Math.max(c.parcouru, 1));
+    let record = null, nouveau = false;
+    try {
+        record = Number(localStorage.getItem(CLE_RECORD_CORTEGE)) || null;
+        nouveau = !record || score > record;
+        if (nouveau) localStorage.setItem(CLE_RECORD_CORTEGE, String(score));
+    } catch (e) { /* navigation privée : pas de record */ }
+    annoncer(`Arrivé ! ${score.toLocaleString('fr-FR')} points${nouveau ? ' · record' : record ? ` · record : ${record.toLocaleString('fr-FR')}` : ''}`
+             + `<small>${arrives.toLocaleString('fr-FR')} participants arrivés (${CORTEGE_PARTICIPANTS.toLocaleString('fr-FR')} au départ`
+             + `${c.rallies ? `, ${c.rallies.toLocaleString('fr-FR')} ralliés` : ''}) · ${enClair(duree)}<br>`
+             + `trajet ${Math.round(c.parcouru)} m, efficacité ${efficacite} % · ${ombre} % à l'ombre · `
+             + `${c.ecartes} casseur${c.ecartes > 1 ? 's' : ''} écarté${c.ecartes > 1 ? 's' : ''}, ${c.incidents} incident${c.incidents > 1 ? 's' : ''}<br>`
+             + `nouvelle manifestation dans ${CORTEGE_ENTRE_PARTIES_S} s</small>`, CORTEGE_ENTRE_PARTIES_S);
+    son('touche');
+    c.relance = maintenant + CORTEGE_ENTRE_PARTIES_S * 1000;
+}
+
+// --- Le jeu ---
+
+function activerCortege() {
+    // La scène se construit encore : ni routes, ni emprise.
+    if (!ARTEFACT || !reliefRegle) return;
+    if (!droneActif) entrerDrone();
+    cortege.graphe = cortege.graphe || grapheJeu(CORTEGE_EXCLUES);
+    if (!cortege.graphe.aretes.length) {
+        annoncer('Pas de cortège ici<small>aucune rue BD TOPO dans cette scène</small>', 4);
+        return;
+    }
+    cortege.actif = true;
+    cortege.appuis = [];
+    btnCortege.classList.add('on');
+    groupeCortege.visible = true;
+    groupeDrone.visible = false;
+    hudDrone.hidden = true;
+    hudJeu.hidden = false;
+    padTir.hidden = !TACTILE;
+    padTir.textContent = 'S.O.';
+    padTir.setAttribute('aria-label', 'Envoyer le service d\'ordre');
+    aideVue.textContent = AIDE_CORTEGE;
+    detacherTip();
+    tip.style.display = 'none';
+    cortege.capVue = drone.cap;
+    focusCortege.copy(controls.target);
+    nouvelleManif();
+}
+
+function arreterCortege() {
+    if (!cortege.actif) return;
+    cortege.actif = false;
+    viderCortege();
+    cortege.gens = [];
+    btnCortege.classList.remove('on');
+    groupeCortege.visible = false;
+    groupeDrone.visible = droneActif;
+    hudJeu.hidden = messageJeu.hidden = indiceJeu.hidden = padTir.hidden = true;
+    padTir.textContent = 'TIR';
+    padTir.setAttribute('aria-label', 'Tirer');
+    if (droneActif) {
+        // Le drone reprend la main au-dessus du cortège, tourné comme la vue.
+        hudDrone.hidden = false;
+        aideVue.textContent = AIDE_DRONE;
+        drone.position.copy(focusCortege).y += 25;
+        drone.cap = cortege.capVue;
+        drone.vitesse.set(0, 0, 0);
+    }
+}
+
+btnCortege.addEventListener('click', () => {
+    if (cortege.actif) arreterCortege(); else { arreterLesJeux(); activerCortege(); }
+    btnCortege.blur();
+});
+
+/** Un clic : l'arrivée pendant le choix ; en marche, le casseur le plus proche du clic à l'écran, à 48 px au plus. */
+const ecranCasseur = new THREE.Vector3();
+function cliquerCortege(rayon, e, r) {
+    const c = cortege;
+    if (c.phase === 'choix') { cliquerArrivee(rayon); return; }
+    if (c.phase !== 'marche') return;
+    let meilleur = null, dMin = 48;
+    for (const cs of c.casseurs) {
+        if (cs.etat !== 'approche' && cs.etat !== 'infiltre') continue;
+        ecranCasseur.set(cs.p.x, ySol(...toLonLat(cs.p.x, cs.p.y)) + 1.5, -cs.p.y).project(camera);
+        if (ecranCasseur.z > 1) continue;
+        const sx = (ecranCasseur.x + 1) / 2 * r.width, sy = (1 - ecranCasseur.y) / 2 * r.height;
+        const d = Math.hypot(sx - (e.clientX - r.left), sy - (e.clientY - r.top));
+        if (d < dMin) { dMin = d; meilleur = cs; }
+    }
+    if (meilleur) envoyerServiceOrdre(meilleur);
+}
+
+function majCortege(dt, maintenant) {
+    const c = cortege, t = maintenant / 1000;
+    if (c.relance && maintenant > c.relance) nouvelleManif();
+    traiterAppuis();
+    if (c.phase === 'choix' && maintenant > c.finChoix) arriveeAuto();
+    if (c.phase === 'forme' && maintenant > c.debutMarche) {
+        c.phase = 'marche';
+        c.debut = maintenant;
+        c.prochaineVague = maintenant + CASSEURS_PREMIERE_S * 1000;
+        c.prochaineDeviation = maintenant + (CORDON_DEVIATION_S[0] + Math.random() * (CORDON_DEVIATION_S[1] - CORDON_DEVIATION_S[0])) * 1000;
+        c.prochainIndice = maintenant + JEU_INDICE_PREMIER_S * 1000;
+        annoncer(`En marche !<small>${AU_DOIGT ? '↶ ↷' : '← →'} la branche au prochain carrefour · ↑ ↓ la cadence</small>`, 3);
+    }
+    let v = 0;
+    if (c.phase === 'marche') {
+        v = vitesseTete();
+        const avant = c.parcouru;
+        avancerTete(v * dt);
+        majTrace();
+        majFatigue(dt, c.parcouru - avant);
+        majGroupes(maintenant);
+        majObstacles(dt, maintenant);
+        if (maintenant > c.prochaineVague) {
+            c.prochaineVague = maintenant + CASSEURS_INTERVALLE_S * 1000;
+            vagueCasseurs();
+        }
+        ajusterRangs();
+        if (Math.hypot(c.arrivee.x - c.tete.x, c.arrivee.y - c.tete.y) < CORTEGE_ARRIVE_M) finCortege(true, maintenant);
+        else if (c.participants < CORTEGE_DISPERSE * CORTEGE_PARTICIPANTS) finCortege(false, maintenant);
+    } else majFatigue(dt, 0);
+    majCorps(dt, t, v);
+    majCasseurs(dt, maintenant);
+    majServiceOrdre(dt, maintenant);
+    majGaz(dt);
+    majFeuxCortege(dt, t, maintenant);
+    poserGens(dt, t);
+    majBanderole();
+    if (c.phase === 'marche') majProchain(); else for (const m of flechesCarrefour) m.visible = false;
+    marqueArrivee.userData.colonne.visible = Math.hypot(camera.position.x - marqueArrivee.position.x,
+                                                        camera.position.z - marqueArrivee.position.z) > 40;
+
+    if (c.phase === 'marche' && messageJeu.hidden && maintenant > c.prochainIndice) {
+        c.prochainIndice = maintenant + JEU_INDICE_S * 1000;
+        c.finIndice = maintenant + JEU_INDICE_DUREE_S * 1000;
+        majIndiceCortege(maintenant);
+        indiceJeu.hidden = false;
+        son('indice');
+    }
+    if (!indiceJeu.hidden && (maintenant > c.finIndice || c.phase !== 'marche')) indiceJeu.hidden = true;
+    if (!messageJeu.hidden && maintenant > jeu.finMessage) messageJeu.hidden = true;
+    if (maintenant - c.hud > 150) {
+        c.hud = maintenant;
+        if (!indiceJeu.hidden) majIndiceCortege(maintenant);
+        majHudCortege(maintenant);
+    }
+}
+
+/**
+ * La caméra : le drone qui filme le cortège. Au choix de l'arrivée, haut
+ * au-dessus de la place, pour voir la zone ; en marche, derrière la tête,
+ * plongeant à 52°, tournée comme la marche lissée sur deux secondes — un
+ * carrefour ne fait pas pivoter la vue d'un coup. La molette règle la
+ * distance, comme le recul du drone ; jamais sous un toit.
+ */
+const focusCortege = new THREE.Vector3(), focusVoulu = new THREE.Vector3(), cameraVoulueCortege = new THREE.Vector3();
+function cameraCortege(dt) {
+    const c = cortege;
+    let fx, fy, distance, plongee;
+    if (c.phase === 'choix' || !c.tete) {
+        fx = c.depart ? c.depart.x : 0;
+        fy = c.depart ? c.depart.y : 0;
+        distance = Math.min(1300, 0.8 * ZONE);
+        plongee = 62 * Math.PI / 180;
+    } else {
+        c.capVue += ecartAngle(c.cap, c.capVue) * (1 - Math.exp(-dt / 2));
+        fx = c.tete.x + Math.sin(c.capVue) * 3;
+        fy = c.tete.y + Math.cos(c.capVue) * 3;
+        distance = 22 + 4 * drone.recul;
+        plongee = 52 * Math.PI / 180;
+    }
+    focusVoulu.set(fx, ySol(...toLonLat(fx, fy)) + 1, -fy);
+    focusCortege.lerp(focusVoulu, 1 - Math.exp(-dt / 0.4));
+    const horizontal = distance * Math.cos(plongee);
+    cameraVoulueCortege.set(focusCortege.x - Math.sin(c.capVue) * horizontal, focusCortege.y + distance * Math.sin(plongee),
+                            focusCortege.z + Math.cos(c.capVue) * horizontal);
+    const sol = solSous(cameraVoulueCortege.x, cameraVoulueCortege.z, true);
+    if (sol !== null) cameraVoulueCortege.y = Math.max(cameraVoulueCortege.y, sol + 3);
+    camera.position.lerp(cameraVoulueCortege, 1 - Math.exp(-dt / 0.5));
+    camera.lookAt(focusCortege);
+    controls.target.copy(focusCortege);
+}
+
 // --- Prise en main ---------------------------------------------------------------
 // Ouverte d'elle-même à la première visite, pendant que la scène se construit
 // (de 1 à 30 s pour un lieu neuf) ; ensuite par « ? ». Les gestes suivent
@@ -11645,6 +13520,8 @@ renderer.domElement.addEventListener('pointerup', e => {
     if (jeu.actif) { tirerSelonRayon(raycaster.ray); return; }
     // Aux incendies, un clic largue l'eau : elle tombe du drone, pas là où l'on clique.
     if (feux.actif) { larguer(performance.now()); return; }
+    // Au cortège, il pose l'arrivée, puis envoie le service d'ordre.
+    if (cortege.actif) { cliquerCortege(raycaster.ray, e, r); return; }
     const hit = raycaster.intersectObjects(ciblesSurvol, false)[0];
     if (!hit) return;
     // Un arbre, un véhicule, un bateau, une piscine : pas de fiche, mais son
@@ -12129,7 +14006,9 @@ function boucle(maintenant) {
         camera.position.x = controls.target.x + dx * cos - dz * sin;
         camera.position.z = controls.target.z + dx * sin + dz * cos;
     }
-    if (droneActif) majDrone(dt, maintenant);
+    // Au cortège, le drone ne se pilote plus : il le suit, et c'est lui qui filme.
+    if (droneActif && cortege.actif) { majCortege(dt, maintenant); cameraCortege(dt); }
+    else if (droneActif) majDrone(dt, maintenant);
     else controls.update();
     if (jeu.actif) majJeu(dt, maintenant);
     if (feux.actif) majIncendies(dt, maintenant);
