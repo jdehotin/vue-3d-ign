@@ -113,12 +113,18 @@ l'étage `export` du Dockerfile.
   avec la couronne, hauteur décroissante du sommet au bord, dessous qui remonte
   vers le tronc, lobage partagé par tous les anneaux. Un défaut ici passe
   inaperçu à forte opacité et saute aux yeux à 30 %.
-- **La fenêtre d'enregistrement de l'export s'ouvre avant le calcul.**
-  `showSaveFilePicker` veut une activation utilisateur : appelée après les une
-  à deux secondes de `modeleExport`, Chromium la refuse. Elle n'existe que sur
-  Chromium et en contexte sûr (https, localhost) ; ailleurs le bouton
-  « Enregistrer sous… » est masqué, « Télécharger » va au dossier du navigateur.
-  Le repli doit rester : c'est le seul chemin des navigateurs sans l'API.
+- **La fenêtre d'enregistrement de l'export s'ouvre avant le calcul**, et son
+  flux d'écriture s'ouvre dans la foulée. `showSaveFilePicker` veut une
+  activation utilisateur : appelée après les une à deux secondes de
+  `modeleExport`, Chromium la refuse. Elle n'existe que sur Chromium et en
+  contexte sûr (https, localhost) ; ailleurs le bouton « Enregistrer sous… » est
+  masqué, « Télécharger » va au dossier du navigateur.
+  Le repli doit rester, et couvrir aussi le refus de l'écriture : dans un
+  navigateur embarqué (l'aperçu d'un éditeur, une WebView), la fenêtre s'ouvre
+  puis `createWritable` lève « The request is not allowed by the user agent or
+  the platform in the current context » — le fichier part alors au
+  téléchargement, la note et l'infobulle du bouton le disent. La fenêtre ne doit
+  jamais coûter l'export.
 - **Un interrupteur d'export suit la scène.** Une couche que la scène ne porte
   pas s'éteint dans la fenêtre, et l'option effective est le cochage **et** la
   présence (`COUCHES_PRESENTES` dans `modeleExport` de la page) : sans quoi la

@@ -208,7 +208,9 @@ messages de commit et dans les commentaires des modules.
   l'emplacement du fichier par la fenêtre du système (`showSaveFilePicker`,
   ouverte **avant** le calcul : sans activation utilisateur, Chromium la
   refuse) ; « Télécharger » va au dossier du navigateur, seul chemin de
-  Firefox et Safari. Une couche que la scène ne porte pas s'éteint d'elle-même
+  Firefox et Safari. Un navigateur embarqué — l'aperçu d'un éditeur, une
+  WebView — ouvre cette fenêtre puis refuse `createWritable` : le fichier
+  part alors au téléchargement, la note et l'infobulle du bouton le disent. Une couche que la scène ne porte pas s'éteint d'elle-même
   dans la fenêtre, et la note finale ne compte que ce qui a été écrit.
   - **Les emprises** : un aplat drapé pour un cimetière, un aérodrome, une
     piste ou un poste de transformation, un volume fermé pour une haie, dont

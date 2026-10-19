@@ -10152,7 +10152,9 @@ const nomFichierExport = () => `vue3d-${LAT0}-${LON0}-z${ZONE}`;
  * 'telecharger' (le dossier de téléchargement du navigateur) ou 'enregistrer'
  * (la fenêtre du système). Celle-ci s'ouvre AVANT le calcul, qui tient la main
  * une à deux secondes en zone de 1 000 m : l'activation du clic serait sinon
- * perdue, et le navigateur refuserait la fenêtre.
+ * perdue, et le navigateur refuserait la fenêtre — et son flux d'écriture
+ * s'ouvre dans la foulée. Quand la plateforme refuse l'écriture directe, le
+ * fichier part au téléchargement et la note le dit.
  */
 async function exporter(format, mode = 'telecharger') {
     const { nom, ecrire, extension, type, reperes } = FORMATS_EXPORT[format];
@@ -10172,18 +10174,40 @@ async function exporter(format, mode = 'telecharger') {
         return;
     }
     const nomFichier = `${nomFichierExport()}.${extension}`;
-    let poignee = null;
+    // Le flux d'écriture s'ouvre tout de suite, avant le calcul. Deux raisons :
+    // Chromium exige une activation utilisateur pour la fenêtre — appelée après
+    // les une à deux secondes de calcul, il la refuse —, et un navigateur
+    // embarqué (l'aperçu d'un éditeur, une WebView) laisse la fenêtre s'ouvrir
+    // puis refuse `createWritable` (« The request is not allowed by the user
+    // agent or the platform in the current context »). On le sait avant de
+    // calculer, et l'écriture directe retombe alors sur le téléchargement.
+    let poignee = null, flux = null;
     if (mode === 'enregistrer' && window.showSaveFilePicker) {
         try {
             poignee = await window.showSaveFilePicker({
                 suggestedName: nomFichier,
                 types: [{ description: `Fichier ${nom}`, accept: { [type]: [`.${extension}`] } }],
             });
+            flux = await poignee.createWritable();
         } catch (err) {
             if (err.name === 'AbortError') return;      // l'utilisateur a renoncé
-            console.warn('Fenêtre d\'enregistrement indisponible, téléchargement direct :', err);
+            console.warn('Écriture directe indisponible, téléchargement :', err);
+            poignee = flux = null;
+            // Le dire au bouton : la prochaine fois, « Enregistrer sous… » ne
+            // promettra plus une fenêtre que la plateforme refuse après coup.
+            const b = document.getElementById('btn-export-enregistrer');
+            if (b) b.title = "Votre navigateur refuse l'écriture directe : "
+                + 'le fichier ira au dossier de téléchargement.';
         }
     }
+    // Un flux ouvert ne doit pas survivre à un abandon, un calcul qui échoue ou
+    // un modèle vide : le fichier choisi resterait verrouillé.
+    const abandonner = async () => {
+        if (flux) {
+            try { await flux.abort(); } catch (e) { /* flux déjà terminé */ }
+            flux = null;
+        }
+    };
     const boutons = [...boutonsExport, ...boutonsFenetre];
     for (const b of boutons) b.disabled = true;
     noterExport(`Écriture du fichier ${nom}…`);
@@ -10192,18 +10216,27 @@ async function exporter(format, mode = 'telecharger') {
     try {
         const modele = modeleExport(choix);
         if (!modele.elements.length) {
+            await abandonner();
             noterExport('Rien à écrire : les couches cochées sont vides dans cette scène.');
             return;
         }
         const texte = ecrire(modele);
         const fichier = new Blob(Array.isArray(texte) ? texte : [texte], { type });
-        let ecrit = nomFichier;
-        if (poignee) {
-            const flux = await poignee.createWritable();
-            await flux.write(fichier);
-            await flux.close();
-            ecrit = poignee.name;
-        } else {
+        let ecrit = nomFichier, repli = !flux && mode === 'enregistrer';
+        if (flux) {
+            try {
+                await flux.write(fichier);
+                await flux.close();
+                ecrit = poignee.name;
+            } catch (err) {
+                // Un fichier choisi peut se refuser en cours de route (disque
+                // plein, fichier verrouillé) : il part au téléchargement.
+                console.warn('Écriture impossible dans le fichier choisi :', err);
+                await abandonner();
+                repli = true;
+            }
+        }
+        if (!flux) {
             const lien = document.createElement('a');
             lien.href = URL.createObjectURL(fichier);
             lien.download = nomFichier;
@@ -10212,9 +10245,11 @@ async function exporter(format, mode = 'telecharger') {
             lien.remove();
             setTimeout(() => URL.revokeObjectURL(lien.href), 60000);
         }
-        noterExport(`${ecrit} : ${(fichier.size / 1e6).toFixed(1).replace('.', ',')} Mo, `
+        noterExport((repli ? 'Écriture directe refusée, fichier téléchargé : ' : '')
+            + `${ecrit} : ${(fichier.size / 1e6).toFixed(1).replace('.', ',')} Mo, `
             + resumeExport(modele, choix) + '. ' + reperes(modele));
     } catch (err) {
+        await abandonner();
         noterExport('Export impossible : ' + err.message);
         console.error(err);
     } finally {

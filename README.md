@@ -394,7 +394,10 @@ les couches cochées. « Couches et dossier… » ouvre la fenêtre d'export :
 on y coche les couches, on y choisit le format, et — sur Chromium — on y
 choisit l'emplacement du fichier par la fenêtre du système
 (`showSaveFilePicker`) ; ailleurs, « Enregistrer sous… » n'est pas proposé
-et « Télécharger » va au dossier de téléchargement du navigateur. Le
+et « Télécharger » va au dossier de téléchargement du navigateur. Un
+navigateur embarqué (l'aperçu d'un éditeur, une WebView) ouvre la fenêtre
+puis refuse d'y écrire : le fichier part alors au dossier de
+téléchargement, et la note comme l'infobulle du bouton le disent. Le
 navigateur écrit le fichier lui-même, en une à quelques secondes.
 
 Se cochent : le relief de l'emprise, les bâtiments, les arbres, les masses
