@@ -89,6 +89,7 @@ const FORMATS = {
 //   node outils/demo-video.mjs bornes paysage    # docs/demo/demo-bornes-paysage.mp4
 //   GRAINE=3 node outils/demo-video.mjs jeu carre   # la traque, une autre partie
 //   node outils/demo-video.mjs feux carre        # les incendies, à Bordeaux
+//   node outils/demo-video.mjs cortege carre     # le cortège, de la République au canal Saint-Martin
 //
 // Les films `jeu` (la traque) et `feux` (les incendies) sont de vraies
 // parties : un pilote (piloter, piloterFeu) tient les touches
@@ -96,8 +97,11 @@ const FORMATS = {
 // réticule est sur lui ; les touches tenues s'allument sur un clavier
 // incrusté. Le hasard de la page (ses choix de route, son point de départ)
 // est tiré d'une graine (GRAINE), pour qu'un tournage refasse la même partie.
-const SERIE = ['lidar', 'recherche', 'dpe-dvf', 'drone', 'bornes', 'vehicules', 'soleil', 'export', 'jeu', 'feux'];
-const FILM_JEU = FORMAT === 'jeu' || FORMAT === 'feux';
+// Le film `cortege` aussi, mis en scène le long du chemin (un cordon, un
+// groupe, des casseurs) ; son pilote (piloterCortege) prend les carrefours,
+// et les longueurs de la marche sont coupées entre deux séquences.
+const SERIE = ['lidar', 'recherche', 'dpe-dvf', 'drone', 'bornes', 'vehicules', 'soleil', 'export', 'jeu', 'feux', 'cortege'];
+const FILM_JEU = FORMAT === 'jeu' || FORMAT === 'feux' || FORMAT === 'cortege';
 const GRAINE = Number(process.env.GRAINE || 1);
 const DANS_SERIE = SERIE.includes(FORMAT);
 const ASPECT = DANS_SERIE ? (process.argv[3] || 'carre') : null;
@@ -215,6 +219,13 @@ const BORDEAUX = { lat: 44.8430, lon: -0.5715, zone: 1000 };
 const BORDEAUX_BASE = { lat: 44.8424, lon: -0.5721 };
 const BORDEAUX_FOYERS = [{ lat: 44.8411, lon: -0.5697 }, { lat: 44.8447, lon: -0.5733 }];
 const BORDEAUX_EAU = { lat: 44.8408, lon: -0.5680 };
+// La place de la République, pour le cortège : le départ est le point de la
+// scène, sur la place ; l'arrivée, cliquée, au bord du canal Saint-Martin,
+// quai de Valmy, à 448 m par la place, la rue Léon-Jouhaux et la rue
+// Beaurepaire. Le square du Temple, essayé d'abord, n'avait qu'une rue
+// droite (377 m de rue du Temple) : pas de carrefour à montrer.
+const REPUBLIQUE = { lat: 48.8674, lon: 2.3636, zone: 1000 };
+const REPUBLIQUE_ARRIVEE = { lat: 48.8705, lon: 2.3640 };
 const SITE = 'vue-3d-ign.kysoe.com';
 const LINKEDIN = 'linkedin.com/in/ysimon';
 const urlDe = l => `${BASE}/?lat=${l.lat}&lon=${l.lon}${l.zone ? `&zone=${l.zone}` : ''}`;
@@ -1250,6 +1261,121 @@ const SEQUENCES_SERIE = [
             await s.voler(s.duree, ['Space']);
         },
     },
+
+    // --- Le cortège : de la place de la République au canal Saint-Martin -------------------
+    // Une vraie partie, mise en scène le long du chemin (mettreEnSceneCortege)
+    // et prise aux carrefours par le pilote (piloterCortege) ; entre deux
+    // séquences, la marche avance sans être filmée (couperCortege). Le soleil
+    // du 21 juin à 16 h : des rues à l'ombre, d'autres au soleil.
+    {
+        id: 'c-titre', lieu: REPUBLIQUE, duree: 6, formats: ['cortege'],
+        court: 'La place de la République, à Paris, en 3D depuis les données ouvertes de l’IGN',
+        carte: { titre: 'Le cortège', sous: 'Vue 3D IGN · un jeu : mener une marche pacifique, sans les casseurs' }, carteDifferee: true,
+        async jouer(s) {
+            await page.evaluate(() => { Object.assign(window.__demo.DATE_SIMULEE, { mois: 6, jour: 21 }); window.__demo.majSoleil(16); });
+            await s.chauffer({ ...REPUBLIQUE, hauteur: 20, distance: 820, azimut: 200, elevation: 32 }, 25);
+            await s.glisser(s.duree, { ...REPUBLIQUE, hauteur: 20, distance: 820, azimut: 200, elevation: 32 },
+                                     { ...REPUBLIQUE, hauteur: 20, distance: 620, azimut: 190, elevation: 30 }, t => apparaitre(s, t, 2));
+        },
+    },
+    {
+        id: 'c-arrivee', lieu: REPUBLIQUE, duree: 8, formats: ['cortege'],
+        court: 'En drone, le bouton « Cortège » : on clique son arrivée, ici le canal Saint-Martin',
+        async jouer(s) {
+            await s.bouton('t-drone', true);
+            await s.bouton('t-cortege', true);
+            // La caméra monte au-dessus de la place, la foule s'y rassemble.
+            await filmer(2.4);
+            await s.cliquerSur(REPUBLIQUE_ARRIVEE, 1.2);
+            await s.cacherCurseur();
+            const pose = await s.mettreEnSceneCortege();
+            console.log('    mise en scène :', pose);
+            // Le message de la page comptait les groupes qu'elle avait tirés, retirés depuis.
+            await page.evaluate(l => window.__demo.annoncer(`Le cortège se forme<small>arrivée à ${Math.round(l / 10) * 10} m `
+                + 'par les rues · un groupe attend qu’on passe le prendre</small>', 3.5), pose.longueur);
+            await s.clavier(true);
+        },
+    },
+    {
+        id: 'c-depart', lieu: REPUBLIQUE, duree: 7, formats: ['cortege'],
+        court: 'Il se forme dans la rue et s’élance : à l’ombre, il tient ; au soleil de 16 h, il se fatigue',
+        async jouer(s) { console.log('    départ :', await s.piloterCortege(s.duree, { cadence: 3 })); },
+    },
+    {
+        // La flèche au sol d'abord tout droit, vers le cordon, puis l'autre
+        // branche : la tête à 52 m du cordon (18 m au-delà du carrefour), le
+        // choix à 22 m du carrefour, la caméra reculée pour voir le cordon.
+        id: 'c-cordon', lieu: REPUBLIQUE, duree: 9, formats: ['cortege'],
+        court: 'Un cordon de police ferme le boulevard : ← → pour prendre une autre rue',
+        async jouer(s) {
+            await s.couperCortege({ cadence: 3, choixA: 22, jusqua: { cordon: 52 }, max: 60 });
+            await page.evaluate(() => { window.__demo.drone.recul = 13; });
+            console.log('    cordon :', await s.piloterCortege(s.duree, { cadence: 3, choixA: 22 }));
+            await page.evaluate(() => { window.__demo.drone.recul = 9; });
+        },
+    },
+    {
+        // Avant le groupe et l'arrivée : le chemin entier n'a que 430 m, et la
+        // coupe qui attend l'infiltration, placée après eux, menait le
+        // cortège à l'arrivée, puis à une autre manifestation.
+        id: 'c-casseurs', lieu: REPUBLIQUE, duree: 8, formats: ['cortege'],
+        court: 'Des casseurs approchent pour s’infiltrer : F, et le service d’ordre les escorte dehors',
+        async jouer(s) {
+            await s.couperCortege({ cadence: 1, max: 2 });
+            // Au plus près : lancés à 82 m, ils n'étaient qu'un point en haut de l'image.
+            let distances = await s.lancerCasseurs(2, 35, 0, 25);
+            if (distances.length < 2) distances = await s.lancerCasseurs(2 - distances.length, 35, 0, 40);
+            console.log('    casseurs à', distances, 'm de la tête');
+            await page.evaluate(() => { window.__demo.drone.recul = 12; });
+            await s.piloterCortege(2.5, { cadence: 1 });
+            console.log('    service d’ordre :', await s.piloterCortege(12, { cadence: 1, envoyer: true, jusqua: 'escortes', apres: 1.5 }));
+        },
+    },
+    {
+        id: 'c-gaz', lieu: REPUBLIQUE, duree: 7, formats: ['cortege'],
+        court: 'Un casseur laissé faire : un feu, le gaz, et le cortège perd du monde',
+        async jouer(s) {
+            await s.couperCortege({ cadence: 1, max: 2 });
+            // Devant la tête, comme les autres : lancé derrière elle, à plus de 25 m
+            // de la trace, il n'en trouvait pas, ou ne rejoignait pas le cortège à temps.
+            let distances = await s.lancerCasseurs(1, 35, 0, 25);
+            if (!distances.length) distances = await s.lancerCasseurs(1, 35, 0, 45);
+            const e = await s.couperCortege({ cadence: 1, jusqua: 'infiltre', max: 25 });
+            console.log('    casseur à', distances, 'm, puis', e.casseurs);
+            await page.evaluate(() => {
+                const d = window.__demo, cs = d.cortege.casseurs.find(x => x.etat === 'infiltre');
+                if (cs) d.incident(cs);
+            });
+            console.log('    gaz :', await s.piloterCortege(s.duree, { cadence: 2 }));
+            await page.evaluate(() => { window.__demo.drone.recul = 9; });
+        },
+    },
+    {
+        id: 'c-ralliement', lieu: REPUBLIQUE, duree: 6, formats: ['cortege'],
+        court: 'Des groupes attendent à quelques rues : on passe les prendre',
+        async jouer(s) {
+            await s.couperCortege({ cadence: 3, envoyer: true, jusqua: { groupe: 55 }, max: 90 });
+            console.log('    ralliement :', await s.piloterCortege(12, { cadence: 3, jusqua: 'rallie', apres: 2.5 }));
+        },
+    },
+    {
+        id: 'c-bilan', lieu: REPUBLIQUE, duree: 7, formats: ['cortege'],
+        court: 'À l’arrivée, le score : les participants gardés, les casseurs écartés, le temps',
+        async jouer(s) {
+            await s.couperCortege({ cadence: 3, envoyer: true, jusqua: { reste: 45 }, max: 120 });
+            console.log('    arrivée :', await s.piloterCortege(14, { cadence: 3, jusqua: 'fin', apres: 4.5 }));
+        },
+    },
+    {
+        ...finSerie('cortege', REPUBLIQUE, null, 'Rues BD TOPO, bâtiments, arbres et orthophotos © IGN'),
+        async jouer(s) {
+            await s.cartouche('');
+            await s.clavier(false);
+            // Le cortège arrêté : pas de nouvelle manifestation sous le carton.
+            await cliquer('t-cortege');
+            await s.voler(s.duree, ['Space']);
+        },
+    },
 ];
 /** Le cartouche d'un export, tiré de la note de la page : format, taille, contenu, repère. */
 function cartoucheExport(format, note, repere) {
@@ -1262,7 +1388,8 @@ function cartoucheExport(format, note, repere) {
 // filmé trouve alors sa couche en cache, sans attente à l'image.
 // La traque ne montre pas le nuage, mais la page le demande : en
 // construction, le serveur répond 503, une erreur pour le tournage.
-const PRELECTURES = { lidar: ['nuage'], 'dpe-dvf': ['dpe', 'dvf'], bornes: ['bornes'], jeu: ['nuage'], feux: ['nuage'] };
+const PRELECTURES = { lidar: ['nuage'], 'dpe-dvf': ['dpe', 'dvf'], bornes: ['bornes'], jeu: ['nuage'], feux: ['nuage'],
+                      cortege: ['nuage'] };
 
 // --- Voix -------------------------------------------------------------------
 // Avec une voix, les phrases sont dites avant le tournage : la durée de chaque
@@ -1408,6 +1535,12 @@ const STYLE_DEMO = `
     #demo-clavier kbd.tir.appui { background:#ff4a3a; border-color:#ff4a3a; color:#fff; }
     #demo-clavier kbd.eau { border-color:#7cc4ff; }
     #demo-clavier kbd.eau.appui { background:#3aa8ff; border-color:#3aa8ff; color:#fff; }
+    #demo-clavier kbd.so { border-color:#ff9a3a; }
+    #demo-clavier kbd.so.appui { background:#ff7a00; border-color:#ff7a00; color:#fff; }
+    ${FORMAT === 'cortege' ? `
+    /* Le cortège : le cartouche (participants, soleil, fatigue) en bas à
+       gauche, au-dessus du clavier ; en haut, il couvrait la légende. */
+    #demo-cartouche { top:auto !important; bottom:13% !important; }` : ''}
     ${FILM_JEU ? `
     /* La traque : la légende en haut, le clavier en bas ; le titre d'une
        manche et l'indice de la page, grandis pour un téléphone, entre les deux. */
@@ -1445,7 +1578,15 @@ const HTML_DEMO = '<div id="demo-carte"><h1></h1><p></p></div><div id="demo-lege
     + '<div id="demo-onde"></div><div id="demo-curseur"><svg viewBox="0 0 24 24" width="100%" height="100%">'
     + '<path d="M3 2l15 11.5-6.6.9 3.9 7.4-2.9 1.5-3.9-7.5L3 20.3z" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/></svg></div>'
     // Q et D : les touches KeyA et KeyD d'un clavier français, que la page écoute.
-    + (FILM_JEU ? '<div id="demo-clavier">'
+    + (FORMAT === 'cortege' ? '<div id="demo-clavier">'
+        + '<div class="bloc"><div class="touches"><kbd data-code="ArrowLeft">←</kbd><kbd data-code="ArrowRight">→</kbd></div>'
+        + '<span>prochain carrefour</span></div>'
+        + '<div class="bloc"><div class="touches"><kbd data-code="ArrowUp">↑</kbd><kbd data-code="ArrowDown">↓</kbd></div>'
+        + '<span>cadence, demi-tour</span></div>'
+        + '<div class="bloc"><div class="touches"><kbd data-code="KeyF" class="so">F</kbd></div><span>service d’ordre</span></div>'
+        + '<div class="bloc"><div class="touches"><kbd data-code="clic" class="large">clic</kbd></div><span>sur un casseur</span></div>'
+        + '</div>'
+    : FILM_JEU ? '<div id="demo-clavier">'
         + '<div class="bloc"><div class="touches"><kbd data-code="ArrowLeft">←</kbd><kbd data-code="ArrowUp">↑</kbd>'
         + '<kbd data-code="ArrowDown">↓</kbd><kbd data-code="ArrowRight">→</kbd></div><span>avancer, tourner</span></div>'
         + '<div class="bloc"><div class="touches"><kbd data-code="KeyA">Q</kbd><kbd data-code="KeyD">D</kbd></div><span>glisser</span></div>'
@@ -1472,7 +1613,9 @@ page.on('request', async r => {
     html = html.replace(ancre, `window.__demo = { THREE, camera, controls, renderer, scene, ySol, majSoleil, DATE_SIMULEE,
             LON0, LAT0, M_PAR_DEGRE_LON, M_PAR_DEGRE_LAT, vegChargee: () => vegChargee,
             MAT_CIBLE, MAT_CONTOUR_CIBLE, MAT_VOISIN, jeu, drone, touchesDrone, groupeBatiments,
-            accesVehicules, seCacher, feux, chutePrevue, rayonFeu, creerFoyer, libererPersonne, groupeFeux };\n${ancre}`)
+            accesVehicules, seCacher, feux, chutePrevue, rayonFeu, creerFoyer, libererPersonne, groupeFeux,
+            cortege, cheminCortege, brancheCortege, projeterSurRoute, pointArete, creerCordon, creerGroupe, GROUPES_CORTEGE,
+            vagueCasseurs, incident, retirerPersonne, groupeCortege, annoncer };\n${ancre}`)
                .replace('</style>', STYLE_DEMO + '</style>')
                .replace('<div id="tip"></div>', '<div id="tip"></div>' + HTML_DEMO);
     r.respond({ status: rep.status, contentType: 'text/html; charset=utf-8', body: html });
@@ -1694,6 +1837,72 @@ async function filmer(secondes, fn) {
         await habiller();
         await capturer();
     }
+}
+
+// --- Le pilote du cortège ------------------------------------------------------------
+// Il tourne dans la page, appelé avant chaque pas : une coupe en fait des
+// milliers d'un seul page.evaluate. Un appui à la fois, rendu par la page à
+// l'image suivante (cortege.appuis), la touche montrée 0,3 s au clavier
+// incrusté (touchesDrone, que la page n'écoute pas pendant le cortège).
+function piloteCortege(o) {
+    const d = window.__demo, c = d.cortege, k = d.touchesDrone, maintenant = performance.now();
+    const montrees = window.__montrees = window.__montrees || {};
+    for (const [code, fin] of Object.entries(montrees)) if (maintenant > fin) { k.delete(code); delete montrees[code]; }
+    const appuyer = code => { c.appuis.push(code); k.add(code); montrees[code] = maintenant + 300; };
+    const attend = c.groupes.find(g => g.etat === 'attend');
+    const e = { phase: c.phase, participants: Math.round(c.participants), soleil: Math.round(c.partSoleil * 100),
+                fatigue: Math.round(c.fatigue), chaleur: c.chaleur, ecartes: c.ecartes, incidents: c.incidents,
+                groupes: c.groupes.map(g => g.etat), casseurs: c.casseurs.map(x => x.etat), cadence: c.cadence,
+                parcouru: Math.round(c.parcouru), reste: c.arrivee ? Math.round(Math.hypot(c.arrivee.x - c.tete.x, c.arrivee.y - c.tete.y)) : null,
+                groupe: attend ? Math.round(Math.hypot(attend.x - c.tete.x, attend.y - c.tete.y)) : null,
+                bloque: c.tete && c.tete.bloque ? c.tete.bloque.type : null,
+                cordon: c.cordons.length ? Math.round(Math.hypot(c.cordons[0].x - c.tete.x, c.cordons[0].y - c.tete.y)) : null };
+    if (c.phase !== 'marche') return e;
+    c.prochaineVague = Infinity;
+    if (c.appuis.length) return e;
+    if (o.cadence != null && c.cadence !== o.cadence) { appuyer(c.cadence < o.cadence ? 'ArrowUp' : 'ArrowDown'); return e; }
+    if (o.envoyer && c.equipes.some(q => q.etat === 'libre')
+        && c.casseurs.some(x => (x.etat === 'approche' || x.etat === 'infiltre') && !x.equipe)) { appuyer('KeyF'); return e; }
+    const p = c.prochain;
+    if (!p) return e;
+    const q = attend ? d.projeterSurRoute(c.graphe, attend.x, attend.y, 40) : c.arrivee;
+    const ch = q && d.cheminCortege(c.tete, q, new Set(c.cordons.map(x => x.arete)));
+    const m = ch && ch.morceaux.find((m, i) => i > 0 && (m.de < m.a ? m.arete.a : m.arete.b) === p.n);
+    if (!m) return e;
+    let voulu = null;
+    for (const choix of [0, -1, 1]) {
+        const b = d.brancheCortege(p.n, p.venue, p.sens, choix);
+        if (b && b.arete === m.arete) { voulu = choix; break; }
+    }
+    if (voulu !== null && voulu !== c.choix && p.distance < (o.choixA ?? 30)) appuyer(voulu < c.choix ? 'ArrowLeft' : 'ArrowRight');
+    return e;
+}
+/** La condition d'arrêt d'un pilotage ou d'une coupe, d'après l'état rendu par le pilote. */
+function arretCortege(e, j) {
+    if (j === 'marche') return e.phase === 'marche';
+    if (j === 'fin') return e.phase === 'fin';
+    if (j === 'rallie') return e.groupes.includes('rallie');
+    if (j === 'infiltre') return e.casseurs.includes('infiltre');
+    if (j === 'escortes') return e.ecartes > 0 && !e.casseurs.some(x => x === 'approche' || x === 'infiltre');
+    if (j.parcouru != null) return e.parcouru >= j.parcouru;
+    if (j.reste != null) return e.reste != null && e.reste <= j.reste;
+    if (j.groupe != null) return e.groupe != null && e.groupe <= j.groupe;
+    if (j.cordon != null) return e.cordon != null && e.cordon <= j.cordon;
+    return false;
+}
+async function installerPiloteCortege() {
+    await page.evaluate((p, a) => {
+        if (window.__piloteCortege) return;
+        window.__piloteCortege = (0, eval)(`(${p})`);
+        window.__arretCortege = (0, eval)(`(${a})`);
+    }, piloteCortege.toString(), arretCortege.toString());
+}
+/** Le cartouche du cortège : ce que la page met dans son bandeau, que le film masque. */
+function cartoucheCortege(e) {
+    if (!e) return '';
+    return `<b>${e.participants.toLocaleString('fr-FR')} participants</b><br>`
+        + (e.chaleur > 0 ? `☀ ${e.soleil} % au soleil · fatigue ${e.fatigue} %` : 'soleil couché')
+        + (e.ecartes ? `<br>${e.ecartes} casseur${e.ecartes > 1 ? 's' : ''} écarté${e.ecartes > 1 ? 's' : ''}` : '');
 }
 
 const outils = {
@@ -2175,6 +2384,114 @@ const outils = {
         }
         await page.evaluate(() => window.__demo.touchesDrone.clear());
         return e;
+    },
+    // --- Cortège : la mise en scène, le pilote, les coupes ---------------------------
+    /**
+     * Le chemin de la manifestation mis en scène, l'arrivée cliquée : les
+     * obstacles tirés par la page retirés ; un cordon sur la branche tout droit
+     * du premier virage du plus court chemin — le cortège tourne devant lui ;
+     * un groupe au carrefour du chemin le plus près des deux tiers, dans la rue
+     * de côté, qui attend tout le film ; ni déviation ni vague de casseurs
+     * d'elles-mêmes, le film les lance. Rend où chacun est, en mètres de chemin.
+     */
+    async mettreEnSceneCortege() {
+        return page.evaluate(() => {
+            const d = window.__demo, c = d.cortege;
+            for (const o of c.cordons) { d.groupeCortege.remove(o.objet); o.policiers.forEach(d.retirerPersonne); }
+            for (const b of c.barricades) d.groupeCortege.remove(b.objet);
+            for (const g of c.groupes) { d.groupeCortege.remove(g.objet); g.membres.forEach(d.retirerPersonne); }
+            c.cordons = [];
+            c.barricades = [];
+            c.groupes = [];
+            c.deviations = Infinity;
+            const ch = d.cheminCortege(c.tete, c.arrivee);
+            // Les nœuds du chemin, dans l'ordre : l'arête par laquelle on y arrive, celle par laquelle on en part.
+            const etapes = [];
+            let avance = Math.abs(ch.morceaux[0].a - ch.morceaux[0].de);
+            for (let i = 1; i < ch.morceaux.length; i++) {
+                const m = ch.morceaux[i], p = ch.morceaux[i - 1];
+                etapes.push({ n: m.de < m.a ? m.arete.a : m.arete.b, venue: p.arete, sens: p.a > p.de ? 1 : -1,
+                              sortie: m.arete, avance });
+                avance += Math.abs(m.a - m.de);
+            }
+            const pose = { longueur: Math.round(ch.longueur) };
+            for (const e of etapes) {
+                if (e.n.aretes.length < 3) continue;
+                const droit = d.brancheCortege(e.n, e.venue, e.sens, 0);
+                if (!droit || droit.arete === e.sortie || droit.arete.longueur < 20) continue;
+                const s = droit.arete.a === e.n ? Math.min(18, droit.arete.longueur / 2)
+                                                : Math.max(droit.arete.longueur - 18, droit.arete.longueur / 2);
+                d.creerCordon(droit.arete, s);
+                pose.cordon = { avance: Math.round(e.avance), rue: droit.arete.nom, virage: e.sortie.nom };
+                break;
+            }
+            const apres = (pose.cordon ? pose.cordon.avance : 0) + 80;
+            const candidats = etapes.filter(e => e.n.aretes.length >= 3 && e.avance > apres && e.avance < ch.longueur - 80);
+            const e = candidats.sort((u, v) => Math.abs(u.avance - 0.66 * ch.longueur) - Math.abs(v.avance - 0.66 * ch.longueur))[0];
+            if (e) {
+                const cote = e.n.aretes.find(a => a !== e.venue && a !== e.sortie);
+                const [x, y] = d.pointArete(cote, cote.a === e.n ? Math.min(8, cote.longueur) : Math.max(cote.longueur - 8, 0));
+                d.creerGroupe(d.GROUPES_CORTEGE[1], x, y);
+                c.groupes[0].fin = Infinity;
+                pose.groupe = { avance: Math.round(e.avance), rue: cote.nom, n: c.groupes[0].membres.length };
+            }
+            return pose;
+        });
+    },
+    /**
+     * Le pilote du cortège, `secondes` au plus, image par image : la cadence
+     * `cadence` ; aux carrefours, la branche du plus court chemin vers le
+     * groupe qui attend, puis vers l'arrivée, choisie à `choixA` m du
+     * carrefour, comme un joueur qui voit la flèche au sol ; avec `envoyer`, F
+     * pour chaque casseur. Les touches qu'il presse s'allument au clavier
+     * incrusté ; le cartouche dit les participants, le soleil, la fatigue.
+     * S'arrête quand `jusqua` (voir arretCortege) est atteint, plus `apres` s.
+     * Rend l'état de la partie.
+     */
+    async piloterCortege(secondes, o = {}) {
+        await installerPiloteCortege();
+        const n = Math.round(secondes * FPS);
+        let e = null, fin = null;
+        for (let i = 0; i < n; i++) {
+            e = await page.evaluate(o => window.__piloteCortege(o), o);
+            if (i % 8 === 0) await outils.cartouche(cartoucheCortege(e));
+            await filmer(1 / FPS);
+            if (fin === null && o.jusqua && arretCortege(e, o.jusqua)) fin = i + Math.round((o.apres || 0) * FPS);
+            if (fin !== null && i >= fin) break;
+        }
+        await outils.cartouche(cartoucheCortege(e));
+        return e;
+    },
+    /**
+     * Une coupe : la partie avance sans être filmée, le pilote aux commandes,
+     * jusqu'à `jusqua` (voir arretCortege), `max` s de jeu au plus. La marche
+     * entière tiendrait trois minutes à l'image.
+     */
+    async couperCortege(o) {
+        await installerPiloteCortege();
+        const e = await page.evaluate((o, fps) => {
+            let e = null;
+            for (let i = 0; i < (o.max || 90) * fps; i++) {
+                e = window.__piloteCortege(o);
+                if (o.jusqua && window.__arretCortege(e, o.jusqua)) break;
+                if (e.phase !== 'marche' && o.jusqua !== 'fin') break;
+                window.__pas(1000 / fps);
+            }
+            return e;
+        }, o, FPS);
+        // Arrivé ou dispersé pendant la coupe : la suite filmerait une autre manifestation.
+        if (e.phase !== 'marche' && o.jusqua !== 'fin') throw new Error(`coupe : partie finie (${JSON.stringify(e)})`);
+        await outils.cartouche(cartoucheCortege(e));
+        return e;
+    },
+    /** Des casseurs lancés par la page autour d'un point du chemin, `devant` m devant la tête (en arrière si négatif), à `cote` m sur sa droite. */
+    async lancerCasseurs(n, devant, cote = 0, rayon = 30) {
+        return page.evaluate((n, devant, cote, rayon) => {
+            const d = window.__demo, c = d.cortege, t = c.tete;
+            const dx = Math.sin(c.cap), dy = Math.cos(c.cap);
+            d.vagueCasseurs({ x: t.x + dx * devant + dy * cote, y: t.y + dy * devant - dx * cote, rayon }, n);
+            return c.casseurs.map(cs => Math.round(Math.hypot(cs.p.x - t.x, cs.p.y - t.y)));
+        }, n, devant, cote, rayon);
     },
     /** Le bonhomme reposé, caché contre le véhicule le plus proche de `p` (mise en scène du départ). */
     async planquer(p) {
