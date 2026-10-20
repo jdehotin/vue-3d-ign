@@ -38,13 +38,25 @@ messages de commit et dans les commentaires des modules.
     avec l'orthophoto, la BD TOPO et la BD Forêt (1,1 à 4,6 s de lecture
     et 0,1 à 0,2 s de découpe par carré), sur 250 m de part et d'autre de
     la route et 2 km devant. Houppiers en facettes et cônes de conifères,
-    opaques, à la couleur de leur port ; trois appels de dessin par carré.
+    translucides (45 %), à la couleur de leur port, effacés à moins de 15 m
+    de la caméra ; trois appels de dessin par carré.
     Jusqu'à 93 000 arbres et 3,1 millions de triangles à Gordes, toujours à
     60 images par seconde ; bouton **Arbres** pour un écran trop lent. Les
     bords de toit que le LiDAR voit hors des emprises BD TOPO, classés en
     végétation par une photo un peu verte, en sont écartés : à Paris, ils
     faisaient 80 % des « arbres » de plus de 8 m, des poteaux verts de 15 m
     le long des façades (la scène les garde, transparents).
+  - **Les routes et les ponts** (même jour) : les tronçons de chaque carré,
+    découpés à son bord, en rubans sur le relief à la largeur de chaussée
+    BD TOPO (60 %, la photo de l'asphalte passe ; effacés sur le plan), et
+    les ponts en tabliers à l'altitude de leurs tronçons — celle du tablier,
+    de 598 à 676 m sur le viaduc de Millau —, avec parapets et piles là où
+    le vide dépasse 3 m. Les tronçons fictifs, qui ne font que raccorder le
+    réseau, ne sont pas dessinés (format des carrés en version 2).
+  - **La caméra plus basse** : 45 m de recul sous 18°, soit 17 m au-dessus
+    de la voiture à l'arrêt et 22 m à 130 km/h, contre 38 et 59 m ; elle se
+    tient au-dessus des toits voisins, que la rue étroite de Paris lui
+    faisait traverser.
   - **La voiture** calée sur la route, vue de derrière ou de dessus, avec
     la vitesse, le nom de la rue et le cartouche de la route (A7, D15) ;
     entre deux relevés, elle avance le long de la route, et dans un tunnel,

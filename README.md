@@ -540,7 +540,12 @@ Chaque premier chargement construit la scène, en quelques secondes.
   l'A7, ils sont prêts 5,4 à 5,9 km devant la voiture. Les arbres suivent,
   sur 250 m de part et d'autre de la route et 2 km devant : ceux de la
   scène, découpés un par un sur le MNH du LiDAR HD, à leur hauteur et leur
-  largeur mesurées, en cônes pour les conifères (bouton **Arbres**). Le sol est fait
+  largeur mesurées, translucides, en cônes pour les conifères (bouton
+  **Arbres**). Les routes sont des rubans sur le relief, à leur largeur de
+  chaussée, et les ponts des tabliers à leur altitude BD TOPO, sur leurs
+  piles : le viaduc de Millau franchit le Tarn, un pont passe au-dessus de
+  l'autoroute. La caméra se tient à 17 m au-dessus de la voiture à
+  l'arrêt, et au-dessus des toits voisins en ville. Le sol est fait
   des tuiles de l'orthophoto ou du Plan IGN (bouton **Plan**) posées sur le
   RGE ALTI, plus fines près de la caméra et là où la voiture sera dans
   quelques secondes. En rue étroite, les façades entre la caméra et la

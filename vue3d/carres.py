@@ -37,8 +37,10 @@ carré (`origine`, en mètres Lambert-93) :
   `importance` (1 à 6), `nature`, `sol` (-1 tunnel, 0, 1 pont…), `sens`
   (« 2 » double, « + » sens direct, « - » inverse, « » sans objet), `voies`,
   `largeur`, `acces` (null s'il est libre, sinon la valeur BD TOPO : « A
-  péage », « Restreint aux ayants droit »…), `ligne` [x0, y0, z0, x1, y1, z1,
-  …] (z en décimètres d'altitude).
+  péage », « Restreint aux ayants droit »…), `fictif` (présent et vrai pour
+  un tronçon qui ne fait que raccorder le réseau, à travers une place :
+  gardé pour le graphe, pas dessiné), `ligne` [x0, y0, z0, x1, y1, z1, …] (z
+  en décimètres d'altitude).
 """
 
 import gzip
@@ -63,8 +65,9 @@ from .mnh import dimensions_grille, fetch_mnh_grid
 from .ortho import fetch_exg_grid
 
 # Version du format et de son contenu : le cache ne périme jamais, un carré
-# change de dossier avec elle.
-CARRES_VERSION = 1
+# change de dossier avec elle. La page la met dans l'adresse du carré, que le
+# navigateur garde une semaine. 2 : `fictif` sur les routes.
+CARRES_VERSION = 2
 # 500 m : la moitié d'une zone de la page, de quoi charger finement le long
 # de la route sans lire tout un kilomètre de part et d'autre. Une réponse de
 # 255 à 382 bâtiments aux trois lieux mesurés, loin des 5 000 du plafond WFS.
@@ -234,7 +237,7 @@ def routes_du_carre(geojson, i, j):
             z = s[2] if len(s) > 2 and _nombre(s[2]) is not None and s[2] > -1000 else None
             ligne += [_dm(s[0], x0), _dm(s[1], y0), None if z is None else round(z * 10)]
         importance = p.get("importance")
-        sortie.append({
+        route = {
             "id": p.get("cleabs"),
             "nom": p.get("nom_voie_ban_gauche") or p.get("nom_voie_ban_droite")
                    or p.get("nom_collaboratif_gauche") or p.get("nom_collaboratif_droite"),
@@ -248,7 +251,10 @@ def routes_du_carre(geojson, i, j):
             "largeur": _nombre(p.get("largeur_de_chaussee")),
             "acces": None if p.get("acces_vehicule_leger") in (None, "Libre") else p["acces_vehicule_leger"],
             "ligne": ligne,
-        })
+        }
+        if p.get("fictif"):
+            route["fictif"] = True
+        sortie.append(route)
     return sortie
 
 

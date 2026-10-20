@@ -311,3 +311,15 @@ def test_les_bords_de_toit_ne_sont_pas_des_arbres():
     gardes = carres.arbres_du_carre(houppiers, I, J, batiments)
     assert [(a[0], a[1]) for a in gardes] == [(3000, 3000), (1215, 1100)]
     assert len(carres.arbres_du_carre(houppiers, I, J)) == 4
+
+
+def test_un_troncon_fictif_le_dit():
+    ligne = [[X0, Y0, 1], [X0 + 5, Y0, 1]]
+    fictif, reel = carres.routes_du_carre({"features": [_route("F", ligne, fictif=True), _route("R", ligne)]}, I, J)
+    assert fictif["fictif"] is True and "fictif" not in reel
+
+
+def test_la_page_demande_la_version_du_serveur():
+    """Le navigateur garde un carré une semaine : son adresse porte la version."""
+    page = open(os.path.join(os.path.dirname(carres.__file__), "static", "voiture.html"), encoding="utf-8").read()
+    assert f"const CARRES_VERSION = {carres.CARRES_VERSION}, VEGETATION_VERSION = {carres.VEGETATION_VERSION};" in page
