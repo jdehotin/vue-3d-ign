@@ -320,6 +320,20 @@ messages de commit et dans les commentaires des modules.
 
 ### Corrigé
 
+- **L'export d'une scène avec lignes HT ne perd plus le fichier, et les
+  couches ne ferment plus la fenêtre.** Le tube d'un conducteur — 62 208
+  valeurs pour une soixantaine de portées — était passé en arguments à
+  `push`, qui dépasse la pile au-delà de quelques dizaines de milliers : la
+  fenêtre disait « Maximum call stack size exceeded » et rien ne sortait.
+  `etendre()` ajoute les valeurs une à une, et le harnais le vérifie sur ces
+  62 208 valeurs. Les onze boutons de couches de la fenêtre, dans un
+  `<form method="dialog">`, étaient des boutons de soumission sans
+  `type="button"` : chaque clic fermait la fenêtre ; ils portent maintenant
+  leur type, et cocher une couche la bascule sur place.
+  - Vérifié en page réelle, sur la scène de Mantes-la-Jolie à 2 000 m : un
+    IFC de 37,4 Mo (4 334 bâtiments, 930 tronçons, 482 pylônes, 67 lignes)
+    et un CityGML de 210,5 Mo s'écrivent, là où le premier échouait avant
+    même d'atteindre les lignes.
 - **« Ma position » recentre la scène quand on en est sorti.** Rappuyer sur
   le bouton pendant le suivi l'arrêtait, et la scène restait où elle était :
   dans une Tesla en marche, on ne se retrouvait plus. Hors de la scène, le

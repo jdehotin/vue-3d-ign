@@ -163,6 +163,15 @@ l'étage `export` du Dockerfile.
   réseaux passent par la branche générique (`ecrireCityGml` inchangé) ;
   `outils/valider_citygml.py` ne demande un volume tourné vers l'extérieur
   qu'aux surfaces fermées, un aplat ou un câble n'enfermant rien.
+- **Un grand tableau s'ajoute avec `etendre()`, jamais `push(...valeurs)`.**
+  L'export rassemble les tableaux de la scène — 62 208 valeurs pour le tube
+  d'un conducteur HT, des dizaines de milliers pour un aplat — et les passer
+  en arguments dépasse la pile (« Maximum call stack size exceeded »), ce qui
+  perdait l'export d'une scène avec lignes. `outils/verifier-export.mjs` le
+  vérifie sur ces 62 208 valeurs.
+- **Dans la fenêtre d'export, tout `<button>` porte son `type`.** La fenêtre
+  est un `<form method="dialog">` : un bouton sans `type` est un bouton de
+  soumission, et chaque clic sur une couche la fermait.
 
 ## Méthode de travail
 

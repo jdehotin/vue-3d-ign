@@ -704,17 +704,17 @@
                         n'est posé. Une couche que la scène ne porte pas s'éteint ici.</p>
                     <div class="sous-titre">Couches</div>
                     <div class="toggles">
-                        <button class="toggle on" id="x-relief">Relief</button>
-                        <button class="toggle on" id="x-batiments">Bâtiments</button>
-                        <button class="toggle on" id="x-arbres">Arbres</button>
-                        <button class="toggle" id="x-masses" title="Sursol ni bâti ni végétal : murs, abris, véhicules…">Masses de sursol</button>
-                        <button class="toggle on" id="x-cimetieres" title="Emprises de cimetière de la BD TOPO, drapées sur le relief.">Cimetières</button>
-                        <button class="toggle on" id="x-aerodromes" title="Aérodromes de la BD TOPO et leurs pistes, drapés sur le relief.">Aérodromes et pistes</button>
-                        <button class="toggle on" id="x-postes" title="Postes de transformation de la BD TOPO, drapés sur le relief.">Postes élec.</button>
-                        <button class="toggle on" id="x-haies" title="Haies de la BD TOPO, dressées : 2 m de haut et 1,5 m d'épaisseur de convention, la donnée les taisant.">Haies</button>
-                        <button class="toggle on" id="x-routes" title="Tronçons de route, chemins et sentiers de la BD TOPO, drapés sur le relief.">Routes et chemins</button>
-                        <button class="toggle on" id="x-eau" title="Étendues et cours d'eau de la BD TOPO, drapés sur le relief.">Hydrographie</button>
-                        <button class="toggle on" id="x-lignes" title="Lignes à haute tension de la BD TOPO : pylônes dressés et conducteurs tendus.">Lignes HT</button>
+                        <button type="button" class="toggle on" id="x-relief">Relief</button>
+                        <button type="button" class="toggle on" id="x-batiments">Bâtiments</button>
+                        <button type="button" class="toggle on" id="x-arbres">Arbres</button>
+                        <button type="button" class="toggle" id="x-masses" title="Sursol ni bâti ni végétal : murs, abris, véhicules…">Masses de sursol</button>
+                        <button type="button" class="toggle on" id="x-cimetieres" title="Emprises de cimetière de la BD TOPO, drapées sur le relief.">Cimetières</button>
+                        <button type="button" class="toggle on" id="x-aerodromes" title="Aérodromes de la BD TOPO et leurs pistes, drapés sur le relief.">Aérodromes et pistes</button>
+                        <button type="button" class="toggle on" id="x-postes" title="Postes de transformation de la BD TOPO, drapés sur le relief.">Postes élec.</button>
+                        <button type="button" class="toggle on" id="x-haies" title="Haies de la BD TOPO, dressées : 2 m de haut et 1,5 m d'épaisseur de convention, la donnée les taisant.">Haies</button>
+                        <button type="button" class="toggle on" id="x-routes" title="Tronçons de route, chemins et sentiers de la BD TOPO, drapés sur le relief.">Routes et chemins</button>
+                        <button type="button" class="toggle on" id="x-eau" title="Étendues et cours d'eau de la BD TOPO, drapés sur le relief.">Hydrographie</button>
+                        <button type="button" class="toggle on" id="x-lignes" title="Lignes à haute tension de la BD TOPO : pylônes dressés et conducteurs tendus.">Lignes HT</button>
                     </div>
                     <div class="sous-titre">Format</div>
                     <div class="choix-format" role="radiogroup" aria-label="Format du fichier">
@@ -9249,6 +9249,19 @@ function angleIfc(deg) {
 }
 
 /**
+ * Ajoute les valeurs d'un tableau à un autre. `sortie.push(...valeurs)` passe
+ * les valeurs en arguments et dépasse la pile au-delà de quelques dizaines de
+ * milliers : un conducteur HT en tube en porte 62 208 (une soixantaine de
+ * portées), et une scène de 1 900 m en compte des centaines. L'export, qui
+ * rassemble ces tableaux avant de les écrire, est le seul endroit où ils
+ * atteignent cette taille.
+ */
+function etendre(sortie, valeurs) {
+    for (let i = 0; i < valeurs.length; i++) sortie.push(valeurs[i]);
+    return sortie;
+}
+
+/**
  * Sommets et triangles d'un maillage en coordonnées IFC (neuf réels par
  * triangle) : sommets confondus au millimètre, triangles dégénérés retirés.
  * `ferme` quand chaque arête est portée par exactement deux triangles, en
@@ -9543,7 +9556,7 @@ function polygonesPlans(f, classer) {
                 }
             }
         }
-        sortie.push(...contoursRegion(F, P, tris, [nx, ny, nz], classes[t0], plats));
+        etendre(sortie, contoursRegion(F, P, tris, [nx, ny, nz], classes[t0], plats));
     }
     return sortie;
 }
@@ -10210,7 +10223,7 @@ function modeleExport(options) {
                             }
                         }
                     } else {
-                        tri.push(...tubeCable(o.geometry.attributes.position.array, RAYON_CABLE));
+                        etendre(tri, tubeCable(o.geometry.attributes.position.array, RAYON_CABLE));
                     }
                     const facettes = facettesIfc(tri);
                     if (!facettes.faces.length) continue;

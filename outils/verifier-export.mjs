@@ -65,14 +65,14 @@ function extraireConst(nom) {
     else if (src[j] === ';' && n === 0) return src.slice(i, j + 1);
   }
 }
-const NOMS = ['coniqueConforme', 'versLambert93', 'versUtm', 'versMercator',
+const NOMS = ['etendre', 'coniqueConforme', 'versLambert93', 'versUtm', 'versMercator',
               'hachage128', 'guidIfc', 'idGml', 'chaineIfc', 'angleIfc', 'facettesIfc',
               'trianglesRelief', 'trianglesTronc', 'tubeCable', 'ecrireIfc', 'alea', 'portDe', 'portMesure',
               'aUnTronc', 'gabaritTronc', 'gabaritHouppier', 'ajouterHouppierSimple', 'polygonesPlans',
               'contoursRegion', 'solsOuverts', 'ecrireCityGml'];
 const CONSTS = ['GRS80', 'WGS84', 'PROJECTIONS', 'ALPHABET_IFC', 'ENTITES_IFC', 'reelIfc', 'STYLES_IFC', 'PORTS', 'EMPRISE_HOUPPIER', 'ENFONCEMENT',
                 'HAUTEUR_MIN_TRONC', 'SEGMENTS_SIMPLE', 'PLAN_COS', 'PLAN_ECART_M', 'texteXml', 'ESPACES_CITYGML'];
-const { versLambert93, PROJECTIONS, guidIfc, idGml, chaineIfc, angleIfc, facettesIfc, trianglesRelief, trianglesTronc,
+const { etendre, versLambert93, PROJECTIONS, guidIfc, idGml, chaineIfc, angleIfc, facettesIfc, trianglesRelief, trianglesTronc,
         tubeCable, ecrireIfc, aUnTronc, portDe, ajouterHouppierSimple, polygonesPlans, solsOuverts, ecrireCityGml,
         ALPHABET_IFC, STYLES_IFC, ENFONCEMENT } =
   new Function('THREE', CONSTS.map(extraireConst).join('\n') + '\n' + NOMS.map(extraire).join('\n')
@@ -167,6 +167,13 @@ verifier(cc.length === 9 && cc.every(p => {
 }), `CC42 à CC50 : ${cc.length} zones, la France dans chacune`);
 verifier(versLambert93(2.2945, 48.85826).every(Number.isFinite),
          'Lambert-93 reste la projection par défaut');
+// Le tube d'un conducteur HT fait 62 208 valeurs d'un coup — `push(...)` y
+// dépasse la pile, ce qui perdait l'export d'une scène avec lignes HT.
+const tube = Array.from({ length: 62208 }, (_, i) => i);
+const ajoute = [];
+etendre(ajoute, tube);
+verifier(ajoute.length === tube.length && ajoute[0] === 0 && ajoute[62207] === 62207,
+         'etendre : 62 208 valeurs ajoutées sans dépasser la pile');
 
 // --- GlobalId -------------------------------------------------------------------
 {
