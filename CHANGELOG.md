@@ -15,6 +15,22 @@ messages de commit et dans les commentaires des modules.
 
 ### Ajouté
 
+- **L'IFC dit où se trouve son site, et la fenêtre laisse choisir comment.**
+  Sous la projection, un sélecteur d'ancrage décide de la place du site dans le
+  fichier. *Origine locale*, le défaut : le site reste à zéro et
+  `IFCMAPCONVERSION` déclare les coordonnées de cette origine — la convention de
+  Revit, d'ArchiCAD et de Bonsai, où la géométrie reste près de zéro.
+  *Coordonnées absolues* : le site est posé à ses coordonnées et la conversion
+  part de zéro, la géométrie restant locale au site — c'est ce que lisent
+  Trimble Connect et les visionneuses qui ignorent `IfcMapConversion`, que
+  Tekla nomme « IfcSite coordinate system ». Le décalage n'est jamais porté
+  deux fois : `outils/valider_ifc.py` refuse désormais un fichier où le site et
+  la conversion le portent tous les deux (le modèle partirait à 1 200 km) comme
+  un fichier où personne ne le porte (il reviendrait à zéro). Vérifié sur la
+  scène de Mantes-la-Jolie : en ancrage absolu, le site est à 605 119 E,
+  6 877 422 N, 35 m, la conversion à zéro, et les coordonnées monde d'ifcopenshell
+  couvrent bien 597 988 à 612 562 E. Sans effet sur le CityGML, toujours en
+  absolu.
 - **La projection de l'export se choisit.** La fenêtre d'export gagne un
   sélecteur de projection, sous le format : Lambert-93 (EPSG:2154, le défaut,
   celui de la BD TOPO et de la vue), les neuf coniques conformes CC42 à CC50
@@ -320,6 +336,16 @@ messages de commit et dans les commentaires des modules.
 
 ### Corrigé
 
+- **Les conducteurs sortaient du repère.** `tubeCable` rendait ses triangles
+  dans le repère de la scène — x vers l'est, y vers le haut, z vers le sud — au
+  lieu de passer par `versIfc` : dans l'IFC, le sud de la scène partait à
+  l'altitude, et les câbles traversaient le modèle sur 14 km, à ±7 km
+  d'altitude. Un lecteur qui cadre sur l'ensemble ne voyait plus qu'un ruban
+  vide, et la maquette semblait absente. Le repère d'écriture est maintenant un
+  paramètre obligatoire, comme pour `trianglesTronc`, et le harnais vérifie
+  qu'il est appliqué : l'IFC de Mantes-la-Jolie garde ses 4 334 bâtiments dans
+  les 2,5 km de la zone, et ses 67 lignes retrouvent leur altitude, de 8 à
+  180 m au-dessus du sol, au lieu de plonger à 7 km sous terre.
 - **L'export d'une scène avec lignes HT ne perd plus le fichier, et les
   couches ne ferment plus la fenêtre.** Le tube d'un conducteur — 62 208
   valeurs pour une soixantaine de portées — était passé en arguments à

@@ -729,6 +729,20 @@ déclare. Lambert-93 est celui de la BD TOPO et de la vue ; les CC servent aux g
 projets français, l'UTM et le Web Mercator aux outils de SIG.">
                         <select id="export-projection"></select>
                     </label>
+                    <div class="sous-titre">Ancrage du site</div>
+                    <label class="zone" title="Où le site se trouve dans le fichier IFC. L'origine locale
+pose le site à zéro et déclare ses coordonnées par IfcMapConversion : c'est la
+convention de Revit, d'ArchiCAD et de Bonsai, et la géométrie y reste près de zéro.
+Les coordonnées absolues posent le site à ses coordonnées, la géométrie restant
+locale au site : c'est ce que lisent Trimble Connect et les visionneuses qui
+ignorent IfcMapConversion (Tekla nomme ce mode « IfcSite coordinate system »), mais
+la géométrie y est à 600 km de l'origine. Sans effet sur le CityGML, toujours en
+coordonnées absolues.">
+                        <select id="export-ancrage">
+                            <option value="origine">Origine locale · Revit, ArchiCAD, Bonsai</option>
+                            <option value="site">Coordonnées absolues · Trimble Connect, SIG</option>
+                        </select>
+                    </label>
                     <div class="note" id="export-note">Un à quelques Mo, écrit par le
                         navigateur en une à deux secondes.</div>
                 </div>
@@ -5485,12 +5499,15 @@ function placerLignes() {
  * Un tube à quatre pans du rayon donné le long des segments d'un câble :
  * `positions` est une suite de couples de points (x vers l'est, y vers le
  * haut, z vers le sud, celui des LineSegments de la scène), et le retour une
- * suite de triangles dans le même repère. Le pan est horizontal ou vertical
+ * suite de triangles passés par `versIfc`, comme tous les maillages de
+ * l'export. Sans lui, le sud de la scène partait à l'altitude : le câble
+ * s'envolait à 7 km en travers du modèle. Le pan est horizontal ou vertical
  * selon le segment ; les extrémités restent ouvertes — un câble n'est pas un
  * solide.
  */
-function tubeCable(positions, rayon) {
+function tubeCable(positions, rayon, versIfc) {
     const tri = [];
+    const poser = p => tri.push(...versIfc(p[0], p[1], p[2]));
     for (let i = 0; i + 5 < positions.length; i += 6) {
         const a = [positions[i], positions[i + 1], positions[i + 2]];
         const b = [positions[i + 3], positions[i + 4], positions[i + 5]];
@@ -5512,7 +5529,7 @@ function tubeCable(positions, rayon) {
         const [A, B] = [coins(a), coins(b)];
         for (let s = 0; s < 4; s++) {
             const t = (s + 1) % 4;
-            tri.push(...A[s], ...B[s], ...B[t], ...A[s], ...B[t], ...A[t]);
+            for (const p of [A[s], B[s], B[t], A[s], B[t], A[t]]) poser(p);
         }
     }
     return tri;
@@ -9382,6 +9399,9 @@ const ENTITES_IFC = {
  *   { base, horodatage, cle, nom, description, site, lon, lat,
  *     origine: { x, y, z }   dans la projection du CRS, et en altitude,
  *                            l'origine du fichier,
+ *     ancrage: 'origine'     le site reste à zéro, IfcMapConversion le situe
+ *              | 'site'      le site est posé à ses coordonnées, la
+ *                            conversion part de zéro (Trimble Connect),
  *     nordVrai: [x, y]       le nord vrai dans ce repère,
  *     crs: { nom, epsg, description, datum, datumVertical, projection,
  *            epsgVertical },
@@ -9419,11 +9439,29 @@ function ecrireIfc(m) {
         + `${ent('IFCSIUNIT(*,.VOLUMEUNIT.,$,.CUBIC_METRE.)')},${ent('IFCSIUNIT(*,.PLANEANGLEUNIT.,$,.RADIAN.)')}))`);
     const crs = ent(`IFCPROJECTEDCRS(${chaineIfc(m.crs.nom)},${opt(m.crs.description)},${opt(m.crs.datum)},`
         + `${opt(m.crs.datumVertical)},${opt(m.crs.projection)},$,${metre})`);
-    ent(`IFCMAPCONVERSION(${contexte},${crs},${reelIfc(m.origine.x)},${reelIfc(m.origine.y)},`
-        + `${reelIfc(m.origine.z)},1.,0.,$)`);
+    // L'ancrage : où le site se trouve dans le fichier. En origine locale, le
+    // site est à zéro et l'IfcMapConversion porte les coordonnées de cette
+    // origine — la convention de Revit, d'ArchiCAD et de Bonsai. En coordonnées
+    // absolues, c'est le site qui est posé à ses coordonnées et l'IfcMapConversion
+    // qui part de zéro ; la géométrie, elle, reste locale au site. C'est ce que
+    // lisent Trimble Connect et les visionneuses qui ignorent IfcMapConversion
+    // (Tekla nomme ce mode « IfcSite coordinate system »). Les deux sont justes,
+    // mais pas pour les mêmes lecteurs : le décalage ne doit jamais être porté
+    // deux fois, ni par le site ni par la conversion.
+    const absolu = m.ancrage === 'site';
+    const decalage = absolu ? { x: 0, y: 0, z: 0 } : m.origine;
+    const pointSite = absolu
+        ? ent(`IFCCARTESIANPOINT((${reelIfc(m.origine.x)},${reelIfc(m.origine.y)},`
+              + `${reelIfc(m.origine.z)}))`)
+        : origine;
+    const axeSite = absolu ? ent(`IFCAXIS2PLACEMENT3D(${pointSite},$,$)`) : axe;
+    ent(`IFCMAPCONVERSION(${contexte},${crs},${reelIfc(decalage.x)},${reelIfc(decalage.y)},`
+        + `${reelIfc(decalage.z)},1.,0.,$)`);
     const projet = ent(`IFCPROJECT(${guid('projet|' + m.cle)},$,${opt(m.nom)},${opt(m.description)},$,$,$,`
         + `(${contexte}),${unites})`);
-    const placeSite = ent(`IFCLOCALPLACEMENT($,${axe})`);
+    // Les éléments restent placés à l'identité *dans le site* : leur géométrie
+    // est déjà rapportée à l'origine du fichier.
+    const placeSite = ent(`IFCLOCALPLACEMENT($,${axeSite})`);
     const site = ent(`IFCSITE(${guid('site|' + m.cle)},$,${opt(m.site)},$,$,${placeSite},$,$,.ELEMENT.,`
         + `(${angleIfc(m.lat)}),(${angleIfc(m.lon)}),${reelIfc(m.origine.z)},$,$)`);
     ent(`IFCRELAGGREGATES(${guid('agrege|' + m.cle)},$,$,$,${projet},(${site}))`);
@@ -10223,7 +10261,7 @@ function modeleExport(options) {
                             }
                         }
                     } else {
-                        etendre(tri, tubeCable(o.geometry.attributes.position.array, RAYON_CABLE));
+                        etendre(tri, tubeCable(o.geometry.attributes.position.array, RAYON_CABLE, versIfc));
                     }
                     const facettes = facettesIfc(tri);
                     if (!facettes.faces.length) continue;
@@ -10283,6 +10321,7 @@ function modeleExport(options) {
         nom: `Vue 3D IGN ${LAT0.toFixed(5)}, ${LON0.toFixed(5)}`,
         description: 'Maquette de contexte, pas un relevé. ' + credits.join(' ; ') + '.',
         site: `Emprise de ${ZONE} m`, lon: CENTER[0], lat: CENTER[1], origine,
+        ancrage: ancrageExport,
         nordVrai: [(nx - lx) / nord, (ny - ly) / nord],
         // Le CRS écrit dans le fichier est celui des coordonnées, pas un autre :
         // un CityGML qui dit EPSG:2154 en portant des mètres UTM se replace
@@ -10319,8 +10358,11 @@ for (const [cle, id] of COUCHES_EXPORT) {
 }
 const FORMATS_EXPORT = {
     ifc: { nom: 'IFC', ecrire: ecrireIfc, extension: 'ifc', type: 'application/x-step',
-           reperes: m => `${m.crs.description} (${m.crs.nom}), origine en ${m.origine.x} E, `
-               + `${m.origine.y} N, ${m.origine.z} m.` },
+           reperes: m => `${m.crs.description} (${m.crs.nom}), `
+               + (m.ancrage === 'site'
+                   ? `site posé en ${m.origine.x} E, ${m.origine.y} N, ${m.origine.z} m, `
+                     + 'géométrie locale au site.'
+                   : `origine en ${m.origine.x} E, ${m.origine.y} N, ${m.origine.z} m.`) },
     citygml: { nom: 'CityGML', ecrire: ecrireCityGml, extension: 'gml', type: 'application/gml+xml',
                reperes: m => `${m.crs.description} (${m.crs.nom})`
                    + (m.crs.epsgVertical ? ` et ${m.crs.datumVertical}` : '')
@@ -10345,6 +10387,14 @@ choixProjection.addEventListener('change', () => {
     choixProjection.title = `${projectionExport.description} (EPSG:${projectionExport.epsg})`;
 });
 choixProjection.title = `${projectionExport.description} (EPSG:${projectionExport.epsg})`;
+
+// L'ancrage du site dans l'IFC : à l'origine du fichier (IfcMapConversion,
+// convention de Revit et d'ArchiCAD), ou posé à ses coordonnées (ce que lisent
+// Trimble Connect et les visionneuses qui ignorent IfcMapConversion). Le
+// CityGML, lui, écrit toujours en coordonnées absolues.
+const choixAncrage = document.getElementById('export-ancrage');
+let ancrageExport = choixAncrage.value;
+choixAncrage.addEventListener('change', () => { ancrageExport = choixAncrage.value; });
 
 /** La même note au panneau et dans la fenêtre : l'une se lit sans l'autre. */
 function noterExport(texte) {
@@ -10402,6 +10452,9 @@ for (const b of boutonsFormat) {
             x.classList.toggle('on', x === b);
             x.setAttribute('aria-checked', String(x === b));
         }
+        // Le CityGML écrit toujours des coordonnées absolues : l'ancrage ne
+        // vaut que pour l'IFC, et le taire vaut mieux que le laisser mentir.
+        choixAncrage.disabled = formatExport !== 'ifc';
     });
 }
 

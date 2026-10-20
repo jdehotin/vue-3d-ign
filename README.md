@@ -474,7 +474,14 @@ Pour l'un comme pour l'autre :
   corrigé. L'IFC rapporte ses coordonnées à une origine entière au point visé
   (IfcMapConversion), dans le CRS qu'il déclare, et renseigne le nord vrai
   pour les études d'ensoleillement — il dépend de la projection ; le CityGML
-  les écrit en absolu. L'altitude NGF ne se compose qu'avec RGF93
+  les écrit en absolu. L'ancrage du site s'y choisit aussi : **origine locale**
+  (le défaut), que lisent Revit, ArchiCAD et Bonsai — la géométrie reste près
+  de zéro, la conversion dit où elle se trouve —, ou **coordonnées absolues**,
+  que lisent Trimble Connect et les visionneuses qui ignorent
+  `IfcMapConversion` : le site y est posé à ses coordonnées, la géométrie
+  restant locale au site, donc à 600 km de l'origine du fichier. Le décalage
+  n'est jamais porté deux fois, et `outils/valider_ifc.py` le vérifie. L'altitude
+  NGF ne se compose qu'avec RGF93
   (EPSG:5720, 5721 en Corse) : en UTM, elle est écrite sans être déclarée, et
   la note du fichier le dit.
 - Un contexte à consulter et à couper, pas des murs ni des dalles à

@@ -43,6 +43,32 @@ def valider(chemin):
               f"origine {c.Eastings:.0f} E, {c.Northings:.0f} N, {c.OrthogonalHeight:.0f} m")
         if not c.TargetCRS.Name.startswith("EPSG:"):
             erreurs.append(f"système {c.TargetCRS.Name}, un code EPSG attendu")
+    # L'ancrage : le site à l'origine, que l'IfcMapConversion situe (Revit,
+    # ArchiCAD, Bonsai), ou le site posé à ses coordonnées et une conversion
+    # nulle (Trimble Connect et les visionneuses qui ignorent IfcMapConversion).
+    # Le décalage ne doit jamais être porté deux fois — le modèle partirait à
+    # 1 200 km —, ni par personne — il reviendrait à zéro.
+    sites = modele.by_type("IfcSite")
+    if not sites:
+        erreurs.append("aucun IfcSite")
+    elif conversions:
+        site, c = sites[0], conversions[0]
+        pose = [0.0, 0.0, 0.0]
+        if site.ObjectPlacement and site.ObjectPlacement.is_a("IfcLocalPlacement"):
+            point = site.ObjectPlacement.RelativePlacement.Location
+            if point and point.Coordinates:
+                pose = [float(v) for v in point.Coordinates]
+        sur_site = any(abs(v) > 1e-6 for v in pose)
+        conversion = any(abs(v) > 1e-6 for v in (c.Eastings, c.Northings, c.OrthogonalHeight))
+        print(f"site : {site.Name}, placement {pose[0]:.0f} E, {pose[1]:.0f} N, "
+              f"{pose[2]:.0f} m, réf. {site.RefLatitude} / {site.RefLongitude} "
+              f"à {site.RefElevation:.0f} m — "
+              + ("ancrage absolu (le site porte le décalage)" if sur_site else "origine locale"))
+        if sur_site and conversion:
+            erreurs.append("géoréférencement : le site et l'IfcMapConversion portent tous "
+                           "deux le décalage")
+        if not sur_site and not conversion:
+            erreurs.append("géoréférencement : ni le site ni l'IfcMapConversion ne situe le modèle")
     contexte = modele.by_type("IfcGeometricRepresentationContext")[0]
     if contexte.TrueNorth:
         x, y = contexte.TrueNorth.DirectionRatios

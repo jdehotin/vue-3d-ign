@@ -84,6 +84,10 @@ const verifier = (ok, message) => {
   console.log(`${ok ? 'ok  ' : 'ÉCHEC'} ${message}`);
 };
 
+// Repère d'écriture des essais : les fonctions de maillage reçoivent un
+// `versIfc`, comme dans la page, et celui-ci laisse les coordonnées en place.
+const IFC = (x, y, z) => [x, y, z];
+
 // --- Projections ---------------------------------------------------------------
 // (lieu, lon, lat, x, y) : pyproj 3.8 (EPSG:4326 -> EPSG, toujours_xy). Les six
 // premiers points sont ceux de tests/test_nuage.py ; les suivants couvrent la
@@ -294,7 +298,7 @@ function volume({ points: P, faces: F }) {
   // un tube de 20 cm, la même suite de couples de points que les LineSegments
   // de la page.
   const portee = (y, z) => [0, y, z, 10, y, z];
-  const f = facettesIfc(tubeCable([...portee(30, -5), ...portee(30, 0), ...portee(30, 5)], 0.2));
+  const f = facettesIfc(tubeCable([...portee(30, -5), ...portee(30, 0), ...portee(30, 5)], 0.2, IFC));
   const ecart = k => Math.max(...Array.from({ length: f.points.length / 3 }, (_, i) => Math.abs(f.points[3 * i + k])));
   verifier(f.points.length === 72 && f.faces.length === 72 && !f.ferme,
            `tube de câble : ${f.points.length / 3} sommets, ${f.faces.length / 3} triangles, ouvert aux deux bouts`);
@@ -302,9 +306,17 @@ function volume({ points: P, faces: F }) {
            `tube de câble : 10 m de long, 20 cm de rayon, trois phases à ±5 m`);
   // Un segment nul ne donne rien, un segment vertical sort des coordonnées
   // finies (le repère du pan ne s'y déduit pas de l'horizontale).
-  verifier(!facettesIfc(tubeCable([1, 2, 3, 1, 2, 3], 0.2)).faces.length, 'tube de câble : segment nul ignoré');
-  const vertical = tubeCable([0, 0, 0, 0, 10, 0], 0.2);
+  verifier(!facettesIfc(tubeCable([1, 2, 3, 1, 2, 3], 0.2, IFC)).faces.length, 'tube de câble : segment nul ignoré');
+  const vertical = tubeCable([0, 0, 0, 0, 10, 0], 0.2, IFC);
   verifier(vertical.length === 72 && vertical.every(Number.isFinite), 'tube de câble vertical : coordonnées finies');
+  // Le tube sort dans le repère qu'on lui passe, comme les autres maillages :
+  // sans `versIfc`, le sud de la scène partait à l'altitude et le câble
+  // traversait le modèle à 7 km — l'IFC semblait vide dans un lecteur.
+  const transpose = tubeCable([0, 0, 0, 0, 10, 0], 0.2, (x, y, z) => [x + 1000, z - 7, y]);
+  verifier(transpose.length === 72
+           && transpose.filter((_, i) => i % 3 === 0).every(v => Math.abs(v - 1000) < 0.21)
+           && transpose.filter((_, i) => i % 3 === 1).every(v => Math.abs(v + 7) < 0.21),
+           'tube de câble : le repère d’écriture est appliqué (le sud ne part pas en altitude)');
 }
 
 // --- Polygones plans (CityGML) -----------------------------------------------------
@@ -507,7 +519,7 @@ const classerMurs = nz => nz < -0.5 ? 'GroundSurface' : nz <= 0.5 ? 'WallSurface
         description: 'Trois phases sur 4 support(s), flèche de 3 % de la portée (convention)',
         proprietes: { nom: 'VueIGN_LigneHT', valeurs: [['Tension', 'IFCLABEL', '225 kV'],
                                                        ['NombreDeSupports', 'IFCINTEGER', 4]] },
-        maillages: [{ style: 'cable', facettes: facettesIfc(tubeCable([-20, 30, -5, 20, 28, -5], 0.2)) }] },
+        maillages: [{ style: 'cable', facettes: facettesIfc(tubeCable([-20, 30, -5, 20, 28, -5], 0.2, IFC)) }] },
       { cle: 'terrain', genre: 'terrain', nom: 'Terrain naturel',
         proprietes: { nom: 'VueIGN_Terrain', valeurs: [['Source', 'IFCLABEL', 'RGE ALTI (IGN)']] },
         maillages: [{ style: 'terrain', facettes: terrain }] },
@@ -543,6 +555,18 @@ const classerMurs = nz => nz < -0.5 ? 'GroundSurface' : nz <= 0.5 ? 'WallSurface
   verifier(/IFCPROJECTEDCRS\('EPSG:32631','WGS 84 \/ UTM 31N','WGS 84',\$,'Transverse Mercator',\$,#\d+\)/.test(texteUtm)
            && /IFCMAPCONVERSION\(#\d+,#\d+,876729\.000,6314973\.000,312\.000,1\.,0\.,\$\)/.test(texteUtm),
            'IFC : autre projection déclarée (EPSG:32631) et conversion depuis son origine');
+  // L'ancrage : en origine locale, le site reste à zéro et porte les
+  // coordonnées par l'IfcMapConversion seule ; en absolu, il est posé à ses
+  // coordonnées et la conversion part de zéro. Le décalage n'est jamais porté
+  // deux fois — c'est ce que vérifie aussi outils/valider_ifc.py.
+  verifier(!/IFCCARTESIANPOINT\(\(876729/.test(texte),
+           'IFC : ancrage local — le site reste à l’origine, aucune coordonnée absolue dans le fichier');
+  const texteSite = ecrireIfc({ ...modele, ancrage: 'site' });
+  verifier(texteSite.includes('IFCCARTESIANPOINT((876729.000,6314973.000,312.000))')
+           && /IFCLOCALPLACEMENT\(\$,#\d+\)/.test(texteSite)
+           && /IFCMAPCONVERSION\(#\d+,#\d+,0\.000,0\.000,0\.000,1\.,0\.,\$\)/.test(texteSite)
+           && /IFCSITE\([^;]*,#\d+,\$,\$,\.ELEMENT\.,\(43,54,41,760000\),\(5,12,1,80000\),312\.000,\$,\$\)/.test(texteSite),
+           'IFC : ancrage absolu — site posé à ses coordonnées, conversion à zéro, réf. géographique inchangée');
   if (process.argv[2]) {
     fs.writeFileSync(process.argv[2], texte);
     console.log(`écrit : ${process.argv[2]} (${texte.length} octets)`);

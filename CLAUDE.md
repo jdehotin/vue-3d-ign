@@ -129,6 +129,15 @@ l'étage `export` du Dockerfile.
   Les projections sont vérifiées contre pyproj par `outils/verifier-export.mjs`,
   au dixième de millimètre ; la série de l'UTM est celle de Krüger à l'ordre 6,
   pas celle de Snyder, qui perd 77 cm à 13° du méridien.
+- **Le décalage du site est porté une fois, par le site ou par la conversion.**
+  L'ancrage se choisit à l'export (`#export-ancrage`) : `origine` laisse le
+  site à zéro et met les coordonnées dans `IFCMAPCONVERSION` — Revit, ArchiCAD,
+  Bonsai ; `site` pose le site à ses coordonnées et met la conversion à zéro —
+  ce que lisent Trimble Connect et les visionneuses qui ignorent la conversion,
+  le « IfcSite coordinate system » de Tekla. Dans les deux cas la géométrie
+  reste rapportée à `origine`, et les éléments placés à l'identité dans le
+  site. `outils/valider_ifc.py` refuse un décalage porté deux fois comme un
+  décalage porté nulle part.
 - **La géométrie d'un houppier ne doit jamais se retourner** : rayon croissant
   avec la couronne, hauteur décroissante du sommet au bord, dessous qui remonte
   vers le tronc, lobage partagé par tous les anneaux. Un défaut ici passe
