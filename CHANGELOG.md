@@ -15,6 +15,26 @@ messages de commit et dans les commentaires des modules.
 
 ### Ajouté
 
+- **La projection de l'export se choisit.** La fenêtre d'export gagne un
+  sélecteur de projection, sous le format : Lambert-93 (EPSG:2154, le défaut,
+  celui de la BD TOPO et de la vue), les neuf coniques conformes CC42 à CC50
+  (EPSG:3942 à 3950, les zones des grands projets), l'UTM 30N, 31N ou 32N
+  (EPSG:32630 à 32632) et le Web Mercator (EPSG:3857). Toutes sont projetées
+  et en mètres : un IFC 4 ne sait déclarer qu'un CRS projeté, et un CityGML
+  en degrés se relit mal dans les outils de SIG. Le fichier déclare le CRS de
+  ses coordonnées, pas un autre — `IFCPROJECTEDCRS` et `IFCMAPCONVERSION` de
+  l'IFC, `srsName` du CityGML —, et le nord vrai, qui dépend de la projection,
+  se calcule dans celle qui est écrite. L'altitude NGF ne se compose qu'avec
+  RGF93 : en UTM, elle est écrite sans être déclarée, et la note le dit.
+  - Les conversions sont dans la page — conique conforme pour Lambert-93 et
+    les CC, série de Krüger à l'ordre 6 pour l'UTM, Mercator sphérique — et
+    vérifiées contre pyproj 3.8 : 0,07 mm au pire, sur 7 systèmes et 39
+    points, dont Brest à 13° du méridien de la zone 32 et Gordes à 8° de
+    celui de la 30, où la série de Snyder s'égare de 77 cm.
+  - Vérifié sur des exports réels de la scène de Mantes-la-Jolie : un IFC en
+    UTM 31N (origine 405 153 E, 5 427 123 N) passe `outils/valider_ifc.py`
+    sans erreur, un CityGML en CC45 (`urn:ogc:def:crs,crs:EPSG::3945,
+    crs:EPSG::5720`) passe `outils/valider_citygml.py`.
 - **Une zone de forme libre, dessinée au sol.** **✎ Dessiner une zone**, au
   panneau — ou l'entrée « Dessiner un contour… » du sélecteur **Zone** — entre
   en tracé : chaque clic au sol pose un sommet, l'aperçu est drapé sur le

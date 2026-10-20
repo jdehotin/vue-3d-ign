@@ -119,6 +119,16 @@ l'étage `export` du Dockerfile.
   carré : deux contours différents ne partagent pas une scène. La page et le
   serveur arrondissent les sommets à six décimales et les écrivent dans le même
   ordre, sans quoi l'URL et la clé du cache divergeraient.
+- **Le CRS écrit est celui des coordonnées, jamais un autre.** Une projection
+  choisie à l'export (`PROJECTIONS`, dans la page) change les coordonnées, le
+  `srsName` du CityGML, l'`IFCPROJECTEDCRS` et l'`IFCMAPCONVERSION` de l'IFC et
+  le nord vrai — pas seulement l'en-tête. Un CityGML qui dit EPSG:2154 en
+  portant des mètres UTM se replace ailleurs, et une conversion qui ment
+  déplace tout le projet chez le lecteur. L'altitude NGF ne se compose qu'avec
+  RGF93 (EPSG:5720, 5721 en Corse) : ailleurs elle s'écrit sans être déclarée.
+  Les projections sont vérifiées contre pyproj par `outils/verifier-export.mjs`,
+  au dixième de millimètre ; la série de l'UTM est celle de Krüger à l'ordre 6,
+  pas celle de Snyder, qui perd 77 cm à 13° du méridien.
 - **La géométrie d'un houppier ne doit jamais se retourner** : rayon croissant
   avec la couronne, hauteur décroissante du sommet au bord, dessous qui remonte
   vers le tronc, lobage partagé par tous les anneaux. Un défaut ici passe

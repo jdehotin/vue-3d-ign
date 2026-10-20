@@ -201,7 +201,9 @@ def valider(chemin):
         erreurs.append("pas d'enveloppe")
     elif any(mini[k] < bornes[0][k] - 1e-6 or maxi[k] > bornes[1][k] + 1e-6 for k in range(3)):
         erreurs.append(f"coordonnées hors de l'enveloppe : {mini} à {maxi}")
-    if not srs or "EPSG::2154" not in srs:
+    # Le système est celui que l'export a déclaré (Lambert-93 par défaut, CC ou
+    # UTM au choix) : il doit être un EPSG, et c'est celui du fichier.
+    if not srs or not srs.startswith("urn:ogc:def:crs") or "EPSG::" not in srs:
         erreurs.append(f"système de coordonnées inattendu : {srs}")
     print(f"système : {srs}")
     print(f"objets : {dict(objets)}")

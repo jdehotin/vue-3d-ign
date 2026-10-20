@@ -494,10 +494,10 @@
             <div class="note" id="note-export">
                 IFC pour la conception (Revit, ArchiCAD…), CityGML pour les SIG.
                 Les bâtiments tels qu'affichés (toits en pente, mesurés, monuments
-                OSM), à l'échelle, en Lambert-93 et altitudes NGF. Une maquette de
-                contexte, pas un relevé. Les deux liens écrivent d'un coup ;
-                « Couches et dossier… » laisse cocher les couches et choisir
-                l'emplacement du fichier.
+                OSM), à l'échelle, en Lambert-93 et altitudes NGF par défaut. Une
+                maquette de contexte, pas un relevé. Les deux liens écrivent d'un
+                coup ; « Couches et dossier… » laisse cocher les couches, choisir
+                la projection et l'emplacement du fichier.
             </div>
         </div>
 
@@ -723,6 +723,12 @@
                         <button type="button" role="radio" aria-checked="false"
                                 data-export-format="citygml">CityGML 2.0 <span>· SIG</span></button>
                     </div>
+                    <div class="sous-titre">Projection</div>
+                    <label class="zone" title="Le repère des coordonnées écrites, et celui que le fichier
+déclare. Lambert-93 est celui de la BD TOPO et de la vue ; les CC servent aux grands
+projets français, l'UTM et le Web Mercator aux outils de SIG.">
+                        <select id="export-projection"></select>
+                    </label>
                     <div class="note" id="export-note">Un à quelques Mo, écrit par le
                         navigateur en une à deux secondes.</div>
                 </div>
@@ -9052,29 +9058,129 @@ btnVeg.addEventListener('click', async () => {
 //
 // IFC 4 (ADD2 TC1), vue de référence : des maillages triangulés
 // (IfcTriangulatedFaceSet), que les logiciels importent tels quels. Les
-// coordonnées sont en Lambert-93, rapportées à une origine entière au point
-// visé (IfcMapConversion) : les logiciels de conception perdent en précision
-// loin de leur origine, et Revit refuse la géométrie au-delà de 32 km. Les
-// longueurs sont celles de la carte, sans facteur d'échelle : l'altération
-// linéaire de Lambert-93 vaut +0,07 mm/m à Gordes, −0,95 vers 46,5° N, +2,2 à
-// Dunkerque et Ajaccio. Des longueurs vraies demanderaient un facteur
-// (Scale) que tous les logiciels ne lisent pas, et qui déplacerait chez eux
-// les objets d'autant plus qu'ils sont loin du centre. Le nord vrai est donné
-// (TrueNorth) : la convergence des méridiens vaut −1,6° à Gordes, +5,4° à
-// Brest, et une étude d'ensoleillement en dépend.
+// coordonnées sont dans la projection choisie (Lambert-93 par défaut),
+// rapportées à une origine entière au point visé (IfcMapConversion) : les
+// logiciels de conception perdent en précision loin de leur origine, et Revit
+// refuse la géométrie au-delà de 32 km. Les longueurs sont celles de la carte,
+// sans facteur d'échelle : l'altération linéaire de Lambert-93 vaut +0,07 mm/m
+// à Gordes, −0,95 vers 46,5° N, +2,2 à Dunkerque et Ajaccio. Des longueurs
+// vraies demanderaient un facteur (Scale) que tous les logiciels ne lisent
+// pas, et qui déplacerait chez eux les objets d'autant plus qu'ils sont loin
+// du centre. Le nord vrai est donné (TrueNorth) : la convergence des méridiens
+// vaut −1,6° à Gordes, +5,4° à Brest, et une étude d'ensoleillement en dépend.
+// Elle dépend de la projection, et se calcule donc dans la projection écrite.
 
-// Lambert-93 (RGF93, ellipsoïde GRS80), constantes de l'IGN (ALG0019), comme
-// vue3d/nuage.py : au millimètre de pyproj (outils/verifier-export.mjs).
-const L93 = { e: 0.0818191910428158, n: 0.7256077650532670, c: 11754255.426096,
-              xs: 700000, ys: 12655612.049876, lon0: 3 * Math.PI / 180 };
+// --- Projections de l'export ------------------------------------------------
+// La BD TOPO est en Lambert-93 (RGF93, ellipsoïde GRS80) : c'est le repère de
+// la vue, et le défaut de l'export. La fenêtre d'export laisse en choisir un
+// autre, car le logiciel qui reçoit le fichier travaille souvent dans le sien :
+// les coniques conformes CC42…CC50 (les neuf zones officielles des grands
+// projets français), l'UTM de la zone du lieu, ou le Web Mercator des tuiles.
+//
+// Toutes sont projetées et en mètres : un IFC 4 ne sait déclarer qu'un CRS
+// projeté (IFCPROJECTEDCRS), et un CityGML en degrés se relit mal dans les
+// outils de SIG. Chaque projection est vérifiée au millimètre contre pyproj
+// (outils/verifier-export.mjs), qui donne aussi les constantes des CC.
+const GRS80 = { a: 6378137, e: 0.0818191910428158 };
+const WGS84 = { a: 6378137, e: 0.0818191908426215 };
 
-/** [x, y] Lambert-93 d'une longitude et d'une latitude en degrés. */
-function versLambert93(lon, lat) {
-    const phi = lat * Math.PI / 180, s = Math.sin(phi);
-    const iso = Math.log(Math.tan(Math.PI / 4 + phi / 2) * ((1 - L93.e * s) / (1 + L93.e * s)) ** (L93.e / 2));
-    const r = L93.c * Math.exp(-L93.n * iso), g = L93.n * (lon * Math.PI / 180 - L93.lon0);
-    return [L93.xs + r * Math.sin(g), L93.ys - r * Math.cos(g)];
+/**
+ * [x, y] d'une conique conforme (Lambert) sur un ellipsoïde donné. Lambert-93
+ * et les CC42…CC50 n'en diffèrent que par leurs parallèles, leur méridien et
+ * leur fausse origine.
+ *
+ * Args:
+ *   ellipsoide: { a, e } — demi-grand axe et excentricité.
+ *   lat0, lat1, lat2: latitude d'origine et parallèles standard, en degrés.
+ *   lon0: méridien central, en degrés.
+ *   fauxX, fauxY: fausse origine, en mètres (elle déplace, elle ne déforme pas).
+ */
+function coniqueConforme(lon, lat, { ellipsoide, lat0, lat1, lat2, lon0, fauxX, fauxY }) {
+    const rad = degres => degres * Math.PI / 180;
+    const { a, e } = ellipsoide;
+    const m = phi => Math.cos(phi) / Math.sqrt(1 - e * e * Math.sin(phi) ** 2);
+    const t = phi => Math.tan(Math.PI / 4 - phi / 2)
+        / ((1 - e * Math.sin(phi)) / (1 + e * Math.sin(phi))) ** (e / 2);
+    const [p0, p1, p2] = [lat0, lat1, lat2].map(rad);
+    const n = Math.log(m(p1) / m(p2)) / Math.log(t(p1) / t(p2));
+    const f = m(p1) / (n * t(p1) ** n);
+    const rayon = phi => a * f * t(phi) ** n;
+    const g = n * (rad(lon) - rad(lon0)), r = rayon(rad(lat));
+    return [fauxX + r * Math.sin(g), fauxY + rayon(p0) - r * Math.cos(g)];
 }
+
+/** [x, y] Lambert-93 d'une longitude et d'une latitude en degrés (IGN ALG0019). */
+function versLambert93(lon, lat) {
+    return coniqueConforme(lon, lat, { ellipsoide: GRS80, lat0: 46.5, lat1: 44, lat2: 49,
+                                       lon0: 3, fauxX: 700000, fauxY: 6600000 });
+}
+
+/**
+ * [x, y] UTM d'une longitude et d'une latitude en degrés, zone 30 à 32 sur la
+ * France métropolitaine (hémisphère nord, comme EPSG:32630 à 32632).
+ *
+ * Série de Krüger à l'ordre 6 (Karney, 2011, « Transverse Mercator with an
+ * accuracy of a few nanometers ») : 0,07 mm de pyproj au pire des points de
+ * contrôle, y compris à 13° du méridien central — Brest dans la zone 32 —, là
+ * où la série de Snyder qu'on écrit d'ordinaire s'égare déjà de 77 cm.
+ */
+function versUtm(lon, lat, zone) {
+    const { a, e } = WGS84;
+    const f = 1 / 298.257223563, n = f / (2 - f);
+    const [n2, n3, n4, n5, n6] = [n * n, n ** 3, n ** 4, n ** 5, n ** 6];
+    const grandA = a / (1 + n) * (1 + n2 / 4 + n4 / 64 + n6 / 256);
+    const alpha = [
+        n / 2 - 2 * n2 / 3 + 5 * n3 / 16 + 41 * n4 / 180 - 127 * n5 / 288 + 7891 * n6 / 37800,
+        13 * n2 / 48 - 3 * n3 / 5 + 557 * n4 / 1440 + 281 * n5 / 630 - 1983433 * n6 / 1935360,
+        61 * n3 / 240 - 103 * n4 / 140 + 15061 * n5 / 26880 + 167603 * n6 / 181440,
+        49561 * n4 / 161280 - 179 * n5 / 168 + 6601661 * n6 / 7257600,
+        34729 * n5 / 80640 - 3418889 * n6 / 1995840,
+        212378941 * n6 / 319334400,
+    ];
+    const phi = lat * Math.PI / 180, lam = (lon - (zone * 6 - 183)) * Math.PI / 180;
+    // Latitude conforme : l'excentrique, puis le retour sur l'ellipsoïde.
+    const tau = Math.tan(phi);
+    const sigma = Math.sinh(e * Math.atanh(e * tau / Math.sqrt(1 + tau * tau)));
+    const taup = tau * Math.sqrt(1 + sigma * sigma) - sigma * Math.sqrt(1 + tau * tau);
+    const xip = Math.atan2(taup, Math.cos(lam));
+    const etap = Math.asinh(Math.sin(lam) / Math.sqrt(taup * taup + Math.cos(lam) ** 2));
+    let xi = xip, eta = etap;
+    for (let j = 1; j <= 6; j++) {
+        xi += alpha[j - 1] * Math.sin(2 * j * xip) * Math.cosh(2 * j * etap);
+        eta += alpha[j - 1] * Math.cos(2 * j * xip) * Math.sinh(2 * j * etap);
+    }
+    return [500000 + 0.9996 * grandA * eta, 0.9996 * grandA * xi];
+}
+
+/** [x, y] Web Mercator (EPSG:3857) : la sphère de 6 378 137 m des tuiles web. */
+function versMercator(lon, lat) {
+    return [WGS84.a * lon * Math.PI / 180,
+            WGS84.a * Math.log(Math.tan(Math.PI / 4 + lat * Math.PI / 360))];
+}
+
+/** Les projections proposées à l'export, dans l'ordre du sélecteur. */
+const PROJECTIONS = [
+    { epsg: 2154, libelle: 'Lambert-93 · France entière',
+      description: 'RGF93 v1 / Lambert-93', datum: 'RGF93 v1',
+      projection: 'Lambert conique conforme', vers: versLambert93 },
+    ...[42, 43, 44, 45, 46, 47, 48, 49, 50].map(lat0 => ({
+        // CC42 → EPSG:3942, CC50 → EPSG:3950 : parallèles à ±0,75°, et une
+        // fausse origine qui monte d'un million de mètres par zone.
+        epsg: 3900 + lat0, libelle: `CC${lat0} · conique conforme`,
+        description: `RGF93 v1 / CC${lat0}`, datum: 'RGF93 v1',
+        projection: 'Lambert conique conforme',
+        vers: (lon, lat) => coniqueConforme(lon, lat, { ellipsoide: GRS80, lat0, lat1: lat0 - 0.75,
+            lat2: lat0 + 0.75, lon0: 3, fauxX: 1700000, fauxY: 1200000 + (lat0 - 42) * 1e6 }),
+    })),
+    { epsg: 32630, libelle: 'UTM 30N · 6° O à 0°', description: 'WGS 84 / UTM 30N',
+      datum: 'WGS 84', projection: 'Transverse Mercator', vers: (lon, lat) => versUtm(lon, lat, 30) },
+    { epsg: 32631, libelle: 'UTM 31N · 0° à 6° E', description: 'WGS 84 / UTM 31N',
+      datum: 'WGS 84', projection: 'Transverse Mercator', vers: (lon, lat) => versUtm(lon, lat, 31) },
+    { epsg: 32632, libelle: 'UTM 32N · 6° à 12° E', description: 'WGS 84 / UTM 32N',
+      datum: 'WGS 84', projection: 'Transverse Mercator', vers: (lon, lat) => versUtm(lon, lat, 32) },
+    { epsg: 3857, libelle: 'Web Mercator · tuiles web', description: 'WGS 84 / Pseudo-Mercator',
+      datum: 'WGS 84', projection: 'Mercator sphérique', vers: versMercator },
+];
 
 const ALPHABET_IFC = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_$';
 
@@ -9261,9 +9367,11 @@ const ENTITES_IFC = {
 /**
  * Fichier IFC 4 d'un modèle (modeleExport), en texte ISO 10303-21. Le modèle :
  *   { base, horodatage, cle, nom, description, site, lon, lat,
- *     origine: { x, y, z }   en Lambert-93 et en altitude, l'origine du fichier,
+ *     origine: { x, y, z }   dans la projection du CRS, et en altitude,
+ *                            l'origine du fichier,
  *     nordVrai: [x, y]       le nord vrai dans ce repère,
- *     crs: { nom, description, datum, datumVertical, projection, epsgVertical },
+ *     crs: { nom, epsg, description, datum, datumVertical, projection,
+ *            epsgVertical },
  *     styles: { nom: [r, v, b] },
  *     elements: [{ cle, genre, nom, description, tag,
  *                  proprietes: { nom, valeurs: [[nom, type IFC, valeur]] },
@@ -9358,8 +9466,9 @@ function ecrireIfc(m) {
 // urbaines (FME, 3DCityDB, FZKViewer) : bâtiments en LOD2 — surfaces de toit,
 // de mur et de sol —, arbres en objets de végétation, masses en objets
 // génériques, relief en TIN. CityGML 2.0 plutôt que 3.0 : c'est celui que ces
-// logiciels lisent tous. Coordonnées absolues en Lambert-93, altitudes NGF,
-// au millimètre ; le système est dit une fois, sur l'enveloppe du modèle.
+// logiciels lisent tous. Coordonnées absolues dans la projection choisie
+// (Lambert-93 par défaut), altitudes NGF, au millimètre ; le système est dit
+// une fois, sur l'enveloppe du modèle.
 // Les volumes sont ceux de l'IFC, pied compris : enfoncé de 0,5 m sous le
 // point le plus bas du terrain, le TIN, plus grossier, ne le laisse pas
 // flotter.
@@ -9668,8 +9777,8 @@ function ecrireCityGml(m) {
             }
         }
     }
-    const srs = m.crs.epsgVertical ? `urn:ogc:def:crs,crs:EPSG::2154,crs:EPSG::${m.crs.epsgVertical}`
-                                   : 'urn:ogc:def:crs:EPSG::2154';
+    const srs = m.crs.epsgVertical ? `urn:ogc:def:crs,crs:EPSG::${m.crs.epsg},crs:EPSG::${m.crs.epsgVertical}`
+                                   : `urn:ogc:def:crs:EPSG::${m.crs.epsg}`;
     const coin = c => c.map((v, k) => ((Number.isFinite(v) ? v : 0) + [O.x, O.y, O.z][k]).toFixed(3)).join(' ');
     return [`<?xml version="1.0" encoding="UTF-8"?>\n<core:CityModel ${ESPACES_CITYGML}>\n`
             + `<gml:description>${texteXml(m.description)}</gml:description><gml:name>${texteXml(m.nom)}</gml:name>\n`
@@ -9886,13 +9995,14 @@ function elementLigne(l, facettes) {
 }
 
 function modeleExport(options) {
-    const [lx, ly] = versLambert93(CENTER[0], CENTER[1]);
+    const proj = projectionExport;
+    const [lx, ly] = proj.vers(CENTER[0], CENTER[1]);
     const origine = { x: Math.round(lx), y: Math.round(ly), z: Math.round(altitudeRef) };
-    const [nx, ny] = versLambert93(CENTER[0], CENTER[1] + 1e-4);
+    const [nx, ny] = proj.vers(CENTER[0], CENTER[1] + 1e-4);
     const nord = Math.hypot(nx - lx, ny - ly);
     // Scène, exagération 1 : x vers l'est, y l'altitude moins altitudeRef, z vers le sud.
     const versIfc = (x, y, z) => {
-        const [e, n] = versLambert93(...toLonLat(x, -z));
+        const [e, n] = proj.vers(...toLonLat(x, -z));
         return [e - origine.x, n - origine.y, y + altitudeRef - origine.z];
     };
     const elements = [];
@@ -10161,8 +10271,16 @@ function modeleExport(options) {
         description: 'Maquette de contexte, pas un relevé. ' + credits.join(' ; ') + '.',
         site: `Emprise de ${ZONE} m`, lon: CENTER[0], lat: CENTER[1], origine,
         nordVrai: [(nx - lx) / nord, (ny - ly) / nord],
-        crs: { nom: 'EPSG:2154', description: 'RGF93 v1 / Lambert-93' + (datumVertical ? `, altitudes ${datumVertical}` : ''),
-               datum: 'RGF93 v1', datumVertical, epsgVertical, projection: 'Lambert conique conforme' },
+        // Le CRS écrit dans le fichier est celui des coordonnées, pas un autre :
+        // un CityGML qui dit EPSG:2154 en portant des mètres UTM se replace
+        // ailleurs, et l'IFCMAPCONVERSION d'un IFC déplacerait tout le projet.
+        // L'altitude NGF n'a de sens qu'avec RGF93 : EPSG:5720/5721 sont des
+        // CRS composés RGF93, pas WGS 84 — en UTM ou en Mercator, elle est
+        // donnée sans le déclarer.
+        crs: { nom: `EPSG:${proj.epsg}`, epsg: proj.epsg, description: proj.description,
+               datum: proj.datum, projection: proj.projection,
+               datumVertical: proj.datum === 'RGF93 v1' ? datumVertical : null,
+               epsgVertical: proj.datum === 'RGF93 v1' ? epsgVertical : null },
         styles: STYLES_IFC, elements, compte,
     };
 }
@@ -10188,13 +10306,32 @@ for (const [cle, id] of COUCHES_EXPORT) {
 }
 const FORMATS_EXPORT = {
     ifc: { nom: 'IFC', ecrire: ecrireIfc, extension: 'ifc', type: 'application/x-step',
-           reperes: m => `Lambert-93, origine en ${m.origine.x} E, ${m.origine.y} N, ${m.origine.z} m.` },
+           reperes: m => `${m.crs.description} (${m.crs.nom}), origine en ${m.origine.x} E, `
+               + `${m.origine.y} N, ${m.origine.z} m.` },
     citygml: { nom: 'CityGML', ecrire: ecrireCityGml, extension: 'gml', type: 'application/gml+xml',
-               reperes: m => `Lambert-93${m.crs.datumVertical ? ` et ${m.crs.datumVertical}` : ''}, coordonnées absolues.` },
+               reperes: m => `${m.crs.description} (${m.crs.nom})`
+                   + (m.crs.epsgVertical ? ` et ${m.crs.datumVertical}` : '')
+                   + ', coordonnées absolues'
+                   + (m.crs.datumVertical && !m.crs.epsgVertical
+                       ? `, altitudes ${m.crs.datumVertical} non déclarées dans le système` : '') + '.' },
 };
 const noteExport = document.getElementById('note-export');
 const noteExportFenetre = document.getElementById('export-note');
 const boutonsExport = [...document.querySelectorAll('[data-format]')];
+
+// La projection des coordonnées écrites, celle que le fichier déclare : le
+// choix se fait dans la fenêtre, et vaut pour les deux formats. Lambert-93 par
+// défaut — c'est le repère de la BD TOPO, et celui de la vue.
+const choixProjection = document.getElementById('export-projection');
+for (const p of PROJECTIONS) {
+    choixProjection.add(new Option(`${p.libelle} (EPSG:${p.epsg})`, String(p.epsg)));
+}
+let projectionExport = PROJECTIONS[0];
+choixProjection.addEventListener('change', () => {
+    projectionExport = PROJECTIONS.find(p => String(p.epsg) === choixProjection.value) || PROJECTIONS[0];
+    choixProjection.title = `${projectionExport.description} (EPSG:${projectionExport.epsg})`;
+});
+choixProjection.title = `${projectionExport.description} (EPSG:${projectionExport.epsg})`;
 
 /** La même note au panneau et dans la fenêtre : l'une se lit sans l'autre. */
 function noterExport(texte) {

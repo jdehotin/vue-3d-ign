@@ -6,8 +6,11 @@
 //   node outils/verifier-export.mjs [essai.ifc [essai.gml]]
 //
 // Les contrôles :
-// - Lambert-93 (versLambert93) : au millimètre des coordonnées de pyproj,
-//   les mêmes points que tests/test_nuage.py ;
+// - projections (coniqueConforme, versLambert93, versUtm, versMercator) : les
+//   sept systèmes proposés à l'export — Lambert-93, CC42, CC50, UTM 30 à 32,
+//   Web Mercator — au dixième de millimètre des coordonnées de pyproj, sur les
+//   points de tests/test_nuage.py et sur Brest et Gordes, loin de leur
+//   méridien ; les neuf CC placent la France dans leur fuseau ;
 // - GlobalId (guidIfc) : 22 caractères de l'alphabet IFC, le premier de 0 à 3,
 //   stables, et sans collision sur 200 000 clés ;
 // - chaînes STEP (chaineIfc), angles en degrés, minutes, secondes (angleIfc) ;
@@ -62,13 +65,14 @@ function extraireConst(nom) {
     else if (src[j] === ';' && n === 0) return src.slice(i, j + 1);
   }
 }
-const NOMS = ['versLambert93', 'hachage128', 'guidIfc', 'idGml', 'chaineIfc', 'angleIfc', 'facettesIfc',
+const NOMS = ['coniqueConforme', 'versLambert93', 'versUtm', 'versMercator',
+              'hachage128', 'guidIfc', 'idGml', 'chaineIfc', 'angleIfc', 'facettesIfc',
               'trianglesRelief', 'trianglesTronc', 'tubeCable', 'ecrireIfc', 'alea', 'portDe', 'portMesure',
               'aUnTronc', 'gabaritTronc', 'gabaritHouppier', 'ajouterHouppierSimple', 'polygonesPlans',
               'contoursRegion', 'solsOuverts', 'ecrireCityGml'];
-const CONSTS = ['L93', 'ALPHABET_IFC', 'ENTITES_IFC', 'reelIfc', 'STYLES_IFC', 'PORTS', 'EMPRISE_HOUPPIER', 'ENFONCEMENT',
+const CONSTS = ['GRS80', 'WGS84', 'PROJECTIONS', 'ALPHABET_IFC', 'ENTITES_IFC', 'reelIfc', 'STYLES_IFC', 'PORTS', 'EMPRISE_HOUPPIER', 'ENFONCEMENT',
                 'HAUTEUR_MIN_TRONC', 'SEGMENTS_SIMPLE', 'PLAN_COS', 'PLAN_ECART_M', 'texteXml', 'ESPACES_CITYGML'];
-const { versLambert93, guidIfc, idGml, chaineIfc, angleIfc, facettesIfc, trianglesRelief, trianglesTronc,
+const { versLambert93, PROJECTIONS, guidIfc, idGml, chaineIfc, angleIfc, facettesIfc, trianglesRelief, trianglesTronc,
         tubeCable, ecrireIfc, aUnTronc, portDe, ajouterHouppierSimple, polygonesPlans, solsOuverts, ecrireCityGml,
         ALPHABET_IFC, STYLES_IFC, ENFONCEMENT } =
   new Function('THREE', CONSTS.map(extraireConst).join('\n') + '\n' + NOMS.map(extraire).join('\n')
@@ -80,21 +84,89 @@ const verifier = (ok, message) => {
   console.log(`${ok ? 'ok  ' : 'ÉCHEC'} ${message}`);
 };
 
-// --- Lambert-93 ---------------------------------------------------------------
-// (lieu, lon, lat, x, y) : pyproj 3.8 (EPSG:4326 -> EPSG:2154), tests/test_nuage.py.
-const REFERENCES = [
-  ['tour Eiffel', 2.2945, 48.85826, 648237.1625, 6862256.1148],
-  ['Gordes', 5.2003, 43.9116, 876728.5214, 6314973.0065],
-  ['Brest', -4.486, 48.39, 146636.1395, 6836217.3647],
-  ['Ajaccio', 8.7386, 41.9192, 1176667.5614, 6108273.2834],
-  ['Dunkerque', 2.3768, 51.0343, 656187.4293, 7104461.7744],
-  ['Strasbourg', 7.751, 48.5819, 1050224.8723, 6841837.9889],
-];
-for (const [lieu, lon, lat, x, y] of REFERENCES) {
-  const [X, Y] = versLambert93(lon, lat);
-  const ecart = Math.hypot(X - x, Y - y);
-  verifier(ecart < 1e-3, `Lambert-93 à ${lieu} : ${(ecart * 1000).toFixed(3)} mm de pyproj`);
+// --- Projections ---------------------------------------------------------------
+// (lieu, lon, lat, x, y) : pyproj 3.8 (EPSG:4326 -> EPSG, toujours_xy). Les six
+// premiers points sont ceux de tests/test_nuage.py ; les suivants couvrent la
+// France d'ouest en est, et les zones UTM qu'on peut demander à l'export.
+const REFERENCES = {
+  2154: [
+    ['tour Eiffel', 2.2945, 48.85826, 648237.1625, 6862256.1148],
+    ['Gordes', 5.2003, 43.9116, 876728.5214, 6314973.0065],
+    ['Brest', -4.486, 48.39, 146636.1395, 6836217.3647],
+    ['Ajaccio', 8.7386, 41.9192, 1176667.5614, 6108273.2834],
+    ['Dunkerque', 2.3768, 51.0343, 656187.4293, 7104461.7744],
+    ['Strasbourg', 7.751, 48.5819, 1050224.8723, 6841837.9889],
+  ],
+  3942: [
+    ['tour Eiffel', 2.2945, 48.85826, 1647849.5958, 1964250.5535],
+    ['Gordes', 5.2003, 43.9116, 1876803.8599, 1414656.3837],
+    ['Brest', -4.486, 48.39, 1142757.0138, 1935981.2922],
+    ['Ajaccio', 8.7386, 41.9192, 2175651.9620, 1206971.2585],
+    ['Dunkerque', 2.3768, 51.0343, 1655712.4598, 2208677.4780],
+    ['Strasbourg', 7.751, 48.5819, 2052733.0759, 1942874.3285],
+  ],
+  3950: [
+    ['tour Eiffel', 2.2945, 48.85826, 1648225.9611, 9073264.5812],
+    ['Gordes', 5.2003, 43.9116, 1877659.7964, 8524587.8857],
+    ['Brest', -4.486, 48.39, 1146334.5521, 9048669.7014],
+    ['Ajaccio', 8.7386, 41.9192, 2180056.2600, 8317448.9330],
+    ['Dunkerque', 2.3768, 51.0343, 1656282.1825, 9315233.0471],
+    ['Strasbourg', 7.751, 48.5819, 2050380.2852, 9053415.2551],
+  ],
+  // Les trois zones UTM de la France métropolitaine. Brest est à 13° du
+  // méridien de la 32, Gordes à 8° de celui de la 30 : les cas qui écartent
+  // une série ordinaire.
+  32630: [
+    ['tour Eiffel', 2.2945, 48.85826, 888276.4969, 5425227.5084],
+    ['Brest', -4.486, 48.39, 389990.5690, 5360715.3241],
+    ['Gordes', 5.2003, 43.9116, 1158509.7530, 4894851.8649],
+  ],
+  32631: [
+    ['tour Eiffel', 2.2945, 48.85826, 448251.8571, 5411939.3474],
+    ['Gordes', 5.2003, 43.9116, 676670.5244, 4864407.8339],
+    ['Brest', -4.486, 48.39, -54011.7425, 5386781.9050],
+    ['Ajaccio', 8.7386, 41.9192, 975943.8924, 4656756.9636],
+    ['Dunkerque', 2.3768, 51.0343, 456302.7353, 5653823.9669],
+    ['Strasbourg', 7.751, 48.5819, 850349.4299, 5391883.8268],
+  ],
+  32632: [
+    ['tour Eiffel', 2.2945, 48.85826, 8304.4045, 5433413.8486],
+    ['Gordes', 5.2003, 43.9116, 194901.7299, 4869076.1756],
+    ['Brest', -4.486, 48.39, -497230.9862, 5448170.3024],
+    ['Ajaccio', 8.7386, 41.9192, 478324.1004, 4640838.1908],
+    ['Dunkerque', 2.3768, 51.0343, 35812.8217, 5674541.3783],
+    ['Strasbourg', 7.751, 48.5819, 407883.6866, 5381732.2621],
+  ],
+  3857: [
+    ['tour Eiffel', 2.2945, 48.85826, 255422.5716, 6250845.2137],
+    ['Gordes', 5.2003, 43.9116, 578894.7480, 5451772.2554],
+    ['Brest', -4.486, 48.39, -499379.2357, 6171983.9321],
+    ['Ajaccio', 8.7386, 41.9192, 972776.5022, 5148883.6697],
+    ['Dunkerque', 2.3768, 51.0343, 264584.1657, 6627363.2397],
+    ['Strasbourg', 7.751, 48.5819, 862837.3731, 6204214.0572],
+  ],
+};
+verifier(PROJECTIONS.length === 14, `${PROJECTIONS.length} projections proposées à l'export`);
+let pire = 0;
+for (const [epsg, points] of Object.entries(REFERENCES)) {
+  const projection = PROJECTIONS.find(p => p.epsg === Number(epsg));
+  if (!projection) { verifier(false, `projection ${epsg} absente de PROJECTIONS`); continue; }
+  for (const [lieu, lon, lat, x, y] of points) {
+    const [X, Y] = projection.vers(lon, lat);
+    pire = Math.max(pire, Math.hypot(X - x, Y - y));
+  }
 }
+verifier(pire < 1e-3, `projections (${Object.keys(REFERENCES).length} systèmes, `
+  + `${Object.values(REFERENCES).flat().length} points) : ${(pire * 1000).toFixed(3)} mm de pyproj`);
+// Les sept zones CC intermédiaires n'ont pas de référence ici : elles doivent
+// au moins poser la France dans leur fuseau, x entre 1,1 et 2,2 millions.
+const cc = PROJECTIONS.filter(p => p.epsg >= 3942 && p.epsg <= 3950);
+verifier(cc.length === 9 && cc.every(p => {
+  const [X, Y] = p.vers(2.2945, 48.85826);
+  return X > 1.1e6 && X < 2.2e6 && Y > 0.8e6 && Y < 9.4e6;
+}), `CC42 à CC50 : ${cc.length} zones, la France dans chacune`);
+verifier(versLambert93(2.2945, 48.85826).every(Number.isFinite),
+         'Lambert-93 reste la projection par défaut');
 
 // --- GlobalId -------------------------------------------------------------------
 {
@@ -371,7 +443,7 @@ const classerMurs = nz => nz < -0.5 ? 'GroundSurface' : nz <= 0.5 ? 'WallSurface
     nom: 'Essai d\'export', description: 'Données IGN, Licence Ouverte 2.0 & « tests ».', site: 'Emprise de 50 m',
     lon: 5.2003, lat: 43.9116, origine: { x: 876729, y: 6314973, z: 312 },
     nordVrai: [-0.027868, 0.999612],
-    crs: { nom: 'EPSG:2154', description: 'RGF93 v1 / Lambert-93, altitudes NGF-IGN69', datum: 'RGF93 v1',
+    crs: { nom: 'EPSG:2154', epsg: 2154, description: 'RGF93 v1 / Lambert-93', datum: 'RGF93 v1',
            datumVertical: 'NGF-IGN69', epsgVertical: 5720, projection: 'Lambert conique conforme' },
     styles: STYLES_IFC,
     elements: [
@@ -454,6 +526,16 @@ const classerMurs = nz => nz < -0.5 ? 'GroundSurface' : nz <= 0.5 ? 'WallSurface
   }
   verifier(['route', 'chemin', 'eau', 'eauIntermittente', 'pylone', 'cable']
     .every(s => (STYLES_IFC[s] || []).length === 3), 'IFC : chaque style des réseaux a sa teinte');
+  // Le CRS écrit est celui du modèle : une autre projection se lit dans
+  // IFCPROJECTEDCRS et dans l'IFCMAPCONVERSION, sans altitude NGF déclarée
+  // (EPSG:5720 est un composé RGF93, pas WGS 84).
+  const utm = { ...modele, crs: { nom: 'EPSG:32631', epsg: 32631, description: 'WGS 84 / UTM 31N',
+                                  datum: 'WGS 84', datumVertical: null, epsgVertical: null,
+                                  projection: 'Transverse Mercator' } };
+  const texteUtm = ecrireIfc(utm);
+  verifier(/IFCPROJECTEDCRS\('EPSG:32631','WGS 84 \/ UTM 31N','WGS 84',\$,'Transverse Mercator',\$,#\d+\)/.test(texteUtm)
+           && /IFCMAPCONVERSION\(#\d+,#\d+,876729\.000,6314973\.000,312\.000,1\.,0\.,\$\)/.test(texteUtm),
+           'IFC : autre projection déclarée (EPSG:32631) et conversion depuis son origine');
   if (process.argv[2]) {
     fs.writeFileSync(process.argv[2], texte);
     console.log(`écrit : ${process.argv[2]} (${texte.length} octets)`);
@@ -490,6 +572,12 @@ const classerMurs = nz => nz < -0.5 ? 'GroundSurface' : nz <= 0.5 ? 'WallSurface
            && /<gml:lowerCorner>876708\.990 6314953\.000 /.test(gml)
            && /&amp; « tests »/.test(gml) && /<bldg:measuredHeight uom="m">8\.500<\/bldg:measuredHeight><bldg:storeysAboveGround>2</.test(gml),
            'CityGML : système, enveloppe absolue, texte échappé, hauteur et étages en attributs CityGML');
+  // Même choix de projection que l'IFC : le srsName suit, sans composé vertical
+  // quand le CRS n'en a pas.
+  const gmlUtm = ecrireCityGml(utm).join('');
+  verifier(/srsName="urn:ogc:def:crs:EPSG::32631"/.test(gmlUtm)
+           && !/crs:EPSG::5720/.test(gmlUtm),
+           'CityGML : autre projection déclarée (EPSG:32631), pas d’altitude NGF composée');
   if (process.argv[3]) {
     fs.writeFileSync(process.argv[3], gml);
     console.log(`écrit : ${process.argv[3]} (${gml.length} octets)`);

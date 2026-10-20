@@ -8,8 +8,9 @@ Ce qu'un logiciel de conception ferait du fichier, sans en avoir un :
   porte (`ifcopenshell.validate`, règles comprises) ;
 - la géométrie de chaque élément, tessellée par le noyau d'ifcopenshell :
   un élément qui n'en rend aucune est une erreur ;
-- le géoréférencement : un IfcMapConversion vers EPSG:2154, et l'emprise du
-  modèle en Lambert-93 et en altitude, à comparer à la scène ;
+- le géoréférencement : un IfcMapConversion vers le CRS que l'export a écrit
+  (Lambert-93 par défaut, CC ou UTM au choix), et l'emprise du modèle dans ce
+  système et en altitude, à comparer à la scène ;
 - le décompte des éléments par type, et des maillages fermés.
 
 Sort en erreur s'il trouve un défaut de schéma ou de géométrie, après le bilan.
@@ -40,8 +41,8 @@ def valider(chemin):
         c = conversions[0]
         print(f"géoréférencement : {c.TargetCRS.Name} ({c.TargetCRS.Description}), "
               f"origine {c.Eastings:.0f} E, {c.Northings:.0f} N, {c.OrthogonalHeight:.0f} m")
-        if c.TargetCRS.Name != "EPSG:2154":
-            erreurs.append(f"système {c.TargetCRS.Name}, EPSG:2154 attendu")
+        if not c.TargetCRS.Name.startswith("EPSG:"):
+            erreurs.append(f"système {c.TargetCRS.Name}, un code EPSG attendu")
     contexte = modele.by_type("IfcGeometricRepresentationContext")[0]
     if contexte.TrueNorth:
         x, y = contexte.TrueNorth.DirectionRatios

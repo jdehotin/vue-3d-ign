@@ -400,8 +400,8 @@ recherche indexer ces données : la page ne les publie nulle part.
 
 Les deux boutons du panneau écrivent le contexte du lieu d'un clic, avec
 les couches cochées. « Couches et dossier… » ouvre la fenêtre d'export :
-on y coche les couches, on y choisit le format, et — sur Chromium — on y
-choisit l'emplacement du fichier par la fenêtre du système
+on y coche les couches, on y choisit le format et la projection, et — sur
+Chromium — on y choisit l'emplacement du fichier par la fenêtre du système
 (`showSaveFilePicker`) ; ailleurs, « Enregistrer sous… » n'est pas proposé
 et « Télécharger » va au dossier de téléchargement du navigateur. Un
 navigateur embarqué (l'aperçu d'un éditeur, une WebView) ouvre la fenêtre
@@ -463,10 +463,20 @@ Pour l'un comme pour l'autre :
   entre ses supports, en tubes de 20 cm de rayon. La vue les dessine d'un trait
   d'un pixel, qu'aucun logiciel ne reprend ; la flèche des conducteurs est
   celle de la convention de la vue, 3 % de la portée, et le fichier le dit.
-- **En Lambert-93, altitudes NGF.** Les longueurs sont celles de la carte :
-  de −1 à +2,2 mm/m selon la latitude. L'IFC rapporte ses coordonnées à une
-  origine entière au point visé (IfcMapConversion) et renseigne le nord vrai
-  pour les études d'ensoleillement ; le CityGML les écrit en absolu.
+- **En Lambert-93 par défaut, altitudes NGF** ; la fenêtre laisse choisir la
+  projection, et le fichier déclare celle qu'il porte : les coniques conformes
+  CC42 à CC50 (EPSG:3942 à 3950, les neuf zones des grands projets), l'UTM
+  30N, 31N ou 32N (EPSG:32630 à 32632), ou le Web Mercator (EPSG:3857) — tous
+  projetés et en mètres, car l'IFC 4 ne sait déclarer qu'un CRS projeté. Les
+  longueurs restent celles de la carte, sans facteur d'échelle : de −1 à
+  +2,2 mm/m selon la latitude en Lambert-93 ; en UTM, le facteur de l'échelle
+  vaut 0,9996 au méridien de la zone et s'en écarte vers ses bords, sans être
+  corrigé. L'IFC rapporte ses coordonnées à une origine entière au point visé
+  (IfcMapConversion), dans le CRS qu'il déclare, et renseigne le nord vrai
+  pour les études d'ensoleillement — il dépend de la projection ; le CityGML
+  les écrit en absolu. L'altitude NGF ne se compose qu'avec RGF93
+  (EPSG:5720, 5721 en Corse) : en UTM, elle est écrite sans être déclarée, et
+  la note du fichier le dit.
 - Un contexte à consulter et à couper, pas des murs ni des dalles à
   modifier. Chaque fichier cite ses sources ; avec des parties de monuments
   OSM, il est aussi sous ODbL.
