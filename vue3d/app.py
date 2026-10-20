@@ -21,6 +21,7 @@
     GET /api/avancement?lat=…&lon=…  l'étape de la construction en cours
     GET /api/carre?i=…&j=…         un carré de 500 m de la grille Lambert-93 :
                                    bâtiments et routes BD TOPO, pour la voiture
+    GET /api/vegetation?i=…&j=…    les arbres du même carré, découpés sur le MNH
     GET /api/tuile/<couche>/<z>/<x>/<y>  une tuile WMTS de l'IGN (ortho, plan) : du
                                    stock du serveur, sinon redirigée vers l'IGN ;
                                    `?relire=1` après un refus, lue et gardée ici
@@ -47,7 +48,8 @@ from flask import Flask, jsonify, redirect, request, send_file, send_from_direct
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from .bornes import fetch_bornes
-from .carres import CARRES_PAR_HEURE, CarreHorsEmprise, CarreIndisponible, Carres, fetch_carre
+from .carres import (CARRES_PAR_HEURE, VEGETATION_VERSION, CarreHorsEmprise, CarreIndisponible, Carres,
+                     fetch_carre, fetch_vegetation)
 from .dpe import fetch_dpe
 from .dvf import fetch_dvf
 from .monuments import fetch_monuments
@@ -145,7 +147,8 @@ def creer_app(dossier_cache=None, construire=construire_scene, lire_monuments=fe
               lire_ouvrages=fetch_ouvrages, lire_vehicules=None, lire_panneaux=None,
               lire_nuage=fetch_nuage, lire_dpe=fetch_dpe, lire_dvf=fetch_dvf, lire_mer=fetch_mer,
               lire_tuile=fetch_tuile, quota=None, proxy=None, relectures=None,
-              lire_bornes=fetch_bornes, lire_carre=fetch_carre, quota_carres=None):
+              lire_bornes=fetch_bornes, lire_carre=fetch_carre, quota_carres=None,
+              lire_vegetation=fetch_vegetation):
     """`construire`, `lire_monuments`, `lire_ouvrages`, `lire_vehicules`,
     `lire_panneaux`, `lire_nuage`, `lire_dpe`, `lire_dvf`, `lire_mer` et
     `lire_bornes` sont injectables
@@ -160,7 +163,8 @@ def creer_app(dossier_cache=None, construire=construire_scene, lire_monuments=fe
     None : de VUE3D_QUOTA et VUE3D_PROXY, 0 en leur absence.
     `relectures` : tuiles relues par heure et par adresse IP, 0 sans limite ;
     None : TUILES_RELECTURES_PAR_HEURE si le service a un quota de scènes.
-    `lire_carre` : (i, j) -> dict d'un carré de la voiture (vue3d/carres.py) ;
+    `lire_carre`, `lire_vegetation` : (i, j) -> dict d'un carré de la voiture,
+    bâtiments et routes, ou arbres (vue3d/carres.py) ;
     `quota_carres` : carrés neufs par heure et par adresse IP, 0 sans limite ;
     None : CARRES_PAR_HEURE si le service a un quota de scènes."""
     app = Flask(__name__, static_folder=os.path.join(ICI, "static"), static_url_path="/static")
@@ -191,6 +195,8 @@ def creer_app(dossier_cache=None, construire=construire_scene, lire_monuments=fe
         relectures = TUILES_RELECTURES_PAR_HEURE if quota else 0
     quota_tuiles = Quota(relectures) if relectures else None
     carres = Carres(cache.dossier, lire=lire_carre)
+    vegetations = Carres(cache.dossier, lire=lire_vegetation, couche="vegetation-",
+                         version=VEGETATION_VERSION)
     if quota_carres is None:
         quota_carres = CARRES_PAR_HEURE if quota else 0
     quota_carres = Quota(quota_carres) if quota_carres else None
@@ -596,24 +602,34 @@ def creer_app(dossier_cache=None, construire=construire_scene, lire_monuments=fe
     def carre():
         """Un carré de la grille de la voiture (vue3d/carres.py), lu au
         besoin : bâtiments et routes BD TOPO."""
+        return servir_carre(carres, "carre")
+
+    @app.get("/api/vegetation")
+    def vegetation():
+        """Les arbres d'un carré de la voiture, découpés comme ceux de la
+        scène : une couche à part, plus lente que les bâtiments."""
+        return servir_carre(vegetations, "vegetation")
+
+    def servir_carre(stock, couche):
         try:
             i, j = int(request.args["i"]), int(request.args["j"])
         except (KeyError, ValueError):
             return erreur(400, "Paramètres i et j attendus : le carré, en pas de 500 m Lambert-93.")
         try:
-            if quota_carres and not carres.present(i, j):
-                attente = quota_carres.attente(request.remote_addr, (i, j))
+            if quota_carres and not stock.present(i, j):
+                # Bâtiments et arbres d'un même carré comptent chacun.
+                attente = quota_carres.attente(request.remote_addr, (couche, i, j))
                 if attente:
                     app.logger.warning("Quota de %d carrés neufs par heure atteint pour %s",
                                        quota_carres.par_heure, request.remote_addr)
                     reponse, code = erreur(429, "Trop de carrés neufs pour ce visiteur.")
                     reponse.headers["Retry-After"] = str(attente)
                     return reponse, code
-            chemin = carres.obtenir(i, j)
+            chemin = stock.obtenir(i, j)
         except CarreHorsEmprise as exc:
             return erreur(422, str(exc))
         except CarreIndisponible as exc:
-            app.logger.warning("Carré %d, %d indisponible : %s", i, j, exc)
+            app.logger.warning("Carré %d, %d (%s) indisponible : %s", i, j, couche, exc)
             reponse, code = erreur(503, f"Un service de l'IGN n'a pas répondu ({exc}).")
             reponse.headers["Retry-After"] = "10"
             return reponse, code

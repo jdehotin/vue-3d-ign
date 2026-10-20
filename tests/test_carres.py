@@ -193,3 +193,121 @@ def test_la_page_de_la_voiture_est_servie(service):
     assert r.status_code == 200
     assert r.headers["Cache-Control"] == "no-cache"
     assert b"api/carre" in r.data
+
+
+def test_lambert_93_au_centieme_du_wfs():
+    """Un sommet de Gordes rendu par le WFS en EPSG:4326 et en EPSG:2154."""
+    x, y = carres.lambert93(5.19564453, 43.92299055)
+    assert abs(x - 876319.49986801) < 0.01 and abs(y - 6316227.80474568) < 0.01
+    lon, lat = carres.wgs84(x, y)
+    assert abs(lon - 5.19564453) < 1e-9 and abs(lat - 43.92299055) < 1e-9
+
+
+@pytest.mark.parametrize("essence, nature, profil, attendu", [
+    ("Pin d'Alep", None, None, "pin"),
+    ("Sapin, épicéa", None, None, "conifere"),
+    ("Chênes sempervirents", None, None, "chene_vert"),
+    ("Peuplier", None, None, "peuplier"),
+    ("Chênes décidus", None, None, "feuillu"),
+    ("Conifères", None, None, "conifere"),
+    (None, "Haie", None, "arbuste"),
+    ("Mixte", "Forêt fermée mixte", [1, 0.95, 0.9, 0.88, 0.8, 0.7], "pin"),
+    ("Mixte", None, [1, 0.7, 0.5, 0.4, 0.3, 0.2], "conifere"),
+    (None, None, [1, 0.9, 0.8, 0.7, 0.6, 0.5], "feuillu"),
+    (None, None, None, "feuillu"),
+])
+def test_le_port_suit_les_regles_de_la_page(essence, nature, profil, attendu):
+    """Les règles de portDe et portMesure (static/index.html), dans le même ordre."""
+    assert carres.port({"essence": essence, "nature": nature, "profil": profil}) == attendu
+
+
+def test_un_arbre_appartient_au_carre_de_son_sommet():
+    def houppier(dx, dy, **props):
+        lon, lat = carres.wgs84(X0 + dx, Y0 + dy)
+        return {"lon": lon, "lat": lat, "h": 12.34, "r": 3.21, "profil": [1, 0.9, 0.8, 0.7, 0.6, 0.5], **props}
+
+    arbres = carres.arbres_du_carre([houppier(100, 200), houppier(-3, 10), houppier(10, 504),
+                                     houppier(250, 250, essence="Douglas")], I, J)
+    assert arbres == [[1000, 2000, 123, 32, carres.PORTS.index("feuillu")],
+                      [2500, 2500, 123, 32, carres.PORTS.index("conifere")]]
+
+
+def test_les_arbres_se_lisent_comme_ceux_de_la_scene(monkeypatch):
+    lus = {}
+
+    def mnh(w, s, e, n, resolution_m=None, max_pixels=None):
+        lus["mnh"] = (w, s, e, n, resolution_m)
+        return {"couvert": True, "source": "lidar_hd"}
+
+    monkeypatch.setattr(carres, "fetch_mnh_grid", mnh)
+    monkeypatch.setattr(carres, "fetch_exg_grid", lambda *a: "exg")
+    monkeypatch.setattr(carres, "lire_couche", lambda couche, *emprise: {"features": [], "couche": couche})
+
+    def houppiers(w, s, e, n, bati, zones, forets, grille, exg):
+        assert (bati["couche"], zones["couche"], forets["couche"], exg) == \
+            (carres.COUCHE_BATIMENTS, carres.COUCHE_VEGETATION, carres.COUCHE_FORET, "exg")
+        lon, lat = carres.wgs84(X0 + 1, Y0 + 1)
+        return {"source": "lidar_hd", "couvert": True,
+                "houppiers": [{"lon": lon, "lat": lat, "h": 8, "r": 2, "profil": None}]}
+
+    monkeypatch.setattr(carres, "houppiers_pour_emprise", houppiers)
+    v = carres.fetch_vegetation(I, J)
+    w, s, e, n, resolution = lus["mnh"]
+    # L'emprise lue couvre le carré et sa marge, à 0,5 m.
+    for x, y in [(X0 - 15, Y0 - 15), (X0 + 515, Y0 + 515)]:
+        lon, lat = carres.wgs84(x, y)
+        assert w <= lon <= e and s <= lat <= n
+    assert resolution == 0.5
+    assert (v["source"], v["couvert"], v["ports"], v["arbres"]) == \
+        ("lidar_hd", True, list(carres.PORTS), [[10, 10, 80, 20, 0]])
+
+
+def test_une_lecture_des_arbres_en_echec_n_ecrit_rien(monkeypatch, tmp_path):
+    def mnh(*a, **k):
+        raise requests.HTTPError("HTTP 400 sur wms-r")
+
+    monkeypatch.setattr(carres, "fetch_mnh_grid", mnh)
+    monkeypatch.setattr(carres, "fetch_exg_grid", lambda *a: None)
+    monkeypatch.setattr(carres, "lire_couche", lambda *a, **k: {"features": []})
+    stock = carres.Carres(str(tmp_path), lire=carres.fetch_vegetation, couche="vegetation-",
+                          version=carres.VEGETATION_VERSION)
+    with pytest.raises(carres.CarreIndisponible):
+        stock.obtenir(I, J)
+    assert not stock.present(I, J)
+
+
+def test_les_arbres_ont_leur_route_et_leur_dossier(service, tmp_path):
+    client = service(lambda i, j: {"carre": [i, j], "batiments": []},
+                     lire_vegetation=lambda i, j: {"carre": [i, j], "arbres": [[1, 2, 3, 4, 0]]},
+                     quota_carres=1)
+    r = client.get(f"/api/vegetation?i={I}&j={J}")
+    assert r.status_code == 200 and json.loads(gzip.decompress(r.data))["arbres"] == [[1, 2, 3, 4, 0]]
+    assert os.path.exists(os.path.join(str(tmp_path), "carres", f"vegetation-v{carres.VEGETATION_VERSION}",
+                                       str(I), f"{J}.json.gz"))
+    # Les arbres du carré ont compté : ses bâtiments, neufs, attendent.
+    assert client.get(f"/api/carre?i={I}&j={J}").status_code == 429
+    assert client.get(f"/api/vegetation?i={I}&j={J}").status_code == 200
+
+
+def test_les_bords_de_toit_ne_sont_pas_des_arbres():
+    """Un houppier fin collé à un bâtiment est un débord de toit ; un arbre
+    fin loin du bâti (un cyprès) et un arbre large contre un mur restent."""
+    def lonlat(dx, dy):
+        return carres.wgs84(X0 + dx, Y0 + dy)
+
+    mur = [list(lonlat(100, 100)), list(lonlat(120, 100)), list(lonlat(120, 120)),
+           list(lonlat(100, 120)), list(lonlat(100, 100))]
+    batiments = {"features": [{"geometry": {"type": "Polygon", "coordinates": [mur]}}]}
+
+    def houppier(dx, dy, h, r):
+        lon, lat = lonlat(dx, dy)
+        return {"lon": lon, "lat": lat, "h": h, "r": r, "profil": None}
+
+    houppiers = [houppier(121, 110, 16, 1.2),     # aiguille à 1 m du mur
+                 houppier(300, 300, 16, 1.2),     # aiguille isolée : un cyprès
+                 houppier(121.5, 110, 12, 3.0),   # arbre large contre le mur
+                 houppier(110, 110, 18, 1.0)]     # aiguille au-dessus du toit
+    assert carres.debords_de_toit(houppiers, batiments) == {0, 3}
+    gardes = carres.arbres_du_carre(houppiers, I, J, batiments)
+    assert [(a[0], a[1]) for a in gardes] == [(3000, 3000), (1215, 1100)]
+    assert len(carres.arbres_du_carre(houppiers, I, J)) == 4

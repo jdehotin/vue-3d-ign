@@ -52,6 +52,7 @@
         #boussole svg { width:100%; height:100%; }
         #boutons { position:fixed; right:max(14px, env(safe-area-inset-right)); bottom:max(14px, env(safe-area-inset-bottom));
                    display:flex; flex-direction:column; gap:10px; }
+        .bouton.petit { font-size:11px; }
         .bouton { width:54px; height:54px; border-radius:50%; padding:0; display:flex; align-items:center;
                   justify-content:center; cursor:pointer; background:var(--panel); border:1px solid var(--line);
                   color:var(--text); font:650 13px/1 system-ui, sans-serif; text-decoration:none; }
@@ -111,6 +112,7 @@
 <div id="boutons">
     <button type="button" id="b-vue" class="bouton" title="Vue de derrière (3D) ou de dessus (2D)">2D</button>
     <button type="button" id="b-fond" class="bouton" title="Fond : photographie aérienne ou plan IGN">Plan</button>
+    <button type="button" id="b-arbres" class="bouton petit on" title="Les arbres le long de la route, mesurés au LiDAR HD">Arbres</button>
     <button type="button" id="b-moins" class="bouton" title="Reculer la caméra" aria-label="Reculer">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 12h12"/></svg></button>
     <button type="button" id="b-plus" class="bouton" title="Rapprocher la caméra" aria-label="Rapprocher">
@@ -126,7 +128,7 @@
     <div id="accueil-texte"></div>
     <div class="actions" id="accueil-actions"></div>
 </div></div>
-<div id="credits">© IGN : BD TOPO, BD ORTHO, Plan IGN, RGE ALTI</div>
+<div id="credits">© IGN : BD TOPO, BD ORTHO, Plan IGN, RGE ALTI, LiDAR HD, BD Forêt</div>
 
 <script type="importmap">
 {
@@ -264,7 +266,9 @@ const COURBURE = (1 - 0.13) / (2 * 6371000);
 function courber(materiau) {
     materiau.onBeforeCompile = shader => {
         shader.vertexShader = shader.vertexShader.replace('#include <project_vertex>',
-            'vec4 mondeP = modelMatrix * vec4(transformed, 1.0);\n'
+            'vec4 mondeP = vec4(transformed, 1.0);\n'
+            + '#ifdef USE_INSTANCING\nmondeP = instanceMatrix * mondeP;\n#endif\n'
+            + 'mondeP = modelMatrix * mondeP;\n'
             + 'vec2 ecartCam = mondeP.xz - cameraPosition.xz;\n'
             + `mondeP.y -= dot(ecartCam, ecartCam) * ${COURBURE.toExponential(8)};\n`
             + 'vec4 mvPosition = viewMatrix * mondeP;\n'
@@ -698,7 +702,9 @@ function carre(i, j) {
     let c = carres.get(cle);
     if (!c) {
         c = { i, j, cle, etat: 'neuf', donnees: null, mesh: null, voulu: 0, reessai: 0, priorite: Infinity,
-              altiPretes: false, nbBatiments: 0 };
+              altiPretes: false, nbBatiments: 0,
+              veg: { etat: 'neuf', donnees: null, mesh: null, voulu: 0, reessai: 0, priorite: Infinity,
+                     altiPretes: false } };
         carres.set(cle, c);
     }
     return c;
@@ -965,8 +971,156 @@ function defaireCarre(c) {
     c.mesh = null;
 }
 
-/** Les carrés voulus et leur priorité : la distance à parcourir pour y être. */
-function carresVoulus() {
+// --- Les arbres ---------------------------------------------------------------------
+// Ceux de la scène (vue3d/houppiers.py), découpés sur le MNH du LiDAR HD
+// carré par carré (/api/vegetation) : 1 à 5 s de lecture par carré au
+// serveur, contre 0,2 s pour les bâtiments. D'où une bande plus étroite :
+// les arbres à plus de 250 m de la route se perdent dans la photo.
+const VEG_AUTOUR_M = 300, VEG_COULOIR_M = 250, VEG_DEVANT_M = 2000;
+const VEG_PARALLELE = 2;
+let vegEnVol = 0;
+let arbresActifs = PARAMS.get('arbres') !== '0';
+// Les ports de la page (PORTS de index.html) : palette, part de fût nu, et
+// une forme simple, opaque — un houppier transparent à 30 % se perd vu de
+// la route. Le serveur classe chaque arbre (carres.port).
+const PORTS_ARBRES = {
+    feuillu:    { base: 0x5e8a3e, cime: 0x9cc06a, tronc: 0.42, forme: 'boule' },
+    chene_vert: { base: 0x3f6b33, cime: 0x6f9a55, tronc: 0.38, forme: 'boule' },
+    pin:        { base: 0x4f7a4a, cime: 0x8fb27a, tronc: 0.52, forme: 'boule' },
+    conifere:   { base: 0x3e6a3c, cime: 0x6d9a63, tronc: 0.12, forme: 'cone' },
+    peuplier:   { base: 0x76a24e, cime: 0xb2d37f, tronc: 0.38, forme: 'colonne' },
+    arbuste:    { base: 0x6a8e44, cime: 0xa2c46e, tronc: 0, forme: 'boule' },
+};
+for (const p of Object.values(PORTS_ARBRES)) { p.base = new THREE.Color(p.base); p.cime = new THREE.Color(p.cime); }
+// Peu de faces : jusqu'à 9 000 arbres par carré à Gordes (garrigue comprise).
+const GEO_BOULE = new THREE.IcosahedronGeometry(1, 0);                         // 20 faces
+const GEO_CONE = new THREE.ConeGeometry(1, 1, 7, 1, true).translate(0, 0.5, 0);  // 7 faces
+const GEO_FUT = new THREE.CylinderGeometry(0.6, 1, 1, 5, 1, true).translate(0, 0.5, 0);
+const MAT_FEUILLAGE = courber(new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true }));
+const MAT_FUT = courber(new THREE.MeshLambertMaterial({ color: 0x6b5240 }));
+const HAUTEUR_MIN_TRONC = 3;
+
+/** Aléa déterministe d'une position : un arbre garde sa teinte d'un passage à l'autre. */
+function alea(x, y) {
+    const v = Math.sin(x * 127.1 + y * 311.7) * 43758.5453;
+    return v - Math.floor(v);
+}
+
+async function chargerVegetation(c) {
+    const g = c.veg;
+    g.etat = 'charge';
+    vegEnVol++;
+    try {
+        const reponse = await fetch(`api/vegetation?i=${c.i}&j=${c.j}`);
+        if (reponse.status === 422) { g.etat = 'hors'; return; }
+        if (!reponse.ok) {
+            g.etat = 'erreur';
+            g.reessai = performance.now() + (Number(reponse.headers.get('retry-after')) || 20) * 1000;
+            return;
+        }
+        g.donnees = await reponse.json();
+        g.etat = 'pret';
+        const coins = [[0, 0], [1, 0], [0, 1], [1, 1]].map(([u, v]) =>
+            depuisLambert93((c.i + u) * CARRE_M, (c.j + v) * CARRE_M));
+        const lons = coins.map(p => p[0]), lats = coins.map(p => p[1]);
+        preparerAltitudes(Math.min(...lons), Math.min(...lats), Math.max(...lons), Math.max(...lats), NIVEAU_PROCHE)
+            .then(() => { g.altiPretes = true; }, () => { g.altiPretes = true; });
+    } catch (e) {
+        g.etat = 'erreur';
+        g.reessai = performance.now() + 20000;
+    } finally {
+        vegEnVol--;
+    }
+}
+
+/**
+ * Les arbres d'un carré en trois maillages instanciés (houppiers ronds,
+ * cônes, fûts) : trois appels de dessin. Un arbre pose sur le relief au
+ * pied de son sommet ; son houppier part du haut du fût nu de son port.
+ */
+function construireVegetation(c) {
+    const d = c.veg.donnees;
+    const cx = (c.i + 0.5) * CARRE_M, cy = (c.j + 0.5) * CARRE_M;
+    const [ox, oy] = d.origine;
+    const arbres = d.arbres, ports = d.ports.map(n => PORTS_ARBRES[n] || PORTS_ARBRES.feuillu);
+    let nBoules = 0, nCones = 0, nFuts = 0;
+    for (const a of arbres) {
+        const p = ports[a[4]];
+        if (p.forme === 'cone') nCones++; else nBoules++;
+        if (a[2] >= HAUTEUR_MIN_TRONC * 10 && p.tronc >= 0.1) nFuts++;
+    }
+    const groupe = new THREE.Group();
+    const boules = new THREE.InstancedMesh(GEO_BOULE, MAT_FEUILLAGE, Math.max(nBoules, 1));
+    const cones = new THREE.InstancedMesh(GEO_CONE, MAT_FEUILLAGE, Math.max(nCones, 1));
+    const futs = new THREE.InstancedMesh(GEO_FUT, MAT_FUT, Math.max(nFuts, 1));
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), pos = new THREE.Vector3(), ech = new THREE.Vector3();
+    const teinte = new THREE.Color();
+    let ib = 0, ic = 0, it = 0;
+    for (const a of arbres) {
+        const x = ox + a[0] / 10, y = oy + a[1] / 10, h = a[2] / 10, r = Math.max(a[3] / 10, 0.5);
+        const p = ports[a[4]];
+        let sol = altitudeL93(x, y);
+        if (!Number.isFinite(sol)) sol = 0;
+        const lx = x - cx, lz = cy - y;
+        const bas = h < HAUTEUR_MIN_TRONC ? 0 : h * p.tronc;
+        const al = alea(x, y);
+        teinte.copy(p.base).lerp(p.cime, 0.25 + 0.5 * al).multiplyScalar(0.92 + 0.12 * alea(y, x));
+        if (p.forme === 'cone') {
+            pos.set(lx, sol + bas - 0.3, lz); ech.set(r, h - bas + 0.3, r);
+            cones.setMatrixAt(ic, m.compose(pos, q, ech));
+            cones.setColorAt(ic++, teinte);
+        } else {
+            const largeur = p.forme === 'colonne' ? r * 0.65 : r;
+            pos.set(lx, sol + (bas + h) / 2, lz); ech.set(largeur, Math.max((h - bas) / 2, 0.4), largeur);
+            boules.setMatrixAt(ib, m.compose(pos, q, ech));
+            boules.setColorAt(ib++, teinte);
+        }
+        if (h >= HAUTEUR_MIN_TRONC && p.tronc >= 0.1) {
+            const hT = h * p.tronc + Math.min(1, h * 0.1), rT = Math.min(Math.max(h / 20, 0.18), 0.6);
+            pos.set(lx, sol - 0.5, lz); ech.set(rT, hT + 0.5, rT);
+            futs.setMatrixAt(it++, m.compose(pos, q, ech));
+        }
+    }
+    for (const [maillage, n] of [[boules, ib], [cones, ic], [futs, it]]) {
+        maillage.count = n;
+        if (!n) continue;
+        maillage.instanceMatrix.needsUpdate = true;
+        if (maillage.instanceColor) maillage.instanceColor.needsUpdate = true;
+        maillage.computeBoundingSphere();
+        groupe.add(maillage);
+    }
+    c.veg.mesh = groupe;
+    c.veg.nb = arbres.length;
+    ancrer(groupe, cx, cy);
+    groupeArbres.add(groupe);
+}
+
+function defaireVegetation(c) {
+    const g = c.veg;
+    if (!g.mesh) return;
+    groupeArbres.remove(g.mesh);
+    ancres.delete(g.mesh);
+    for (const maillage of g.mesh.children) maillage.dispose();
+    g.mesh = null;
+}
+
+const groupeArbres = new THREE.Group();
+scene.add(groupeArbres);
+const boutonArbres = document.getElementById('b-arbres');
+function majBoutonArbres() { boutonArbres.classList.toggle('on', arbresActifs); }
+boutonArbres.addEventListener('click', () => {
+    arbresActifs = !arbresActifs;
+    groupeArbres.visible = arbresActifs;
+    majBoutonArbres();
+});
+majBoutonArbres();
+
+/**
+ * Les carrés voulus et leur priorité, la distance à parcourir pour y être :
+ * ceux à moins de `autour` de la voiture, et à moins de `couloir` de la
+ * route prévue, sur `devant` mètres.
+ */
+function carresVoulus(autour = AUTOUR_M, couloir = COULOIR_M, devant = Infinity) {
     const voulus = new Map();
     const ajouter = (x, y, rayon, prio) => {
         const i0 = Math.floor((x - rayon) / CARRE_M), i1 = Math.floor((x + rayon) / CARRE_M);
@@ -984,19 +1138,19 @@ function carresVoulus() {
     };
     const v = voiture;
     const x = v.vue ? v.x : v.attendu.x, y = v.vue ? v.y : v.attendu.y;
-    ajouter(x, y, AUTOUR_M, 0);
+    ajouter(x, y, autour, 0);
     const ch = v.chemin;
     if (ch) {
-        const d0 = v.dChemin;
-        for (let d = d0 + PAS_COULOIR_M; d < ch.longueur; d += PAS_COULOIR_M) {
+        const d0 = v.dChemin, fin = Math.min(ch.longueur, d0 + devant);
+        for (let d = d0 + PAS_COULOIR_M; d < fin; d += PAS_COULOIR_M) {
             const p = pointDuChemin(ch, d);
-            ajouter(p.x, p.y, COULOIR_M, d - d0);
+            ajouter(p.x, p.y, couloir, d - d0);
         }
         // Au bout d'une route encore inconnue : le carré suivant, d'abord.
-        if (ch.fin === 'inconnu') ajouter(ch.bout[0], ch.bout[1], 1, ch.longueur - d0 - 200);
+        if (ch.fin === 'inconnu' && devant === Infinity) ajouter(ch.bout[0], ch.bout[1], 1, ch.longueur - d0 - 200);
     } else if (v.vue && v.v > 2) {
-        for (let d = PAS_COULOIR_M; d <= 1500; d += PAS_COULOIR_M) {
-            ajouter(x + d * Math.sin(v.cap * RAD), y + d * Math.cos(v.cap * RAD), COULOIR_M, d);
+        for (let d = PAS_COULOIR_M; d <= Math.min(1500, devant); d += PAS_COULOIR_M) {
+            ajouter(x + d * Math.sin(v.cap * RAD), y + d * Math.cos(v.cap * RAD), couloir, d);
         }
     }
     return [...voulus.values()].sort((a, b) => a.p - b.p).slice(0, CARRES_VOULUS_MAX);
@@ -1004,6 +1158,7 @@ function carresVoulus() {
 
 let budgetConstruction = 0;
 const durees = [];                     // [ms, bâtiments] des dernières constructions, pour les essais
+const dureesArbres = [];               // [ms, arbres], de même
 function majCarres(maintenant) {
     if (maintenant - derniereSelectionCarres >= 300 && (voiture.vue || (voiture.attendu && !voiture.attendu.provisoire))) {
         derniereSelectionCarres = maintenant;
@@ -1020,14 +1175,34 @@ function majCarres(maintenant) {
             const c = carre(i, j);
             if (c.etat === 'neuf' || (c.etat === 'erreur' && maintenant >= c.reessai)) chargerCarre(c);
         }
+        // Les arbres, après les bâtiments et plus près de la route.
+        const vegCles = new Set();
+        if (arbresActifs) {
+            const vegVoulus = carresVoulus(VEG_AUTOUR_M, VEG_COULOIR_M, VEG_DEVANT_M);
+            for (const { i, j, p } of vegVoulus) {
+                const c = carre(i, j);
+                c.veg.voulu = maintenant;
+                c.veg.priorite = p;
+                vegCles.add(c.cle);
+            }
+            for (const { i, j } of vegVoulus) {
+                if (vegEnVol >= VEG_PARALLELE) break;
+                const c = carre(i, j);
+                if (c.veg.etat === 'neuf' || (c.veg.etat === 'erreur' && maintenant >= c.veg.reessai)) chargerVegetation(c);
+            }
+        }
         const px = voiture.vue ? voiture.x : voiture.attendu.x, py = voiture.vue ? voiture.y : voiture.attendu.y;
         for (const c of [...carres.values()]) {
             const voulu = cles.has(c.cle);
             if (c.mesh) c.mesh.visible = voulu;
+            if (c.veg.mesh) c.veg.mesh.visible = vegCles.has(c.cle);
+            if (!vegCles.has(c.cle) && c.veg.mesh && maintenant - c.veg.voulu > CARRE_DEFAIT_S * 1000) defaireVegetation(c);
             if (!voulu && c.mesh && maintenant - c.voulu > CARRE_DEFAIT_S * 1000) defaireCarre(c);
-            if (!voulu && c.etat !== 'charge' && maintenant - c.voulu > CARRE_OUBLI_S * 1000
+            if (!voulu && c.etat !== 'charge' && c.veg.etat !== 'charge' && maintenant - c.voulu > CARRE_OUBLI_S * 1000
+                && maintenant - c.veg.voulu > CARRE_OUBLI_S * 1000
                 && Math.hypot((c.i + 0.5) * CARRE_M - px, (c.j + 0.5) * CARRE_M - py) > CARRE_OUBLI_M) {
                 defaireCarre(c);
+                defaireVegetation(c);
                 if (c.donnees) retirerRoutes(c);
                 carres.delete(c.cle);
             }
@@ -1042,6 +1217,19 @@ function majCarres(maintenant) {
     for (const c of carres.values()) {
         if (c.etat === 'pret' && !c.mesh && c.altiPretes && c.voulu >= derniereSelectionCarres - 1
             && (!meilleur || c.priorite < meilleur.priorite)) meilleur = c;
+    }
+    // Et les arbres d'un carré par image, de même.
+    let arbres = null;
+    for (const c of carres.values()) {
+        const g = c.veg;
+        if (g.etat === 'pret' && !g.mesh && g.altiPretes && g.voulu >= derniereSelectionCarres - 1
+            && (!arbres || g.priorite < arbres.veg.priorite)) arbres = c;
+    }
+    if (arbres && arbresActifs) {
+        const t0 = performance.now();
+        construireVegetation(arbres);
+        dureesArbres.push([performance.now() - t0, arbres.veg.donnees.arbres.length]);
+        if (dureesArbres.length > 200) dureesArbres.shift();
     }
     if (meilleur) {
         const t0 = performance.now();
@@ -2013,7 +2201,7 @@ function boucle(maintenant) {
 }
 
 // Pour les essais (outils/essai-voiture.mjs) : l'état, en lecture.
-window.__voiture = { voiture, carres, tuilesSol, aretes, camVue, renderer, durees,
+window.__voiture = { voiture, carres, tuilesSol, aretes, camVue, renderer, durees, dureesArbres,
                      get budget() { return budgetConstruction; } };
 
 // --- Départ ---------------------------------------------------------------------------------

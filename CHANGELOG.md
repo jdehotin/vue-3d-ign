@@ -33,6 +33,18 @@ messages de commit et dans les commentaires des modules.
     importance ; aux ronds-points, la sortie la plus proche du cap
     d'entrée), sur 2 à 6 km selon la vitesse. Sentiers, escaliers, pistes
     cyclables et galeries marchandes n'en sont pas.
+  - **Les arbres** (même jour, en couche à part : `/api/vegetation`) :
+    ceux de la scène, découpés un par un sur le MNH du LiDAR HD à 0,5 m,
+    avec l'orthophoto, la BD TOPO et la BD Forêt (1,1 à 4,6 s de lecture
+    et 0,1 à 0,2 s de découpe par carré), sur 250 m de part et d'autre de
+    la route et 2 km devant. Houppiers en facettes et cônes de conifères,
+    opaques, à la couleur de leur port ; trois appels de dessin par carré.
+    Jusqu'à 93 000 arbres et 3,1 millions de triangles à Gordes, toujours à
+    60 images par seconde ; bouton **Arbres** pour un écran trop lent. Les
+    bords de toit que le LiDAR voit hors des emprises BD TOPO, classés en
+    végétation par une photo un peu verte, en sont écartés : à Paris, ils
+    faisaient 80 % des « arbres » de plus de 8 m, des poteaux verts de 15 m
+    le long des façades (la scène les garde, transparents).
   - **La voiture** calée sur la route, vue de derrière ou de dessus, avec
     la vitesse, le nom de la rue et le cartouche de la route (A7, D15) ;
     entre deux relevés, elle avance le long de la route, et dans un tunnel,
@@ -347,6 +359,13 @@ messages de commit et dans les commentaires des modules.
 
 ### Corrigé
 
+- **Les sapins et les chênes verts de la BD Forêt** : « Sapin, épicéa »
+  contient « pin », et les sapins des Vosges sortaient en pins parasols, sur
+  un long fût nu ; les chênes verts, « Chênes sempervirents » dans la BD
+  Forêt v2, n'étaient jamais reconnus et passaient en feuillus. Trouvé en
+  portant la règle à la vue en voiture, contre les valeurs réelles de la
+  couche (350 massifs « Sapin, épicéa » dans les Vosges, 124 « Chênes
+  sempervirents » autour de Gordes).
 - **Les boutons de la vue tiennent sur un petit écran.** En vol, leur
   colonne descendait à 464 px du haut ; avec le pad du drone, il fallait
   650 px. Sur un téléphone en paysage (390 px), Cortège et « ? » sortaient

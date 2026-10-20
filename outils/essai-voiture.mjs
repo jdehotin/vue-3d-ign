@@ -26,6 +26,9 @@ const page = await navigateur.newPage();
 await page.setViewport({ width: 1280, height: 800 });
 const erreurs = [];
 const carres = { lus: 0, caches: 0, refus: 0 };
+// Un 503 est un refus passager de la Géoplateforme : la page redemande le
+// carré plus tard. Il n'est une erreur que s'il n'a jamais été rattrapé.
+const passagers = new Map();          // URL → rattrapée
 const tuiles = { absentes: 0 };
 page.on('pageerror', e => erreurs.push('pageerror: ' + e.message));
 page.on('console', m => {
@@ -41,8 +44,11 @@ page.on('requestfailed', r => {
 });
 page.on('response', r => {
     const u = r.url();
-    if (/\/api\/carre\?/.test(u)) {
-        if (r.status() === 200) { if (r.fromCache()) carres.caches++; else carres.lus++; }
+    if (/\/api\/(carre|vegetation)\?/.test(u)) {
+        if (r.status() === 200) {
+            if (/carre/.test(u)) { if (r.fromCache()) carres.caches++; else carres.lus++; }
+            if (passagers.has(u)) passagers.set(u, true);
+        } else if (r.status() === 503) passagers.set(u, passagers.get(u) || false);
         else if (r.status() !== 304) { carres.refus++; erreurs.push(`HTTP ${r.status()} ${u.slice(0, 100)}`); }
         return;
     }
@@ -102,6 +108,17 @@ for (let t = 5; t <= duree; t += 5) {
 await page.screenshot({ path: sortie });
 // Durée de construction d'un carré (un par image au plus, voiture.html) :
 // la médiane et le pire, avec les bâtiments du carré.
+const arbres = await page.evaluate(() => {
+    let lus = 0, montres = 0, n = 0;
+    for (const c of window.__voiture.carres.values()) {
+        if (c.veg.etat === 'pret') lus++;
+        if (c.veg.mesh && c.veg.mesh.visible) { montres++; n += c.veg.nb; }
+    }
+    const d = window.__voiture.dureesArbres.slice().sort((a, b) => a[0] - b[0]);
+    return { lus, montres, n, mediane: d.length ? d[d.length >> 1][0] : null, pire: d.length ? d[d.length - 1] : null };
+});
+console.log(`\nArbres : ${arbres.lus} carrés lus, ${arbres.montres} montrés (${arbres.n} arbres)`
+    + (arbres.pire ? `, construction médiane ${arbres.mediane.toFixed(1)} ms, pire ${arbres.pire[0].toFixed(1)} ms (${arbres.pire[1]} arbres)` : ''));
 const durees = await page.evaluate(() => window.__voiture.durees.slice());
 if (durees.length) {
     const tri = durees.slice().sort((a, b) => a[0] - b[0]);
@@ -111,6 +128,9 @@ if (durees.length) {
 }
 console.log(`\nCarrés : ${carres.lus} lus au serveur, ${carres.caches} du cache du navigateur, ${carres.refus} refusés ; `
     + `tuiles absentes : ${tuiles.absentes}. Capture : ${sortie}`);
+const rattrapes = [...passagers.values()].filter(Boolean).length;
+if (passagers.size) console.log(`Refus passagers (503) : ${passagers.size}, dont ${rattrapes} rattrapés`);
+for (const [u, ok] of passagers) if (!ok) erreurs.push(`503 jamais rattrapé : ${u.slice(0, 100)}`);
 const roule = releves.filter(r => r.vue && r.chemin);
 if (!roule.length) erreurs.push('la voiture n\'a jamais été calée sur une route');
 else if (!roule.slice(-3).some(r => /prêts sur/.test(r.pret) && !/prêts sur 0 m/.test(r.pret))) {

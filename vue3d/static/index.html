@@ -7753,9 +7753,12 @@ function portDe(el) {
     if (el.classe !== 'vegetation') return PORTS.masse;
     const e = (el.essence || '').toLowerCase();
     const n = (el.nature || '').toLowerCase();
-    if (/pin/.test(e)) return PORTS.pin;
+    // « Sapin, épicéa » contient « pin » : le mot seul, ou les sapins des
+    // Vosges sortaient en pins parasols. Le chêne vert est « Chênes
+    // sempervirents » dans la BD Forêt v2 (valeurs relevées le 2026-10-20).
+    if (/\bpins?\b/.test(e)) return PORTS.pin;
     if (/sapin|épicéa|epicea|douglas|mélèze|meleze/.test(e)) return PORTS.conifere;
-    if (/vert/.test(e)) return PORTS.chene_vert;
+    if (/vert|sempervirent/.test(e)) return PORTS.chene_vert;
     if (/peuplier/.test(e)) return PORTS.peuplier;
     if (/chêne|chene|hêtre|hetre|châtaignier|chataignier|robinier|feuillu/.test(e)) return PORTS.feuillu;
     if (/conif/.test(e) || /conif|sineux/.test(n)) return PORTS.conifere;

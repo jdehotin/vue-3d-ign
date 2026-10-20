@@ -535,9 +535,12 @@ Chaque premier chargement construit la scène, en quelques secondes.
   la même voie, par la sortie d'en face aux ronds-points), la trace en bleu,
   et charge les bâtiments le long d'elle, sur 2 à 6 km selon la vitesse ; ce
   qui reste derrière est libéré. Ces bâtiments sont ceux de la BD TOPO seule,
-  par carrés de 500 m : hauteurs et toits déclarés, ni LiDAR ni arbres, mais
-  0,2 s par carré, quand une scène complète en demande 10 à 30. À 130 km/h
-  sur l'A7, ils sont prêts 5,4 à 5,9 km devant la voiture. Le sol est fait
+  par carrés de 500 m : hauteurs et toits déclarés, sans LiDAR, mais 0,2 s
+  par carré, quand une scène complète en demande 10 à 30. À 130 km/h sur
+  l'A7, ils sont prêts 5,4 à 5,9 km devant la voiture. Les arbres suivent,
+  sur 250 m de part et d'autre de la route et 2 km devant : ceux de la
+  scène, découpés un par un sur le MNH du LiDAR HD, à leur hauteur et leur
+  largeur mesurées, en cônes pour les conifères (bouton **Arbres**). Le sol est fait
   des tuiles de l'orthophoto ou du Plan IGN (bouton **Plan**) posées sur le
   RGE ALTI, plus fines près de la caméra et là où la voiture sera dans
   quelques secondes. En rue étroite, les façades entre la caméra et la
@@ -829,6 +832,7 @@ principales :
 | `GET /api/dvf?lat=…&lon=…` | Les ventes DVF des parcelles de l'emprise (`parcelles`, `ventes`, `resume`), en JSON gzippé, datées ; `absent` nomme les départements sans DVF (Alsace-Moselle) ; au clic seulement |
 | `GET /api/bornes?lat=…&lon=…` | Les bornes de recharge de l'emprise, réunies par station (`stations` : opérateur, points de charge, puissances, prises, accès), en JSON gzippé, datées ; au clic seulement |
 | `GET /api/carre?i=…&j=…` | Un carré de 500 m de la grille Lambert-93 (`i = x // 500`, `j = y // 500`) pour la vue en voiture : bâtiments et routes carrossables BD TOPO, en JSON gzippé, coordonnées en décimètres depuis son coin sud-ouest. Lu à la première demande (0,1 à 0,3 s), gardé ensuite ; 422 hors de France métropolitaine |
+| `GET /api/vegetation?i=…&j=…` | Les arbres du même carré, découpés comme ceux de la scène (MNH à 0,5 m, orthophoto, BD TOPO, BD Forêt) : `[x, y, h, r, port]` en décimètres depuis son coin sud-ouest, `ports` nommant les indices ; `couvert` faux sans MNH. 1 à 5 s à la première demande |
 | `GET /api/sante` | `{"ok": true, "vehicules": {"mode": …, "detecteurs": […]}, "panneaux": {"actif": …}}` : le contrôle de vie, et ce que le service sait détecter ou lire |
 | `POST /api/reconstruire?lat=…&lon=…` | Met de côté la scène et ses couches (202) : la demande suivante les reconstruit d'après les données de l'IGN du moment, l'ancienne revenant si l'IGN ne répond pas. 429 moins de 10 min après sa construction, 409 pendant qu'elle ou une de ses couches se calcule |
 
