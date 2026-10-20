@@ -375,6 +375,18 @@ messages de commit et dans les commentaires des modules.
 
 ### Corrigé
 
+- **Pincer pour zoomer, en drone et au cortège.** En vol, la page coupe les
+  gestes de la vue, et deux doigts n'y faisaient plus rien. Ils règlent
+  désormais le recul de la caméra, comme la molette, y compris pendant le
+  choix de l'arrivée du cortège, pour viser une rue au téléphone. Un
+  pincement n'est plus pris pour un toucher : il posait l'arrivée.
+- **Une vue d'ensemble au départ du cortège.** L'arrivée posée, la caméra
+  recule 6 s pour cadrer le cortège, l'arrivée, les groupes et les cordons,
+  chacun avec son nom. Le cadre tient dans la part de l'écran que ne couvrent
+  ni le bandeau, ni les croix, ni la barre des slogans. Un toucher passe la
+  vue. Vus de loin, en cours de partie, le cortège et les cordons gardent
+  leur nom. Les étiquettes prennent la largeur de leur texte, et un peu
+  moins de place sur un téléphone en portrait.
 - **Les sapins et les chênes verts de la BD Forêt** : « Sapin, épicéa »
   contient « pin », et les sapins des Vosges sortaient en pins parasols, sur
   un long fût nu ; les chênes verts, « Chênes sempervirents » dans la BD

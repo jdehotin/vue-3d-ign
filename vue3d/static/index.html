@@ -9949,7 +9949,7 @@ if (AU_DOIGT) aideVue.textContent = 'Glisser pour pivoter · pincer pour zoomer 
 const AIDE_ORBITE = aideVue.textContent;
 const AIDE_DRONE = AU_DOIGT
     ? 'Drone : à gauche avancer, reculer, tourner · à droite monter, descendre, glisser · '
-      + 'son bouton pour sortir'
+      + 'pincer pour le recul · son bouton pour sortir'
     : 'Drone : ↑ ↓ avancer, reculer · ← → tourner · Q D glisser · espace monter · '
       + 'Maj descendre · molette pour le recul · Échap pour sortir';
 // F tire pendant la traque (majJeu), tenue comme les autres. Pas Entrée :
@@ -11284,7 +11284,16 @@ const CORTEGE_TRACE_DEPART_M = 160;         // la rue où il se forme, derrière
 const CORTEGE_ARRIVEE_M = [400, 700];       // par la route, l'arrivée tirée d'office
 const CORTEGE_ARRIVEE_MIN_M = 300;          // au moins, une arrivée cliquée
 const CORTEGE_CHOIX_S = 10;                 // pour cliquer l'arrivée
-const CORTEGE_FORMATION_S = 4;
+// La vue d'ensemble, l'arrivée posée : la caméra recule CORTEGE_SURVOL_S
+// pour montrer le parcours, les cordons, les groupes et les passants que la
+// page vient de poser, puis redescend sur la tête pendant le reste de la
+// formation. Avant, elle plongeait aussitôt sur la tête, et on ne les voyait
+// jamais ensemble (demande de Yannick, au téléphone). Réglages de jeu.
+const CORTEGE_SURVOL_S = 6;
+const CORTEGE_FORMATION_S = CORTEGE_SURVOL_S + 2;
+const CORTEGE_SURVOL_PLONGEE = 60 * Math.PI / 180;
+const CORTEGE_SURVOL_M = [150, 1300];       // de la caméra au point visé
+const CORTEGE_VUE_LARGE_M = 150;            // plus loin, les étiquettes de tous les acteurs s'affichent
 const CORTEGE_ARRIVE_M = 15;
 const CORTEGE_DISPERSE = 0.2;               // du départ : en dessous, le cortège s'est dispersé
 const CORTEGE_ENTRE_PARTIES_S = 14;
@@ -11414,7 +11423,8 @@ const CLE_RECORD_CORTEGE = 'vue3d.cortege-record';
 const CLE_SON_CORTEGE = 'vue3d.cortege-son';
 const AIDE_CORTEGE = AU_DOIGT
     ? 'Cortège : ↶ ↷ la branche au prochain carrefour · ↑ ↓ la cadence, ↓ à l\'arrêt pour demi-tour · '
-      + 'les slogans en bas · S.O., ou toucher un casseur, pour le service d\'ordre · le bouton Cortège pour arrêter'
+      + 'les slogans en bas · S.O., ou toucher un casseur, pour le service d\'ordre · pincer pour la vue · '
+      + 'le bouton Cortège pour arrêter'
     : 'Cortège : ← → la branche au prochain carrefour · ↑ ↓ la cadence, ↓ à l\'arrêt pour demi-tour · '
       + '1 à 4 les slogans · N négocier devant un cordon · F, ou un clic sur un casseur, pour le service d\'ordre · '
       + 'M le son · molette pour la vue · Échap pour sortir';
@@ -11448,16 +11458,32 @@ function texteTexture(texte, couleur, fond, l, h, police) {
     return t;
 }
 
-/** Une étiquette qui garde sa taille à l'écran : `hauteur`, en part de la hauteur de la vue. */
+/**
+ * Une étiquette qui garde sa taille à l'écran : `hauteur`, en part de la
+ * hauteur de la vue. Sa largeur est celle du texte mesuré : à 30 px par
+ * lettre, « Les habitants du quartier » couvrait presque toute la largeur
+ * d'un téléphone en portrait. Sur un écran plus haut que large, elle perd
+ * jusqu'à un quart de sa taille, pas plus : le texte resterait illisible.
+ */
+const POLICE_ETIQUETTE = '600 38px system-ui, sans-serif';
+const mesureEtiquette = document.createElement('canvas').getContext('2d');
 function etiquette(texte, fond, hauteur = 0.035) {
-    const l = Math.max(160, 30 * texte.length + 40);
+    mesureEtiquette.font = POLICE_ETIQUETTE;
+    const l = Math.max(120, Math.ceil(mesureEtiquette.measureText(texte).width) + 44);
     const s = new THREE.Sprite(new THREE.SpriteMaterial({
-        map: texteTexture(texte, '#ffffff', fond, l, 64, '600 38px system-ui, sans-serif'),
+        map: texteTexture(texte, '#ffffff', fond, l, 64, POLICE_ETIQUETTE),
         sizeAttenuation: false, depthTest: false, transparent: true }));
     s.center.set(0.5, 0);
-    s.scale.set(hauteur * l / 64, hauteur, 1);
+    s.userData.etiquette = { hauteur, l };
+    tailleEtiquette(s);
     s.renderOrder = 11;
     return s;
+}
+/** Sa taille d'après l'écran : reprise à chaque redimensionnement (dimensionner), le téléphone tourné. */
+function tailleEtiquette(s) {
+    const { hauteur, l } = s.userData.etiquette;
+    const h = hauteur * Math.min(1, Math.max(0.75, camera.aspect));
+    s.scale.set(h * l / 64, h, 1);
 }
 
 // La banderole de tête, lisible des deux côtés, entre deux hampes.
@@ -11497,6 +11523,7 @@ const marqueArrivee = (() => {
     nom.position.y = 82;
     g.add(anneau, colonne, nom);
     g.userData.colonne = colonne;
+    g.userData.nom = nom;
     g.visible = false;
     groupeCortege.add(g);
     return g;
@@ -12215,7 +12242,8 @@ function etatNeuf() {
              casseurs: [], equipes: [], nuages: [], feux: [], lances: 0, ecartes: 0, incidents: 0,
              prochaineVague: Infinity, deviations: 0, prochaineDeviation: Infinity, debut: 0, finChoix: 0,
              debutMarche: 0, relance: null, hud: 0, prochainIndice: Infinity, finIndice: 0, plusCourt: 0,
-             prochain: null, rangOmbre: 0, bQueue: 0, couleurs: true, cap: cortege.capVue, fin: null };
+             prochain: null, rangOmbre: 0, bQueue: 0, couleurs: true, cap: cortege.capVue, fin: null,
+             survol: null, finSurvol: 0, vueLarge: false };
 }
 
 /** Une manifestation neuve : la foule se rassemble sur la place, l'arrivée reste à choisir. */
@@ -12276,6 +12304,7 @@ function viderCortege() {
         if (o.objet) groupeCortege.remove(o.objet);
     }
     for (const g of c.passants || []) if (g.etiquette) retirerSprite(g.etiquette);
+    for (const o of c.cordons || []) if (o.etiquette) retirerSprite(o.etiquette);
     for (const cs of c.casseurs || []) groupeCortege.remove(cs.marque);
     for (const n of c.nuages || []) { for (const b of n.bouffees) groupeCortege.remove(b); n.materiau.dispose(); }
     for (const f of [...(c.feux || []), ...((c.rassemblement && c.rassemblement.fumigenes) || [])]) {
@@ -12360,6 +12389,8 @@ function choisirArrivee(q) {
     tracerParcours(chemin);
     placerObstacles(chemin);
     cortege.phase = 'forme';
+    cortege.survol = cadrerSurvol();
+    cortege.finSurvol = performance.now() + CORTEGE_SURVOL_S * 1000;
     cortege.debutMarche = performance.now() + CORTEGE_FORMATION_S * 1000;
     banderole.visible = true;
     const passants = cortege.passants.reduce((n, g) => n + g.membres.length, 0) * CORTEGE_PAR_FIGURE;
@@ -12367,6 +12398,87 @@ function choisirArrivee(q) {
              + `${cortege.groupes.length} groupe${cortege.groupes.length > 1 ? 's' : ''} attendent qu'on passe les prendre`
              + `${passants ? `, ${passants.toLocaleString('fr-FR')} passants sur les trottoirs` : ''}</small>`,
              CORTEGE_FORMATION_S);
+}
+
+/**
+ * La part de la vue que ne couvrent ni le bandeau en haut, ni la barre des
+ * slogans et les croix en bas, ni la colonne de boutons à droite, en
+ * coordonnées normalisées (−1 à 1), une marge comprise. Sur un téléphone en
+ * portrait, ils en couvraient près de la moitié : « Le cortège » tombait sous
+ * la barre des slogans, un groupe sous les boutons.
+ */
+function zoneLibre() {
+    const r = renderer.domElement.getBoundingClientRect();
+    const boite = id => {
+        const e = document.getElementById(id);
+        if (!e || e.hidden) return null;
+        const b = e.getBoundingClientRect();
+        return b.width && b.height ? b : null;
+    };
+    let haut = r.top, bas = r.bottom, droite = r.right;
+    const hg = boite('haut-gauche');
+    if (hg) haut = Math.max(haut, hg.bottom);
+    for (const id of ['barre-cortege', 'pad-drone']) { const b = boite(id); if (b) bas = Math.min(bas, b.top); }
+    const nav = boite('nav-vue');
+    if (nav && nav.left > r.left + r.width / 2) droite = Math.min(droite, nav.left);
+    const z = { x0: -1 + 0.06, x1: (droite - r.left) / r.width * 2 - 1 - 0.06,
+                y0: 1 - (bas - r.top) / r.height * 2 + 0.06, y1: 1 - (haut - r.top) / r.height * 2 - 0.06 };
+    // Une mise en page inattendue (panneaux qui couvrent tout) : tout l'écran.
+    return z.x1 - z.x0 < 0.6 || z.y1 - z.y0 < 0.6 ? { x0: -0.85, x1: 0.85, y0: -0.85, y1: 0.85 } : z;
+}
+
+/**
+ * Le cadre de la vue d'ensemble : la tête, l'arrivée, les groupes et les
+ * cordons, vus dans l'axe du départ vers l'arrivée, qui se lit vers le haut,
+ * dans la zone libre de la vue (zoneLibre). Distance et point visé sont
+ * ajustés ensemble en projetant les acteurs depuis une caméra d'essai : une
+ * formule sans perspective laissait déborder un groupe au bas d'un téléphone
+ * en portrait, où le parcours s'étire vers la caméra.
+ */
+const cameraSurvol = new THREE.PerspectiveCamera();
+function cadrerSurvol() {
+    const c = cortege, t = c.tete, a = c.arrivee;
+    const points = [[t.x, t.y], [a.x, a.y], ...c.groupes.map(g => [g.x, g.y]), ...c.cordons.map(o => [o.x, o.y])]
+        .map(([x, y]) => new THREE.Vector3(x, ySol(...toLonLat(x, y)), -y));
+    const cap = Math.atan2(a.x - t.x, a.y - t.y);
+    const fx = Math.sin(cap), fy = Math.cos(cap), rx = Math.cos(cap), ry = -Math.sin(cap);
+    let f0 = Infinity, f1 = -Infinity, r0 = Infinity, r1 = -Infinity;
+    for (const p of points) {
+        const f = p.x * fx - p.z * fy, r = p.x * rx - p.z * ry;
+        f0 = Math.min(f0, f); f1 = Math.max(f1, f);
+        r0 = Math.min(r0, r); r1 = Math.max(r1, r);
+    }
+    let x = fx * (f0 + f1) / 2 + rx * (r0 + r1) / 2, y = fy * (f0 + f1) / 2 + ry * (r0 + r1) / 2;
+    let distance = Math.max(f1 - f0, r1 - r0, 100);
+    const z = zoneLibre(), xc = (z.x0 + z.x1) / 2, yc = (z.y0 + z.y1) / 2;
+    Object.assign(cameraSurvol, { fov: camera.fov, aspect: camera.aspect, near: 1, far: 1e5 });
+    cameraSurvol.updateProjectionMatrix();
+    const vfov = camera.fov * Math.PI / 180, hfov = 2 * Math.atan(Math.tan(vfov / 2) * camera.aspect);
+    const vise = new THREE.Vector3(), ecran = new THREE.Vector3();
+    for (let k = 0; k < 12; k++) {
+        vise.set(x, ySol(...toLonLat(x, y)) + 1, -y);
+        const h = distance * Math.cos(CORTEGE_SURVOL_PLONGEE);
+        cameraSurvol.position.set(vise.x - fx * h, vise.y + distance * Math.sin(CORTEGE_SURVOL_PLONGEE), vise.z + fy * h);
+        cameraSurvol.lookAt(vise);
+        cameraSurvol.updateMatrixWorld();
+        let bx0 = Infinity, bx1 = -Infinity, by0 = Infinity, by1 = -Infinity;
+        for (const p of points) {
+            ecran.copy(p).project(cameraSurvol);
+            bx0 = Math.min(bx0, ecran.x); bx1 = Math.max(bx1, ecran.x);
+            by0 = Math.min(by0, ecran.y); by1 = Math.max(by1, ecran.y);
+        }
+        // Le centre des acteurs ramené au centre de la zone libre : un écart
+        // d'une unité à l'écran vaut, au point visé, D·tan(champ/2) en
+        // travers, et D·tan(champ/2)/sin(plongée) en profondeur sur le sol.
+        const dx = ((bx0 + bx1) / 2 - xc) * distance * Math.tan(hfov / 2);
+        const dy = ((by0 + by1) / 2 - yc) * distance * Math.tan(vfov / 2) / Math.sin(CORTEGE_SURVOL_PLONGEE);
+        x += rx * dx + fx * dy;
+        y += ry * dx + fy * dy;
+        // Leur étendue à la taille de la zone : l'écart à l'écran va comme
+        // l'inverse de la distance, à peu près.
+        distance *= Math.max((bx1 - bx0) / (z.x1 - z.x0), (by1 - by0) / (z.y1 - z.y0));
+    }
+    return { x, y, cap, distance: Math.min(Math.max(distance, CORTEGE_SURVOL_M[0]), CORTEGE_SURVOL_M[1]) };
 }
 
 /**
@@ -12683,6 +12795,11 @@ function creerCordon(a, s, annonce = false) {
         const p = nouvellePersonne('police', x + nx * u, y + ny * u, TEINTES_POLICE, { cordon: o, bouclier: true });
         if (p) { p.cap = cap + (cote > 0 ? Math.PI : 0); o.policiers.push(p); }
     }
+    // Son nom, vu de loin seulement (majEtiquettesLarges) : à hauteur de rue, le fourgon suffit.
+    o.etiquette = etiquette('Cordon', 'rgba(31,58,110,.92)', 0.026);
+    o.etiquette.position.set(fx, ySol(...toLonLat(fx, fy)) + 4.5, -fy);
+    o.etiquette.visible = false;
+    groupeCortege.add(o.etiquette);
     cortege.cordons.push(o);
     if (annonce) {
         annoncer(`Déviation<small>un cordon ferme ${a.nom || 'la rue'} devant le cortège · `
@@ -14089,6 +14206,12 @@ const ecranCasseur = new THREE.Vector3();
 function cliquerCortege(rayon, e, r) {
     const c = cortege;
     if (c.phase === 'choix') { cliquerArrivee(rayon); return; }
+    // Pendant la vue d'ensemble, un toucher la passe : la marche part 1,5 s plus tard.
+    if (c.phase === 'forme' && performance.now() < c.finSurvol) {
+        c.finSurvol = performance.now();
+        c.debutMarche = Math.min(c.debutMarche, performance.now() + 1500);
+        return;
+    }
     if (c.phase !== 'marche') return;
     let meilleur = null, dMin = 48;
     for (const cs of c.casseurs) {
@@ -14141,6 +14264,7 @@ function majCortege(dt, maintenant) {
     if (c.phase === 'rassemblement') majRassemblement(dt, maintenant);
     majChant(maintenant);
     majCorps(dt, t, v);
+    majEtiquettesLarges(maintenant);
     majPassants();
     majCasseurs(dt, maintenant);
     majServiceOrdre(dt, maintenant);
@@ -14175,9 +14299,34 @@ function majCortege(dt, maintenant) {
     }
 }
 
+// « Le cortège », au-dessus de la tête : vu de loin seulement, comme les autres.
+const etiquetteTete = etiquette('Le cortège', 'rgba(230,126,34,.94)', 0.03);
+etiquetteTete.visible = false;
+groupeCortege.add(etiquetteTete);
+/**
+ * Vu de loin — la vue d'ensemble, ou la caméra reculée au doigt ou à la
+ * molette —, le cortège et les cordons ont leur nom ; les groupes et
+ * l'arrivée ont le leur en tout temps. Pas les passants : une vingtaine de
+ * « +N » couvraient la vue d'ensemble d'un téléphone (le message de la
+ * formation dit leur nombre).
+ */
+function majEtiquettesLarges(maintenant) {
+    const c = cortege;
+    c.vueLarge = (c.phase === 'forme' && maintenant < c.finSurvol)
+        || camera.position.distanceTo(focusCortege) > CORTEGE_VUE_LARGE_M;
+    const fini = c.phase === 'fin' || c.phase === 'rassemblement';
+    etiquetteTete.visible = c.vueLarge && !!c.tete && !fini;
+    if (etiquetteTete.visible) etiquetteTete.position.set(c.tete.x, ySol(...toLonLat(c.tete.x, c.tete.y)) + 6, -c.tete.y);
+    for (const o of c.cordons) if (o.etiquette) o.etiquette.visible = c.vueLarge && !fini;
+    // Le nom de l'arrivée, en haut de sa colonne pour la voir de la rue ; vu
+    // de haut, près de l'anneau : au sommet, il tombait sous le bandeau.
+    marqueArrivee.userData.nom.position.y = c.vueLarge ? 10 : 82;
+}
+
 /**
  * La caméra : le drone qui filme le cortège. Au choix de l'arrivée, haut
- * au-dessus de la place, pour voir la zone ; en marche, derrière la tête,
+ * au-dessus de la place, pour voir la zone ; l'arrivée posée, la vue
+ * d'ensemble (cadrerSurvol) ; en marche, derrière la tête,
  * plongeant à 52°, tournée comme la marche lissée sur deux secondes — un
  * carrefour ne fait pas pivoter la vue d'un coup ; au rassemblement, elle
  * tourne lentement autour de la place. La molette règle la distance, comme
@@ -14187,11 +14336,21 @@ const focusCortege = new THREE.Vector3(), focusVoulu = new THREE.Vector3(), came
 function cameraCortege(dt) {
     const c = cortege;
     let fx, fy, distance, plongee;
+    // Aux vues larges, le recul (molette, pincement) agit aussi : de quoi viser
+    // une rue au doigt pour l'arrivée.
+    const zoomLarge = Math.min(Math.max((22 + 4 * drone.recul) / (22 + 4 * DRONE_RECUL.depart), 0.4), 1.6);
     if (c.phase === 'choix' || !c.tete) {
         fx = c.depart ? c.depart.x : 0;
         fy = c.depart ? c.depart.y : 0;
-        distance = Math.min(1300, 0.8 * ZONE);
+        distance = Math.min(1300, 0.8 * ZONE) * zoomLarge;
         plongee = 62 * Math.PI / 180;
+    } else if (c.phase === 'forme' && c.survol && performance.now() < c.finSurvol) {
+        // La vue d'ensemble, tournée du départ vers l'arrivée.
+        c.capVue += ecartAngle(c.survol.cap, c.capVue) * (1 - Math.exp(-dt / 0.6));
+        fx = c.survol.x;
+        fy = c.survol.y;
+        distance = c.survol.distance * zoomLarge;
+        plongee = CORTEGE_SURVOL_PLONGEE;
     } else if (c.rassemblement && !c.defaite) {
         c.capVue += dt * 0.12;
         fx = c.arrivee.x;
@@ -14293,6 +14452,38 @@ window.addEventListener('wheel', e => {
     controls.update();
 }, { capture: true, passive: false });
 
+// Le pincement, en vol : OrbitControls le gérait, mais il est coupé en drone
+// (entrerDrone), et deux doigts n'y faisaient plus rien, au cortège comme au
+// drone (signalé au téléphone). Ils règlent donc le recul, comme la molette ;
+// hors vol, OrbitControls garde le sien. Le canevas a touch-action: none
+// (posé par OrbitControls) : chaque doigt arrive en événement de pointeur.
+const doigts = new Map();
+let gesteAPlusieursDoigts = false;
+const ecartDoigts = () => {
+    const [a, b] = [...doigts.values()];
+    return Math.hypot(a.x - b.x, a.y - b.y);
+};
+renderer.domElement.addEventListener('pointerdown', e => {
+    if (e.pointerType !== 'touch') return;
+    doigts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (doigts.size >= 2) gesteAPlusieursDoigts = true;
+});
+renderer.domElement.addEventListener('pointermove', e => {
+    if (e.pointerType !== 'touch' || !doigts.has(e.pointerId)) return;
+    const avant = doigts.size === 2 ? ecartDoigts() : 0;
+    doigts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (!droneActif || avant < 10) return;
+    const apres = ecartDoigts();
+    if (apres < 10) return;
+    // Écarter les doigts rapproche, les resserrer éloigne.
+    drone.recul = Math.min(Math.max(drone.recul * avant / apres, DRONE_RECUL.min), DRONE_RECUL.max);
+});
+renderer.domElement.addEventListener('pointerup', e => { doigts.delete(e.pointerId); });
+renderer.domElement.addEventListener('pointercancel', e => {
+    doigts.delete(e.pointerId);
+    if (!doigts.size) gesteAPlusieursDoigts = false;
+});
+
 // Un clic doit être distingué de la fin d'une orbite : OrbitControls consomme le
 // glissement, mais le navigateur émet quand même un pointerup au relâchement.
 let departPointeur = null;
@@ -14301,6 +14492,13 @@ renderer.domElement.addEventListener('pointerdown', e => {
     detacherTip();
 });
 renderer.domElement.addEventListener('pointerup', e => {
+    // Un geste à plusieurs doigts n'est jamais un clic : le doigt levé, peu
+    // déplacé, posait sinon l'arrivée du cortège. Oublié au dernier doigt levé.
+    if (gesteAPlusieursDoigts) {
+        departPointeur = null;
+        if (!doigts.size) gesteAPlusieursDoigts = false;
+        return;
+    }
     if (!departPointeur) return;
     const parcouru = Math.hypot(e.clientX - departPointeur.x,
                                 e.clientY - departPointeur.y);
@@ -14604,6 +14802,8 @@ function dimensionner() {
     renderer.setSize(w, h);
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
+    // Les étiquettes du cortège suivent la forme de l'écran (tailleEtiquette).
+    groupeCortege.traverse(o => { if (o.userData.etiquette) tailleEtiquette(o); });
 }
 window.addEventListener('resize', dimensionner);
 // Le passage en tiroir (fenêtre rétrécie, plein écran) change la largeur du
