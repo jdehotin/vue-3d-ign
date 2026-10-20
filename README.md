@@ -546,10 +546,13 @@ Chaque premier chargement construit la scène, en quelques secondes.
   piles : le viaduc de Millau franchit le Tarn, un pont passe au-dessus de
   l'autoroute. La caméra se tient à 17 m au-dessus de la voiture à
   l'arrêt, sans jamais changer d'angle : ce qui la sépare de la voiture,
-  bâtiment ou arbre, s'efface. Le sol est fait
-  des tuiles de l'orthophoto ou du Plan IGN (bouton **Plan**) posées sur le
-  RGE ALTI, plus fines près de la caméra et là où la voiture sera dans
-  quelques secondes. En rue étroite, les façades entre la caméra et la
+  bâtiment ou arbre, s'efface. Les photos, le plan et les altitudes sont
+  gardés dans le navigateur de la voiture : un trajet refait se charge
+  aussitôt, même sans réseau ; ceux de la route prévue sont chargés
+  d'avance sur 2 km, et une tuile manquée faute de réseau est redemandée
+  plus tard. Le sol est fait des tuiles de l'orthophoto ou du Plan IGN
+  (bouton **Plan**) posées sur le RGE ALTI, plus fines près de la caméra et
+  là où la voiture sera dans quelques secondes. En rue étroite, les façades entre la caméra et la
   voiture s'ajourent ; la nuit, le ciel et la photo s'assombrissent. Pour
   l'essayer sans rouler : `/voiture?simu=1&lat=…&lon=…&vitesse=90`, une
   conduite simulée.

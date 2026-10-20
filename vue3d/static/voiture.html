@@ -155,6 +155,9 @@ const nombreParam = (nom, defaut) => {
     return PARAMS.has(nom) && Number.isFinite(v) ? v : defaut;
 };
 const VITESSE_SIMU_KMH = Math.min(Math.max(nombreParam('vitesse', 50), 5), 180);
+// La part des carrefours où la voiture simulée quitte la route prévue ;
+// `hasard=0` : elle la suit, pour un essai qui se rejoue à l'identique.
+const HASARD_SIMU = Math.min(Math.max(nombreParam('hasard', 0.33), 0), 1);
 // Départ de la simulation sans point : les Champs-Élysées, un lieu public
 // où la route est longue et bordée de bâtiments.
 const DEPART_SIMU = { lat: 48.8706, lon: 2.3055 };
@@ -299,7 +302,7 @@ function tuileAlti(niveau, ligne, colonne) {
     if (t) return t;
     t = { valeurs: null };
     t.promesse = (async () => {
-        const reponse = await fetch(ALTI_URL(niveau, ligne, colonne));
+        const reponse = await lireEnCache(ALTI_URL(niveau, ligne, colonne), DELAI_ALTI_MS);
         if (reponse.status === 404) return new Float32Array(256 * 256).fill(NaN);
         const type = reponse.headers.get('content-type') || '';
         if (!reponse.ok || !type.startsWith('image/x-bil')) throw new Error(`RGE ALTI : ${reponse.status} ${type}`);
@@ -397,14 +400,226 @@ const versLonLat = (x, y, z) => {
     return [x / n * 360 - 180, Math.atan(Math.sinh(Math.PI * (1 - 2 * y / n))) / RAD];
 };
 
-function chargerImage(url) {
+// En voiture, une image peut ne jamais répondre (une zone sans réseau) : elle
+// tenait une des SOL_PARALLELE places pour toujours. Abandonnée au bout de
+// ce délai, elle sera redemandée.
+const DELAI_IMAGE_MS = 10000, DELAI_ALTI_MS = 15000;
+function chargerImage(url, delai = DELAI_IMAGE_MS) {
     return new Promise((ok, ko) => {
         const img = new Image();
+        const minuterie = setTimeout(() => { img.src = ''; ko(new Error(`image trop lente : ${url}`)); }, delai);
         img.crossOrigin = 'anonymous';
-        img.onload = () => ok(img);
-        img.onerror = ko;
+        img.onload = () => { clearTimeout(minuterie); ok(img); };
+        img.onerror = e => { clearTimeout(minuterie); ko(e); };
         img.src = url;
     });
+}
+/** Une lecture qui ne répond pas dans le délai est abandonnée. */
+async function lireAvecDelai(url, delai) {
+    const arret = new AbortController();
+    const minuterie = setTimeout(() => arret.abort(), delai);
+    try { return await fetch(url, { signal: arret.signal }); }
+    finally { clearTimeout(minuterie); }
+}
+/** L'IGN n'a pas de photo ici, le serveur le confirme (404) : un fait, pas une panne. */
+class TuileAbsente extends Error {}
+
+// --- Les tuiles gardées dans la voiture ---------------------------------------------
+// Les tuiles de l'IGN (photo, plan, altitudes) n'ont aucun en-tête de cache
+// (vérifié le 2026-10-20) : le navigateur les relisait à chaque trajet, sur
+// le réseau mobile, et le serveur ne peut pas les relayer sans y user ses
+// fils (l'IGN mettait ce jour-là de 0,3 à 6,7 s par tuile). La page les
+// range elle-même dans le stockage du navigateur (Cache Storage, permanent
+// en https) : un trajet refait se charge de là, même sans réseau. Au plus
+// CACHE_TUILES_MAX tuiles (une photo ~20 Ko, une tuile d'altitude ~210 Ko :
+// quelques centaines de mégaoctets), les plus anciennes rendues d'abord ; un
+// cache par trimestre, l'ancien effacé, comme le stock du serveur qui purge à
+// 90 jours : une nouvelle prise de vue de l'IGN arrive dans la voiture.
+const CACHE_PREFIXE = 'vue3d-voiture-tuiles-';
+const CACHE_TUILES_MAX = 15000, CACHE_PURGE_TOUTES = 400;
+const statsCache = { lues: 0, gardees: 0, reseau: 0 };
+let ecrituresCache = 0;
+const ouvertureCache = (async () => {
+    try {
+        if (!window.caches) return null;
+        const d = new Date(), nom = `${CACHE_PREFIXE}${d.getFullYear()}T${Math.floor(d.getMonth() / 3) + 1}`;
+        for (const autre of await caches.keys()) if (autre.startsWith(CACHE_PREFIXE) && autre !== nom) caches.delete(autre);
+        // Que le navigateur ne l'efface pas de lui-même quand il manque de place.
+        navigator.storage?.persist?.().catch(() => {});
+        return await caches.open(nom);
+    } catch (e) { return null; }        // navigation privée, stockage refusé : sans cache
+})();
+
+function garderEnCache(cache, url, reponse) {
+    cache.put(url, reponse).then(async () => {
+        statsCache.gardees++;
+        if (++ecrituresCache % CACHE_PURGE_TOUTES) return;
+        const cles = await cache.keys();
+        for (const c of cles.slice(0, Math.max(cles.length - Math.floor(CACHE_TUILES_MAX * 0.9), 0))) await cache.delete(c);
+    }).catch(() => {});
+}
+
+/** La réponse de `url`, du cache de la voiture, sinon du réseau (gardée si elle est bonne). */
+async function lireEnCache(url, delai, noter = true) {
+    const cache = await ouvertureCache;
+    if (cache) {
+        try {
+            const r = await cache.match(url);
+            if (r) { statsCache.lues++; return r; }
+        } catch (e) { /* cache illisible : le réseau */ }
+    }
+    let r;
+    try { r = await lireAvecDelai(url, delai); }
+    catch (e) { if (noter) noterManquee(url); throw e; }
+    statsCache.reseau++;
+    if (r.ok) {
+        oublierManquee(url);
+        if (cache) garderEnCache(cache, url, r.clone());
+    } else if (noter && (r.status >= 500 || r.status === 429)) {
+        noterManquee(url);
+    }
+    return r;
+}
+
+// --- Les tuiles manquées, redemandées plus tard ------------------------------------
+// Une tuile qui n'a pas pu se charger (pas de réseau, IGN en panne) est
+// notée, avec le nombre de fois où la page l'a demandée, et gardée d'une
+// session à l'autre (localStorage) : elle est redemandée en arrière-plan, les
+// plus demandées d'abord — celles d'un trajet habituel —, de plus en plus
+// tard (30 s, puis jusqu'à 10 min), quand le sol visible laisse de la place ;
+// arrivée, elle entre au cache et sort de la liste. Une absence confirmée par
+// l'IGN l'en retire aussi.
+const MANQUEES_CLE = 'vue3d-voiture-manquees', MANQUEES_MAX = 2000, MANQUEES_PARALLELE = 2;
+const MANQUEES_ATTENTE_MS = 30000, MANQUEES_ATTENTE_MAX_MS = 600000;
+const manquees = new Map();            // url → { n : demandes, prochain : instant, essais }
+try {
+    for (const [url, n] of JSON.parse(localStorage.getItem(MANQUEES_CLE) || '[]')) {
+        if (typeof url === 'string' && Number.isFinite(n)) manquees.set(url, { n, prochain: 0, essais: 0 });
+    }
+} catch (e) { /* stockage refusé ou illisible : une liste neuve */ }
+let manqueesModifiees = false, manqueesEnVol = 0, dernierManquees = -Infinity, derniereSauvegarde = -Infinity;
+function noterManquee(url) {
+    const m = manquees.get(url) || { n: 0, prochain: 0, essais: 0 };
+    m.n++;
+    if (m.prochain !== Infinity) m.prochain = performance.now() + MANQUEES_ATTENTE_MS;
+    manquees.set(url, m);
+    manqueesModifiees = true;
+    if (manquees.size > MANQUEES_MAX) {
+        // Trop de tuiles en attente : les moins demandées s'en vont.
+        const moindre = [...manquees].reduce((a, b) => (b[1].n < a[1].n ? b : a));
+        manquees.delete(moindre[0]);
+    }
+}
+function oublierManquee(url) { if (manquees.delete(url)) manqueesModifiees = true; }
+function sauverManquees() {
+    if (!manqueesModifiees) return;
+    try {
+        localStorage.setItem(MANQUEES_CLE, JSON.stringify([...manquees].map(([u, m]) => [u, m.n])));
+        manqueesModifiees = false;
+    } catch (e) { /* stockage refusé : la liste vit le temps de la page */ }
+}
+window.addEventListener('pagehide', sauverManquees);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') sauverManquees(); });
+
+async function reessayerManquee(url, m) {
+    try {
+        let r = await lireEnCache(url, url.startsWith('api/tuile') ? DELAI_IMAGE_MS : DELAI_ALTI_MS, false);
+        if (r.ok) return;                                   // gardée, oubliée par lireEnCache
+        if (r.status === 404) {
+            // Une photo refusée à l'IGN : le serveur la relit, ou confirme
+            // qu'elle n'existe pas ; une altitude absente, c'est la mer.
+            if (url.startsWith('api/tuile')) await relireTuile(url);
+            oublierManquee(url);
+            return;
+        }
+        throw new Error(`HTTP ${r.status}`);
+    } catch (e) {
+        if (e instanceof TuileAbsente) { oublierManquee(url); return; }
+        m.essais++;
+        m.prochain = performance.now() + Math.min(MANQUEES_ATTENTE_MS * 2 ** m.essais, MANQUEES_ATTENTE_MAX_MS);
+    }
+}
+
+function majManquees(maintenant) {
+    if (maintenant - derniereSauvegarde > 15000) { derniereSauvegarde = maintenant; sauverManquees(); }
+    if (maintenant - dernierManquees < 2000 || !manquees.size) return;
+    dernierManquees = maintenant;
+    // Le sol visible d'abord.
+    if (solEnVol >= SOL_PARALLELE / 2) return;
+    const pretes = [...manquees].filter(([, m]) => m.prochain <= maintenant).sort((a, b) => b[1].n - a[1].n);
+    for (const [url, m] of pretes) {
+        if (manqueesEnVol >= MANQUEES_PARALLELE) break;
+        manqueesEnVol++;
+        m.prochain = Infinity;                              // en cours
+        reessayerManquee(url, m).finally(() => {
+            manqueesEnVol--;
+            if (m.prochain === Infinity) m.prochain = performance.now() + MANQUEES_ATTENTE_MS;
+        });
+    }
+}
+
+// --- Le préchargement le long de la route ---------------------------------------
+// La page ne demande le sol que là où sont la caméra et, d'avance, la voiture
+// dans 6 et 12 s : une zone sans réseau traversée pour la première fois
+// gardait ses bâtiments, lus 2 à 6 km devant, sur une photo floue. Les photos
+// fines (zooms 16 à 18) et les altitudes d'une bande de PRECHARGE_LARGEUR_M
+// de part et d'autre de la route prévue, sur PRECHARGE_M devant, entrent au
+// cache sans être dessinées, trois à la fois, à part du sol visible :
+// n'avançant que quand celui-ci laissait une place, elles prenaient du retard
+// dès que l'IGN ralentissait (aucune tuile nette au bout d'une minute de
+// coupure à 110 km/h, une fois sur deux).
+const PRECHARGE_M = 2000, PRECHARGE_PAS_M = 75, PRECHARGE_LARGEUR_M = 120, PRECHARGE_PARALLELE = 3;
+const PRECHARGE_ZOOMS = [16, 17, 18];
+const prechargees = new Set();
+const statsPrecharge = { demandees: 0, deja: 0 };
+let prechargesEnVol = 0, dernierePrecharge = -Infinity;
+
+function majPrecharge(maintenant) {
+    if (maintenant - dernierePrecharge < 300) return;
+    dernierePrecharge = maintenant;
+    const ch = voiture.chemin;
+    let libres = PRECHARGE_PARALLELE - prechargesEnVol;
+    if (!ch || !voiture.vue || libres <= 0) return;
+    const lancer = url => {
+        if (libres <= 0 || prechargees.has(url)) return;
+        prechargees.add(url);
+        libres--;
+        prechargesEnVol++;
+        precharger(url).finally(() => { prechargesEnVol--; });
+    };
+    // Du plus près au plus loin : la route d'abord, puis ses deux bords.
+    const fin = Math.min(voiture.dChemin + PRECHARGE_M, ch.longueur);
+    for (let d = voiture.dChemin; d <= fin && libres > 0; d += PRECHARGE_PAS_M) {
+        const p = pointDuChemin(ch, d);
+        const nx = Math.cos(p.cap * RAD) * PRECHARGE_LARGEUR_M, ny = -Math.sin(p.cap * RAD) * PRECHARGE_LARGEUR_M;
+        for (const k of [0, -1, 1]) {
+            const [lon, lat] = depuisLambert93(p.x + nx * k, p.y + ny * k);
+            for (const z of PRECHARGE_ZOOMS) {
+                const [tx, ty] = versTuile(lon, lat, z);
+                lancer(FONDS[fond](z, tx, ty));
+                const niveau = Math.min(Math.max(z - 5, ALTI_NIVEAU_MIN), ALTI_NIVEAU_MAX), q = pasAlti(niveau) * 256;
+                lancer(ALTI_URL(niveau, Math.floor((90 - lat) / q), Math.floor((lon + 180) / q)));
+            }
+        }
+    }
+}
+
+async function precharger(url) {
+    const cache = await ouvertureCache;
+    if (!cache) return;                                      // sans cache, rien à gagner
+    try {
+        if (await cache.match(url)) { statsPrecharge.deja++; return; }
+        statsPrecharge.demandees++;
+        await lireEnCache(url, url.startsWith('api/tuile') ? DELAI_IMAGE_MS : DELAI_ALTI_MS);
+    } catch (e) { /* notée, redemandée plus tard */ }
+}
+
+/** L'image d'une tuile, du cache ou du réseau ; lève si elle ne vient pas. */
+async function imageEnCache(url) {
+    const r = await lireEnCache(url, DELAI_IMAGE_MS);
+    if (!r.ok) throw new Error(`tuile ${r.status} : ${url}`);
+    const lien = URL.createObjectURL(await r.blob());
+    try { return await chargerImage(lien); } finally { URL.revokeObjectURL(lien); }
 }
 
 // Une tuile refusée au navigateur est relue par le serveur, qui la garde
@@ -418,11 +633,15 @@ async function relireTuile(url) {
     relecturesEnCours++;
     try {
         for (let essai = 0; essai < 3; essai++) {
-            const reponse = await fetch(`${url}?relire=1`);
+            const reponse = await lireAvecDelai(`${url}?relire=1`, DELAI_IMAGE_MS);
             if (reponse.ok) {
+                // Gardée sous l'adresse de la tuile : le prochain trajet l'y trouve.
+                const cache = await ouvertureCache;
+                if (cache) garderEnCache(cache, url, reponse.clone());
                 const lien = URL.createObjectURL(await reponse.blob());
                 try { return await chargerImage(lien); } finally { URL.revokeObjectURL(lien); }
             }
+            if (reponse.status === 404) throw new TuileAbsente(url);
             if (reponse.status !== 503) break;
             await new Promise(r => setTimeout(r, (Number(reponse.headers.get('retry-after')) || 2) * 1000));
         }
@@ -452,13 +671,33 @@ function tuileSol(z, x, y) {
     return t;
 }
 
+/**
+ * L'image d'une tuile ; null si l'IGN n'en a pas (404 confirmé) ; une panne
+ * (réseau coupé, serveur occupé, délai) lève, et la tuile sera redemandée.
+ *
+ * Seule l'absence confirmée vaut absence. La page classait « sans image » toute
+ * tuile dont la relecture échouait, et ses descendantes ne demandaient plus
+ * rien : une zone sans réseau, ou un épisode de 404 de l'IGN (une tuile du
+ * zoom 15 au centre de Rousset, puis 200 cinq fois de suite) où le serveur,
+ * qui relit deux tuiles à la fois, répondait 503, laissaient toute une zone
+ * grise pour la vie de la page — 274 tuiles montrées sur 274 après 15 s de
+ * coupure et 35 s de réseau. Sous un ancêtre sans image (la mer, l'étranger),
+ * une descendante essaie encore l'IGN, sans relecture : l'image peut exister
+ * plus fin.
+ */
 async function imageSol(t, gen) {
-    for (let a = parentSol(t); a; a = parentSol(a)) if (a.sansImage === gen) { t.sansImage = gen; return null; }
+    let ancetreAbsent = false;
+    for (let a = parentSol(t); a; a = parentSol(a)) if (a.sansImage === gen) { ancetreAbsent = true; break; }
     const url = FONDS[fond](t.z, t.x, t.y);
-    try { return await chargerImage(url); }
+    try { return await imageEnCache(url); }
     catch (e) {
+        if (ancetreAbsent) { t.sansImage = gen; return null; }
         try { return await relireTuile(url); }
-        catch (e2) { t.sansImage = gen; return null; }
+        catch (e2) {
+            if (e2 instanceof TuileAbsente) { t.sansImage = gen; oublierManquee(url); return null; }
+            noterManquee(url);
+            throw e2;
+        }
     }
 }
 
@@ -567,8 +806,13 @@ async function chargerTuileSol(t) {
         if (!tuilesSol.has(t.cle)) return;
         if (!t.mesh) construireTuile(t, niveau);
         else habillerTuile(t);
+        t.echecs = 0;
     } catch (e) {
-        t.reessai = performance.now() + 15000;
+        // Altitudes ou image en panne : redemandée de plus en plus tard, de
+        // 4 à 20 s, pas plus : le réseau revenu, le sol doit suivre ; d'ici
+        // là, sa mère la couvre.
+        t.echecs = (t.echecs || 0) + 1;
+        t.reessai = performance.now() + Math.min(4000 * 2 ** (t.echecs - 1), 20000);
     } finally {
         t.enCours = false;
         solEnVol--;
@@ -661,8 +905,12 @@ function majSol(maintenant) {
     }
 
     if (tuilesSol.size > SOL_CACHE) {
+        // Jamais les ancêtres d'une tuile montrée : leur image habille celles
+        // qui n'ont pas encore la leur. Évincés, ils laissaient le sol gris.
+        const ancetres = new Set();
+        for (const t of montrees) for (let a = parentSol(t); a && !ancetres.has(a); a = parentSol(a)) ancetres.add(a);
         const vieilles = [...tuilesSol.values()]
-            .filter(t => !montrees.has(t) && !t.enCours && t.vue < maintenant)
+            .filter(t => !montrees.has(t) && !ancetres.has(t) && !t.enCours && t.vue < maintenant)
             .sort((a, b) => a.vue - b.vue)
             .slice(0, tuilesSol.size - SOL_CACHE);
         for (const t of vieilles) {
@@ -698,6 +946,9 @@ const CARRE_M = 500;
 // leur adresse : le navigateur garde un carré une semaine.
 const CARRES_VERSION = 2, VEGETATION_VERSION = 2;
 const AUTOUR_M = 450;
+// Autour de la voiture quand la route prévue finit en impasse : bâtiments ;
+// les arbres, plus lents à lire, sur VEG_IMPASSE_M.
+const IMPASSE_RAYON_M = 1000;
 const COULOIR_M = 350;
 const PAS_COULOIR_M = 100;
 const CARRES_VOULUS_MAX = 90;
@@ -1188,7 +1439,7 @@ function construireRoutes(c, cx, cy) {
 // carré par carré (/api/vegetation) : 1 à 5 s de lecture par carré au
 // serveur, contre 0,2 s pour les bâtiments. D'où une bande plus étroite :
 // les arbres à plus de 250 m de la route se perdent dans la photo.
-const VEG_AUTOUR_M = 300, VEG_COULOIR_M = 250, VEG_DEVANT_M = 2000;
+const VEG_AUTOUR_M = 300, VEG_COULOIR_M = 250, VEG_DEVANT_M = 2000, VEG_IMPASSE_M = 500;
 const VEG_PARALLELE = 2;
 let vegEnVol = 0;
 let arbresActifs = PARAMS.get('arbres') !== '0';
@@ -1340,7 +1591,7 @@ majBoutonArbres();
  * ceux à moins de `autour` de la voiture, et à moins de `couloir` de la
  * route prévue, sur `devant` mètres.
  */
-function carresVoulus(autour = AUTOUR_M, couloir = COULOIR_M, devant = Infinity) {
+function carresVoulus(autour = AUTOUR_M, couloir = COULOIR_M, devant = Infinity, impasse = IMPASSE_RAYON_M) {
     const voulus = new Map();
     const ajouter = (x, y, rayon, prio) => {
         const i0 = Math.floor((x - rayon) / CARRE_M), i1 = Math.floor((x + rayon) / CARRE_M);
@@ -1368,6 +1619,9 @@ function carresVoulus(autour = AUTOUR_M, couloir = COULOIR_M, devant = Infinity)
         }
         // Au bout d'une route encore inconnue : le carré suivant, d'abord.
         if (ch.fin === 'inconnu' && devant === Infinity) ajouter(ch.bout[0], ch.bout[1], 1, ch.longueur - d0 - 200);
+        // Une impasse devant : on ne sait plus par où la voiture repartira,
+        // tout autour d'elle, plus loin.
+        if (ch.fin === 'impasse') ajouter(x, y, impasse, 0);
     } else if (v.vue && v.v > 2) {
         for (let d = PAS_COULOIR_M; d <= Math.min(1500, devant); d += PAS_COULOIR_M) {
             ajouter(x + d * Math.sin(v.cap * RAD), y + d * Math.cos(v.cap * RAD), couloir, d);
@@ -1398,7 +1652,7 @@ function majCarres(maintenant) {
         // Les arbres, après les bâtiments et plus près de la route.
         const vegCles = new Set();
         if (arbresActifs) {
-            const vegVoulus = carresVoulus(VEG_AUTOUR_M, VEG_COULOIR_M, VEG_DEVANT_M);
+            const vegVoulus = carresVoulus(VEG_AUTOUR_M, VEG_COULOIR_M, VEG_DEVANT_M, VEG_IMPASSE_M);
             for (const { i, j, p } of vegVoulus) {
                 const c = carre(i, j);
                 c.veg.voulu = maintenant;
@@ -1574,12 +1828,18 @@ function suites(a, n, capArrivee) {
         if (b.nature === 'Chemin' || b.nature === 'Route empierrée') score += 40;
         if (b.nature === 'Bretelle' && a.nature !== 'Bretelle') score += 25;
         if (b.acces && b.acces.startsWith('Restreint') && !a.acces) score += 60;
+        // Un cul-de-sac au bout du tronçon : à Rousset, la route prévue y
+        // finissait au bout de 250 à 800 m quand la rue continuait ailleurs,
+        // et plus rien ne se chargeait au-delà.
+        const bout = b.n0 === n ? b.n1 : b.n0;
+        if (bout.aretes.length === 1 && carrePret(bout.x, bout.y)) score += CUL_DE_SAC;
         options.push({ a: b, sens: b.n0 === n ? 1 : -1, score });
     }
     return options.sort((u, v) => u.score - v.score);
 }
 
 const carrePret = (x, y) => carreDe(x, y)?.etat === 'pret';
+const CUL_DE_SAC = 80;
 
 // Sur un rond-point, la suite « la plus droite » est l'anneau lui-même : la
 // route prévue en faisait le tour et s'arrêtait sur un tronçon déjà vu (au
@@ -2281,8 +2541,9 @@ function majHud(maintenant) {
     }
     let charges = 0, construits = 0;
     for (const c of carres.values()) { if (c.etat === 'pret') charges++; if (c.mesh && c.mesh.visible) construits++; }
-    elCarres.innerHTML = ch ? `Bâtiments prêts sur <b>${pret >= 1000 ? (pret / 1000).toFixed(1).replace('.', ',') + ' km'
-        : Math.round(pret / 50) * 50 + ' m'}</b> devant` : `${construits} carrés de bâtiments`;
+    elCarres.innerHTML = (ch ? `Bâtiments prêts sur <b>${pret >= 1000 ? (pret / 1000).toFixed(1).replace('.', ',') + ' km'
+        : Math.round(pret / 50) * 50 + ' m'}</b> devant` : `${construits} carrés de bâtiments`)
+        + (manquees.size ? `<br>${manquees.size} tuile${manquees.size > 1 ? 's' : ''} en attente de réseau` : '');
     if (v.vue) majLienQuitter();
 }
 
@@ -2386,7 +2647,7 @@ function majSimu(dt, maintenant) {
         simu.s = simu.sens > 0 ? a.L : 0;
         const n = simu.sens > 0 ? a.n1 : a.n0;
         if (!carrePret(n.x, n.y)) { arrete = true; break; }
-        const choix = suiteProbable(a, simu.sens, n, simu.etat, simu.evitees, 0.33);
+        const choix = suiteProbable(a, simu.sens, n, simu.etat, simu.evitees, HASARD_SIMU);
         if (!choix) { simu.sens = -simu.sens; simu.etat.capEntree = null; continue; }
         simu.a = choix.a; simu.sens = choix.sens; simu.s = choix.sens > 0 ? 0 : choix.a.L;
     }
@@ -2432,6 +2693,8 @@ function boucle(maintenant) {
     majCamera(dt, maintenant);
     majCarres(maintenant);
     majSol(maintenant);
+    majPrecharge(maintenant);
+    majManquees(maintenant);
     majRuban(maintenant);
     majCiel(maintenant);
     majHud(maintenant);
@@ -2446,7 +2709,8 @@ function boucle(maintenant) {
 }
 
 // Pour les essais (outils/essai-voiture.mjs) : l'état, en lecture.
-window.__voiture = { voiture, carres, tuilesSol, aretes, camVue, camera, renderer, durees, dureesArbres,
+window.__voiture = { voiture, carres, tuilesSol, aretes, camVue, camera, renderer, durees, dureesArbres, statsCache,
+                     manquees, statsPrecharge,
                      get budget() { return budgetConstruction; } };
 
 // --- Départ ---------------------------------------------------------------------------------

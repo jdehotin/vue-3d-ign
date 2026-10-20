@@ -61,6 +61,20 @@ messages de commit et dans les commentaires des modules.
     Elle ne change jamais d'angle pour un obstacle — montée au-dessus des
     toits voisins, elle sautait sans cesse dans un village : les bâtiments
     et les arbres qui la frôlent ou la séparent de la voiture s'effacent.
+  - **Les tuiles gardées dans la voiture** : les photos, le plan et les
+    altitudes de l'IGN, qui n'ont aucun en-tête de cache et se relisaient
+    à chaque trajet sur le réseau mobile, sont rangés par la page dans le
+    stockage du navigateur (15 000 tuiles au plus, un cache par trimestre).
+    À Rousset, le même trajet refait : sol net sous la voiture après 1 s
+    au lieu de 11,5 s, 44 tuiles lues sur le réseau au lieu de 433, et
+    autant sans réseau du tout. Les photos fines et les altitudes d'une
+    bande de 120 m de part et d'autre de la route prévue sont de plus
+    chargées d'avance sur 2 km : dans la seconde moitié d'une coupure de
+    réseau d'une minute à 110 km/h, sur un trajet neuf, le sol reste net
+    sous la voiture 60 % du temps, contre 12 % sans. Une tuile manquée
+    (pas de réseau, IGN en panne) est notée, gardée d'une session à
+    l'autre, et redemandée plus tard, les plus demandées d'abord ; le
+    panneau d'état dit combien attendent le réseau.
   - **La voiture** calée sur la route, vue de derrière ou de dessus, avec
     la vitesse, le nom de la rue et le cartouche de la route (A7, D15) ;
     entre deux relevés, elle avance le long de la route, et dans un tunnel,
@@ -387,6 +401,19 @@ messages de commit et dans les commentaires des modules.
   vue. Vus de loin, en cours de partie, le cortège et les cordons gardent
   leur nom. Les étiquettes prennent la largeur de leur texte, et un peu
   moins de place sur un téléphone en portrait.
+- **Le sol de la vue en voiture qui restait gris** (Tesla, autour de
+  Rousset) : une photo dont la relecture échouait — zone sans réseau, ou
+  épisode de 404 de l'IGN où le serveur, qui relit deux tuiles à la fois,
+  répond « occupé » — était tenue pour absente, et toutes les tuiles plus
+  fines de la zone n'étaient plus jamais demandées ; les tuiles grossières
+  qui les habillaient en attendant pouvaient de plus être évincées. Après
+  15 s de coupure et 35 s de réseau, 274 tuiles montrées sur 274 restaient
+  grises ; aucune désormais : seul un 404 confirmé vaut absence, une panne
+  est redemandée de 4 à 20 s plus tard, une image ou une altitude qui ne
+  répond pas est abandonnée au bout de 10 ou 15 s, et les ancêtres d'une
+  tuile montrée restent. La route prévue évite aussi les culs-de-sac, et
+  charge les bâtiments sur 1 km autour de la voiture quand elle finit en
+  impasse : au centre de Rousset, elle s'arrêtait au bout de 250 à 800 m.
 - **Les sapins et les chênes verts de la BD Forêt** : « Sapin, épicéa »
   contient « pin », et les sapins des Vosges sortaient en pins parasols, sur
   un long fût nu ; les chênes verts, « Chênes sempervirents » dans la BD
