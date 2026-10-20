@@ -242,6 +242,7 @@
         .bouton-vue:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
         .bouton-vue.on { background:var(--accent); border-color:var(--accent); color:#fff; }
         .bouton-vue[hidden] { display:none; }
+        a.bouton-vue { text-decoration:none; }
         .bouton-vue:disabled { cursor:wait; opacity:.6; }
         .bouton-vue svg { width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.8;
                           stroke-linecap:round; stroke-linejoin:round; }
@@ -604,6 +605,14 @@
                     <path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3"/>
                 </svg>
             </button>
+            <a id="t-voiture" class="bouton-vue" href="voiture" aria-label="En voiture"
+               title="En voiture : la vue suit votre position comme un GPS, et charge les bâtiments sur la route, devant vous">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M4.5 16.5v-3.4l1.7-4.3a2 2 0 0 1 1.9-1.3h7.8a2 2 0 0 1 1.9 1.3l1.7 4.3v3.4z"/>
+                    <path d="M4.5 13.1h15"/>
+                    <circle cx="8" cy="16.6" r="1.6"/><circle cx="16" cy="16.6" r="1.6"/>
+                </svg>
+            </a>
             <button type="button" id="v-nuage" class="bouton-vue texte" hidden aria-label="Nuage LiDAR"
                     title="Nuage LiDAR : tout le bâti en points du LiDAR HD ; les ouvrages ajourés, comme la tour Eiffel, y sont toujours">LiDAR</button>
             <button type="button" id="t-drone" class="bouton-vue" aria-label="Drone"
@@ -7513,6 +7522,17 @@ const MESSAGES_GEOLOC = {
 };
 
 const btnMoi = document.getElementById('t-moi');
+
+// La vue en voiture (static/voiture.html), qui part de la position suivie si
+// elle est connue, sinon du point de la scène ; de l'accueil, de la
+// géolocalisation seule.
+const lienVoiture = document.getElementById('t-voiture');
+function majLienVoiture() {
+    const [lat, lon] = moi.lat != null ? [moi.lat, moi.lon] : ACCUEIL ? [null, null] : [LAT0, LON0];
+    lienVoiture.href = lat == null ? 'voiture' : `voiture?lat=${lat.toFixed(5)}&lon=${lon.toFixed(5)}`;
+}
+lienVoiture.addEventListener('click', majLienVoiture);
+majLienVoiture();
 let suiviPosition = null;   // identifiant du watchPosition en cours
 
 // Le bouton est sur la vue, et sur téléphone le panneau est replié : chaque

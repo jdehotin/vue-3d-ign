@@ -25,13 +25,14 @@ python outils/valider_ifc.py essai.ifc           # validation par ifcopenshell (
 python outils/valider_citygml.py essai.gml       # géométrie du CityGML ; son schéma : citygml-tools validate essai.gml
 python3 -m http.server -d outils 8000            # visionneuse-ifc.html : un IFC exporté, relu par web-ifc, propriétés au clic
 npm install puppeteer-core && node outils/essai-navigateur.mjs "http://localhost:8080/?lat=43.9116&lon=5.2003"
+node outils/essai-voiture.mjs "http://localhost:8080/voiture?simu=1&lat=48.8706&lon=2.3055&vitesse=50" 60 voiture.png   # la vue en voiture, conduite simulée
 ```
 
 ## Architecture
 
 ```
 vue3d/
-  app.py        Flask : /, /api/scene, /api/ortho, /api/monuments, /api/ouvrages, /api/nuage, /api/piscines, /api/navires, /api/vehicules, /api/panneaux, /api/dpe, /api/dvf, /api/bornes, /api/avancement, /api/sante, /api/tuile, POST /api/reconstruire ; quota de scènes neuves par IP (VUE3D_QUOTA, VUE3D_PROXY derrière un proxy)
+  app.py        Flask : /, /voiture, /api/scene, /api/carre, /api/ortho, /api/monuments, /api/ouvrages, /api/nuage, /api/piscines, /api/navires, /api/vehicules, /api/panneaux, /api/dpe, /api/dvf, /api/bornes, /api/avancement, /api/sante, /api/tuile, POST /api/reconstruire ; quota de scènes neuves par IP (VUE3D_QUOTA, VUE3D_PROXY derrière un proxy)
   scene.py      assemblage d'une scène, cache disque par point arrondi
   couches.py    lecture WFS (bâtiments, végétation, BD Forêt, routes)
   batiments.py  bâtiments découpés sur l'emprise, en retrait du bord
@@ -53,9 +54,11 @@ vue3d/
   dpe.py        DPE de l'ADEME rattachés aux bâtiments (RNB, sinon adresse à 5 m) : couche à part, lue au clic seulement, datée
   dvf.py        ventes DVF (fichiers Etalab) jointes aux parcelles du cadastre IGN : couche à part, lue au clic seulement, datée
   bornes.py     bornes de recharge (Base nationale des IRVE, API tabulaire de data.gouv.fr) réunies par station : couche à part, lue au clic seulement, datée
+  carres.py     carrés de 500 m de la vue en voiture, grille Lambert-93 : bâtiments et routes BD TOPO lus en EPSG:2154 (cache/carres/), sans scène ni MNH ; quota à part (CARRES_PAR_HEURE)
   geopf.py      GET avec reprise sur la Géoplateforme ; 8 places pour tout le service, lectures groupées abandonnées au premier échec
   tuiles.py     tuiles WMTS de la page (ortho, plan) : stock servi, sinon redirection vers l'IGN ; une tuile refusée au navigateur est relue ici et gardée 90 jours (cache/tuiles/)
   static/index.html   la page entière : HTML, CSS et JavaScript (three.js r160)
+  static/voiture.html la vue en voiture, page à part : un monde qui défile en Lambert-93, sol en tuiles WMTS sur le RGE ALTI, carrés chargés le long de la route prévue sur le graphe BD TOPO, voiture calée sur la route
   static/favicon.svg, favicon-32.png, apple-touch-icon.png   le logo de la page, tiré de docs/logo/
 docs/logo/      le logo « Tuile » : SVG avec et sans le nom (vectorisé), icône, aperçu GitHub
 ```

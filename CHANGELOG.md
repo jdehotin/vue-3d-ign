@@ -15,6 +15,33 @@ messages de commit et dans les commentaires des modules.
 
 ### Ajouté
 
+- **La vue en voiture** (20 octobre 2026), au bouton en forme de voiture sous
+  « Ma position », ou `/voiture` : une page à part, qui suit la position
+  comme un GPS, pour l'écran d'un téléphone ou d'une voiture. La scène ne
+  pouvait pas suivre : une zone de 1 000 m se traverse en 40 s à 90 km/h,
+  quand une scène demande 10 à 30 s et que la prod en limite la
+  construction à 20 par heure.
+  - **Un monde qui défile**, en Lambert-93 : le sol en tuiles de
+    l'orthophoto ou du Plan IGN posées sur le RGE ALTI, fines près de la
+    caméra et là où la voiture sera dans 6 et 12 s ; les bâtiments par
+    carrés de 500 m de la BD TOPO seule (`/api/carre`, 0,12 à 0,33 s et 5 à
+    34 Ko par carré), chargés le long de la route prévue et libérés
+    derrière. À 130 km/h sur l'A7, ils sont prêts 5,4 à 5,9 km devant la
+    voiture, à 60 images par seconde (Chrome, Mac M4).
+  - **La route prévue**, tracée en bleu : la route où l'on roule, prolongée
+    sur le graphe BD TOPO (tout droit, sur la même voie, de même
+    importance ; aux ronds-points, la sortie la plus proche du cap
+    d'entrée), sur 2 à 6 km selon la vitesse. Sentiers, escaliers, pistes
+    cyclables et galeries marchandes n'en sont pas.
+  - **La voiture** calée sur la route, vue de derrière ou de dessus, avec
+    la vitesse, le nom de la rue et le cartouche de la route (A7, D15) ;
+    entre deux relevés, elle avance le long de la route, et dans un tunnel,
+    jusqu'à 40 s sans GPS. Les façades entre la caméra et elle s'ajourent ;
+    la nuit, le ciel et la photo s'assombrissent ; l'écran reste allumé là
+    où le navigateur le permet.
+  - **Une conduite simulée**, `?simu=1&lat=…&lon=…&vitesse=…`, pour
+    l'essayer sans rouler, et `outils/essai-voiture.mjs` pour la vérifier
+    dans un navigateur.
 - **Un second jeu : le cortège**, par le bouton **Cortège** en vol (ou
   `?jeu=cortege`). Il s'agit de mener une marche pacifique, de la place de
   la scène jusqu'à son arrivée, par les rues de la BD TOPO, avec le plus de

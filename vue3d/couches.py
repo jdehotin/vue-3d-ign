@@ -33,6 +33,11 @@ COUCHE_BATIMENTS = "BDTOPO_V3:batiment"
 COUCHE_VEGETATION = "BDTOPO_V3:zone_de_vegetation"
 COUCHE_FORET = "LANDCOVER.FORESTINVENTORY.V2:formation_vegetale"
 COUCHE_ROUTES = "BDTOPO_V3:troncon_de_route"
+SRS_WGS84 = "EPSG:4326"
+# Lambert-93 : le service rend l'emprise et les coordonnées en x, y (vérifié
+# le 2026-10-20 sur un bâtiment de Gordes, au centième de mètre de sa
+# projection depuis la réponse en EPSG:4326).
+SRS_LAMBERT93 = "EPSG:2154"
 # Plafond du service, constaté (numberMatched 9 948, numberReturned 5 000).
 WFS_PAGE = 5000
 # Une zone de 1 km tient en une réponse presque partout ; quatre découpes
@@ -40,11 +45,11 @@ WFS_PAGE = 5000
 WFS_DECOUPES_MAX = 4
 
 
-def _requete(typenames, west, south, east, north):
+def _requete(typenames, west, south, east, north, srs=SRS_WGS84):
     """Une réponse du service, au plus WFS_PAGE objets."""
     url = (f"{WFS_URL}?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature"
-           f"&TYPENAMES={typenames}&OUTPUTFORMAT=application/json&SRSNAME=EPSG:4326"
-           f"&BBOX={west},{south},{east},{north},EPSG:4326")
+           f"&TYPENAMES={typenames}&OUTPUTFORMAT=application/json&SRSNAME={srs}"
+           f"&BBOX={west},{south},{east},{north},{srs}")
     with place():
         reponse = get_avec_reprise(url, timeout=30)
     reponse.raise_for_status()
@@ -57,14 +62,16 @@ def _requete(typenames, west, south, east, north):
         raise requests.RequestException(f"réponse illisible sur {typenames}") from exc
 
 
-def lire_couche(typenames, west, south, east, north, profondeur=0):
-    """GeoJSON d'une couche WFS sur une emprise WGS84, sans objet manquant.
+def lire_couche(typenames, west, south, east, north, profondeur=0, srs=SRS_WGS84):
+    """GeoJSON d'une couche WFS sur une emprise, sans objet manquant : en
+    WGS84 par défaut, en Lambert-93 avec `srs=SRS_LAMBERT93` (emprise et
+    coordonnées rendues en x, y, mètres).
 
     Raises:
         requests.RequestException si le service ne répond pas, ou répond une
         erreur déguisée en succès.
     """
-    geojson = _requete(typenames, west, south, east, north)
+    geojson = _requete(typenames, west, south, east, north, srs)
     attendus = geojson.get("numberMatched")
     if not isinstance(attendus, int) or len(geojson["features"]) >= attendus:
         return geojson
@@ -76,7 +83,7 @@ def lire_couche(typenames, west, south, east, north, profondeur=0):
               (west, milieu_lat, milieu_lon, north), (milieu_lon, milieu_lat, east, north))
     # Les quatre lus ensemble, réunis dans le même ordre qu'un à un : un objet
     # à cheval reste celui du premier quart qui le rend.
-    reponses = en_parallele(*(lambda q=q: lire_couche(typenames, *q, profondeur + 1)
+    reponses = en_parallele(*(lambda q=q: lire_couche(typenames, *q, profondeur + 1, srs)
                               for q in quarts))
     vus, objets = set(), []
     for reponse in reponses:

@@ -2,6 +2,9 @@
 
     GET /                          la page ; `?lat=…&lon=…` pour viser un point
                                    et `&zone=…` pour le côté de la zone, en mètres
+    GET /voiture                   la vue en voiture, qui suit la position ;
+                                   `?lat=…&lon=…` pour son départ, `&simu=1` pour
+                                   une conduite simulée
     GET /api/scene?lat=…&lon=…     la scène, JSON gzippé (construite au besoin)
     GET /api/ortho?lat=…&lon=…     l'orthophoto de la scène, en JPEG
     GET /api/monuments?lat=…&lon=…   la couche des monuments OSM, JSON gzippé
@@ -16,6 +19,8 @@
     GET /api/dvf?lat=…&lon=…         les ventes DVF des parcelles, de même
     GET /api/bornes?lat=…&lon=…      les bornes de recharge (IRVE, data.gouv.fr), de même
     GET /api/avancement?lat=…&lon=…  l'étape de la construction en cours
+    GET /api/carre?i=…&j=…         un carré de 500 m de la grille Lambert-93 :
+                                   bâtiments et routes BD TOPO, pour la voiture
     GET /api/tuile/<couche>/<z>/<x>/<y>  une tuile WMTS de l'IGN (ortho, plan) : du
                                    stock du serveur, sinon redirigée vers l'IGN ;
                                    `?relire=1` après un refus, lue et gardée ici
@@ -27,8 +32,8 @@ elle, l'emprise par défaut d'environ 356 m.
 La première demande d'un point construit sa scène : une vingtaine à une
 trentaine de secondes, que la page annonce. Les suivantes la lisent sur disque.
 Avec `VUE3D_QUOTA`, une même adresse IP n'en fait construire qu'autant par
-heure (429 au-delà) ; derrière un proxy, `VUE3D_PROXY` dit combien croire de
-`X-Forwarded-For`.
+heure (429 au-delà), et pas plus de CARRES_PAR_HEURE carrés neufs ; derrière
+un proxy, `VUE3D_PROXY` dit combien croire de `X-Forwarded-For`.
 """
 
 import logging
@@ -42,6 +47,7 @@ from flask import Flask, jsonify, redirect, request, send_file, send_from_direct
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from .bornes import fetch_bornes
+from .carres import CARRES_PAR_HEURE, CarreHorsEmprise, CarreIndisponible, Carres, fetch_carre
 from .dpe import fetch_dpe
 from .dvf import fetch_dvf
 from .monuments import fetch_monuments
@@ -139,7 +145,7 @@ def creer_app(dossier_cache=None, construire=construire_scene, lire_monuments=fe
               lire_ouvrages=fetch_ouvrages, lire_vehicules=None, lire_panneaux=None,
               lire_nuage=fetch_nuage, lire_dpe=fetch_dpe, lire_dvf=fetch_dvf, lire_mer=fetch_mer,
               lire_tuile=fetch_tuile, quota=None, proxy=None, relectures=None,
-              lire_bornes=fetch_bornes):
+              lire_bornes=fetch_bornes, lire_carre=fetch_carre, quota_carres=None):
     """`construire`, `lire_monuments`, `lire_ouvrages`, `lire_vehicules`,
     `lire_panneaux`, `lire_nuage`, `lire_dpe`, `lire_dvf`, `lire_mer` et
     `lire_bornes` sont injectables
@@ -153,7 +159,10 @@ def creer_app(dossier_cache=None, construire=construire_scene, lire_monuments=fe
     `proxy` : proxys devant le service, dont on croit `X-Forwarded-For`.
     None : de VUE3D_QUOTA et VUE3D_PROXY, 0 en leur absence.
     `relectures` : tuiles relues par heure et par adresse IP, 0 sans limite ;
-    None : TUILES_RELECTURES_PAR_HEURE si le service a un quota de scènes."""
+    None : TUILES_RELECTURES_PAR_HEURE si le service a un quota de scènes.
+    `lire_carre` : (i, j) -> dict d'un carré de la voiture (vue3d/carres.py) ;
+    `quota_carres` : carrés neufs par heure et par adresse IP, 0 sans limite ;
+    None : CARRES_PAR_HEURE si le service a un quota de scènes."""
     app = Flask(__name__, static_folder=os.path.join(ICI, "static"), static_url_path="/static")
     proxy = entier_env("VUE3D_PROXY") if proxy is None else proxy
     if proxy:
@@ -181,6 +190,10 @@ def creer_app(dossier_cache=None, construire=construire_scene, lire_monuments=fe
     if relectures is None:
         relectures = TUILES_RELECTURES_PAR_HEURE if quota else 0
     quota_tuiles = Quota(relectures) if relectures else None
+    carres = Carres(cache.dossier, lire=lire_carre)
+    if quota_carres is None:
+        quota_carres = CARRES_PAR_HEURE if quota else 0
+    quota_carres = Quota(quota_carres) if quota_carres else None
 
     def point():
         """(lat, lon, zone) de la requête ; None si l'un d'eux est illisible."""
@@ -349,6 +362,12 @@ def creer_app(dossier_cache=None, construire=construire_scene, lire_monuments=fe
     @app.get("/")
     def page():
         return send_from_directory(app.static_folder, "index.html")
+
+    @app.get("/voiture")
+    def voiture():
+        reponse = send_from_directory(app.static_folder, "voiture.html")
+        reponse.headers["Cache-Control"] = "no-cache"
+        return reponse
 
     @app.get("/api/scene")
     def scene():
@@ -571,6 +590,38 @@ def creer_app(dossier_cache=None, construire=construire_scene, lire_monuments=fe
         reponse = send_file(chemin, mimetype=COUCHES[couche][1], conditional=True)
         # Le délai que l'IGN donne lui-même à ses tuiles.
         reponse.headers["Cache-Control"] = "public, max-age=1814400"
+        return reponse
+
+    @app.get("/api/carre")
+    def carre():
+        """Un carré de la grille de la voiture (vue3d/carres.py), lu au
+        besoin : bâtiments et routes BD TOPO."""
+        try:
+            i, j = int(request.args["i"]), int(request.args["j"])
+        except (KeyError, ValueError):
+            return erreur(400, "Paramètres i et j attendus : le carré, en pas de 500 m Lambert-93.")
+        try:
+            if quota_carres and not carres.present(i, j):
+                attente = quota_carres.attente(request.remote_addr, (i, j))
+                if attente:
+                    app.logger.warning("Quota de %d carrés neufs par heure atteint pour %s",
+                                       quota_carres.par_heure, request.remote_addr)
+                    reponse, code = erreur(429, "Trop de carrés neufs pour ce visiteur.")
+                    reponse.headers["Retry-After"] = str(attente)
+                    return reponse, code
+            chemin = carres.obtenir(i, j)
+        except CarreHorsEmprise as exc:
+            return erreur(422, str(exc))
+        except CarreIndisponible as exc:
+            app.logger.warning("Carré %d, %d indisponible : %s", i, j, exc)
+            reponse, code = erreur(503, f"Un service de l'IGN n'a pas répondu ({exc}).")
+            reponse.headers["Retry-After"] = "10"
+            return reponse, code
+        reponse = servir_gzip(os.path.dirname(chemin), os.path.basename(chemin))
+        # Jamais réécrit sous la même adresse (le dossier porte la version) :
+        # gardé une semaine, sans revalidation, ce qui épargne une requête par
+        # carré à chaque passage.
+        reponse.headers["Cache-Control"] = "public, max-age=604800"
         return reponse
 
     @app.get("/api/sante")

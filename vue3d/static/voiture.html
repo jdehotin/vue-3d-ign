@@ -1,0 +1,2047 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="utf-8" />
+    <link rel="icon" href="static/favicon-32.png" sizes="32x32" type="image/png" />
+    <link rel="icon" href="static/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="static/apple-touch-icon.png" />
+    <!-- Pas de zoom du navigateur : les doigts règlent le recul de la caméra. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="theme-color" content="#1f2328" />
+    <title>Vue 3D IGN · en voiture</title>
+    <style>
+        :root { --accent:#e07b00; --panel:rgba(31,35,40,.88); --text:#e8eaed; --muted:#9aa0a6;
+                --line:#3a4149; --bleu:#3d8bff; }
+        * { box-sizing:border-box; }
+        html, body { margin:0; height:100%; overflow:hidden; background:#0e1116; color:var(--text);
+                     font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                     -webkit-user-select:none; user-select:none; -webkit-tap-highlight-color:transparent; }
+        #vue { position:fixed; inset:0; touch-action:none; }
+        #vue canvas { display:block; }
+        .cartouche { background:var(--panel); border:1px solid var(--line); border-radius:14px;
+                     box-shadow:0 4px 18px rgba(0,0,0,.35); }
+        /* La rue où l'on roule, en haut au milieu, comme sur un GPS. */
+        #rue { position:fixed; top:max(12px, env(safe-area-inset-top)); left:50%; transform:translateX(-50%);
+               max-width:min(680px, calc(100vw - 150px)); padding:8px 18px; text-align:center;
+               display:flex; align-items:center; gap:10px; }
+        #rue[hidden] { display:none; }
+        #rue b { font-size:clamp(16px, 2.6vw, 26px); font-weight:650; white-space:nowrap;
+                 overflow:hidden; text-overflow:ellipsis; }
+        /* Cartouches des routes numérotées : rouge pour les autoroutes et les
+           nationales, jaune pour les départementales, comme leurs panneaux. */
+        .numero { flex:none; font:700 clamp(13px, 2vw, 18px)/1 system-ui, sans-serif; padding:4px 8px;
+                  border-radius:5px; border:2px solid #fff; background:#c8102e; color:#fff; }
+        .numero.d { background:#f6c700; color:#111; border-color:#111; }
+        .numero.e { background:#007a3d; }
+        .numero.c { background:#fff; color:#111; border-color:#111; }
+        #compteur { position:fixed; left:max(14px, env(safe-area-inset-left)); bottom:max(14px, env(safe-area-inset-bottom));
+                    width:108px; height:108px; border-radius:50%; display:flex; flex-direction:column;
+                    align-items:center; justify-content:center; }
+        #compteur b { font-size:42px; font-weight:700; line-height:1; font-variant-numeric:tabular-nums; }
+        #compteur small { font-size:12px; color:var(--muted); margin-top:2px; }
+        #etat { position:fixed; left:max(14px, env(safe-area-inset-left)); top:max(12px, env(safe-area-inset-top));
+                font-size:11px; color:var(--muted); padding:7px 10px; line-height:1.45; max-width:230px; }
+        #etat b { color:var(--text); font-weight:600; }
+        #etat .rond { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:5px;
+                      background:#3ba55d; vertical-align:0; }
+        #etat .rond.faible { background:#e0a100; } #etat .rond.perdu { background:#d9453b; }
+        #boussole { position:fixed; right:max(14px, env(safe-area-inset-right)); top:max(12px, env(safe-area-inset-top));
+                    width:52px; height:52px; border-radius:50%; padding:0; cursor:pointer; }
+        #boussole svg { width:100%; height:100%; }
+        #boutons { position:fixed; right:max(14px, env(safe-area-inset-right)); bottom:max(14px, env(safe-area-inset-bottom));
+                   display:flex; flex-direction:column; gap:10px; }
+        .bouton { width:54px; height:54px; border-radius:50%; padding:0; display:flex; align-items:center;
+                  justify-content:center; cursor:pointer; background:var(--panel); border:1px solid var(--line);
+                  color:var(--text); font:650 13px/1 system-ui, sans-serif; text-decoration:none; }
+        .bouton:hover { border-color:var(--accent); }
+        .bouton:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+        .bouton.on { background:var(--accent); border-color:var(--accent); color:#fff; }
+        .bouton[hidden] { display:none; }
+        .bouton svg { width:24px; height:24px; fill:none; stroke:currentColor; stroke-width:1.8;
+                      stroke-linecap:round; stroke-linejoin:round; }
+        /* Sur un écran bas (téléphone en paysage), deux colonnes. */
+        @media (max-height:520px) {
+            #boutons { flex-direction:row; flex-wrap:wrap-reverse; justify-content:flex-end; max-width:190px; }
+            #compteur { width:88px; height:88px; } #compteur b { font-size:32px; }
+        }
+        #annonce { position:fixed; top:calc(max(12px, env(safe-area-inset-top)) + 64px); left:50%;
+                   transform:translateX(-50%); padding:8px 14px; font-size:13px; max-width:calc(100vw - 32px);
+                   text-align:center; transition:opacity .4s; }
+        #annonce[hidden] { display:none; }
+        #accueil { position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
+                   background:rgba(14,17,22,.55); padding:16px; }
+        #accueil[hidden] { display:none; }
+        #accueil .cartouche { max-width:440px; padding:22px 22px 18px; line-height:1.5; }
+        #accueil h1 { margin:0 0 6px; font-size:19px; display:flex; align-items:center; gap:10px; }
+        #accueil h1 img { width:30px; height:30px; }
+        #accueil p { margin:8px 0; font-size:14px; color:#c9cdd2; }
+        #accueil .actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:14px; }
+        #accueil .actions a, #accueil .actions button { border:1px solid var(--line); background:#2b3138;
+                   color:var(--text); border-radius:8px; padding:9px 14px; font-size:14px; cursor:pointer;
+                   text-decoration:none; }
+        #accueil .actions .principal { background:var(--accent); border-color:var(--accent); color:#fff; }
+        .roue { display:inline-block; width:14px; height:14px; border:2px solid var(--muted);
+                border-top-color:transparent; border-radius:50%; animation:tourne 1s linear infinite;
+                vertical-align:-2px; margin-right:6px; }
+        @keyframes tourne { to { transform:rotate(360deg); } }
+        #credits { position:fixed; bottom:max(2px, env(safe-area-inset-bottom)); left:50%; transform:translateX(-50%);
+                   font-size:10px; color:var(--muted); background:rgba(31,35,40,.7); padding:2px 8px;
+                   border-radius:4px; white-space:nowrap; pointer-events:none; }
+        /* Étroit : les crédits entre le compteur et les boutons, sur deux lignes au besoin. */
+        @media (max-width:560px) {
+            #etat { display:none; }
+            #credits { left:130px; right:84px; transform:none; white-space:normal; text-align:center; font-size:9px; }
+        }
+    </style>
+</head>
+<body>
+<div id="vue" aria-label="Vue 3D qui suit la voiture"></div>
+
+<div id="rue" class="cartouche" hidden><span id="rue-numero" class="numero" hidden></span><b id="rue-nom"></b></div>
+<div id="etat" class="cartouche"><span class="rond perdu"></span><span id="etat-gps">Position attendue</span><br><span id="etat-carres"></span></div>
+<button type="button" id="boussole" class="cartouche" title="Le nord ; un appui remet la vue derrière la voiture" aria-label="Boussole">
+    <svg viewBox="0 0 52 52" aria-hidden="true"><g id="aiguille">
+        <polygon points="26,8 31,26 21,26" fill="#d9453b"/><polygon points="26,44 31,26 21,26" fill="#c9cdd2"/>
+        <text x="26" y="7.5" text-anchor="middle" font-size="7" font-weight="700" fill="#e8eaed" font-family="system-ui">N</text>
+    </g></svg>
+</button>
+<div id="compteur" class="cartouche" aria-live="off"><b id="vitesse">–</b><small>km/h</small></div>
+<div id="boutons">
+    <button type="button" id="b-vue" class="bouton" title="Vue de derrière (3D) ou de dessus (2D)">2D</button>
+    <button type="button" id="b-fond" class="bouton" title="Fond : photographie aérienne ou plan IGN">Plan</button>
+    <button type="button" id="b-moins" class="bouton" title="Reculer la caméra" aria-label="Reculer">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 12h12"/></svg></button>
+    <button type="button" id="b-plus" class="bouton" title="Rapprocher la caméra" aria-label="Rapprocher">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 12h12M12 6v12"/></svg></button>
+    <button type="button" id="b-plein" class="bouton" title="Plein écran" aria-label="Plein écran" hidden>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+    <a id="b-quitter" class="bouton" href="./" title="Quitter la voiture : la scène détaillée là où vous êtes" aria-label="Quitter">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></a>
+</div>
+<div id="annonce" class="cartouche" hidden></div>
+<div id="accueil" hidden><div class="cartouche">
+    <h1><img src="static/favicon.svg" alt="" />En voiture</h1>
+    <div id="accueil-texte"></div>
+    <div class="actions" id="accueil-actions"></div>
+</div></div>
+<div id="credits">© IGN : BD TOPO, BD ORTHO, Plan IGN, RGE ALTI</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from 'three';
+
+// La vue en voiture : un monde qui défile autour de la position, comme sur un
+// GPS. Elle ne lit pas de scène (vue3d/scene.py), trop lente pour la route,
+// mais des carrés de 500 m de bâtiments et de routes BD TOPO
+// (vue3d/carres.py), chargés le long de la route prévue devant la voiture et
+// libérés derrière elle, sur un sol de tuiles d'orthophoto (ou du plan IGN)
+// posées sur le RGE ALTI, plus fines près de la caméra.
+
+// --- Paramètres ------------------------------------------------------------
+const PARAMS = new URLSearchParams(location.search);
+const SIMU = PARAMS.get('simu') === '1';
+const nombreParam = (nom, defaut) => {
+    const v = Number(PARAMS.get(nom));
+    return PARAMS.has(nom) && Number.isFinite(v) ? v : defaut;
+};
+const VITESSE_SIMU_KMH = Math.min(Math.max(nombreParam('vitesse', 50), 5), 180);
+// Départ de la simulation sans point : les Champs-Élysées, un lieu public
+// où la route est longue et bordée de bâtiments.
+const DEPART_SIMU = { lat: 48.8706, lon: 2.3055 };
+const DEPART = PARAMS.has('lat') && PARAMS.has('lon')
+    ? { lat: nombreParam('lat', NaN), lon: nombreParam('lon', NaN) } : (SIMU ? DEPART_SIMU : null);
+if (DEPART && !(Number.isFinite(DEPART.lat) && Number.isFinite(DEPART.lon))) DEPART.lat = DEPART.lon = NaN;
+const RAD = Math.PI / 180;
+
+// --- Lambert-93 --------------------------------------------------------------
+// Le monde est en Lambert-93 : la projection des carrés (le serveur les lit
+// en EPSG:2154), conforme, à moins de 0,1 % d'écart d'échelle sur la France.
+// Constantes de l'IGN (ALG0019), comme versLambert93 de index.html et
+// vue3d/nuage.py ; un sommet de Gordes rendu par le WFS en EPSG:2154 et en
+// EPSG:4326 se retrouve au centième de mètre.
+const L93 = { e: 0.0818191910428158, n: 0.7256077650532670, c: 11754255.426096,
+              xs: 700000, ys: 12655612.049876, lon0: 3 * RAD };
+
+function versLambert93(lon, lat) {
+    const phi = lat * RAD, s = Math.sin(phi);
+    const iso = Math.log(Math.tan(Math.PI / 4 + phi / 2) * ((1 - L93.e * s) / (1 + L93.e * s)) ** (L93.e / 2));
+    const r = L93.c * Math.exp(-L93.n * iso), g = L93.n * (lon * RAD - L93.lon0);
+    return [L93.xs + r * Math.sin(g), L93.ys - r * Math.cos(g)];
+}
+
+/** Réciproque : la latitude isométrique, puis la latitude par point fixe. */
+function depuisLambert93(x, y) {
+    const dx = x - L93.xs, dy = L93.ys - y;
+    const r = Math.hypot(dx, dy), g = Math.atan2(dx, dy);
+    const iso = -Math.log(r / L93.c) / L93.n;
+    let phi = 2 * Math.atan(Math.exp(iso)) - Math.PI / 2;
+    for (let k = 0; k < 12; k++) {
+        const s = L93.e * Math.sin(phi);
+        const suivant = 2 * Math.atan(((1 + s) / (1 - s)) ** (L93.e / 2) * Math.exp(iso)) - Math.PI / 2;
+        if (Math.abs(suivant - phi) < 1e-12) { phi = suivant; break; }
+        phi = suivant;
+    }
+    return [(L93.lon0 + g / L93.n) / RAD, phi / RAD];
+}
+
+/** Écart du nord du quadrillage au nord vrai, en degrés (convergence des méridiens). */
+const convergence = lon => L93.n * (lon - 3);
+
+// --- Monde ---------------------------------------------------------------------
+// X = x − ORIGINE.x (vers l'est), Z = ORIGINE.y − y (le nord est −Z), Y =
+// l'altitude. L'origine se recale quand la voiture s'en éloigne : les
+// sommets d'un objet sont relatifs à son ancre, mais le nuanceur calcule la
+// courbure en flottants 32 bits, qu'on garde petits.
+const ORIGINE = { x: 0, y: 0 };
+const RECALAGE_M = 20000;
+const ancres = new Set();
+function ancrer(objet, x, y, alt = 0) {
+    objet.userData.ancre = [x, y];
+    objet.position.set(x - ORIGINE.x, alt, ORIGINE.y - y);
+    ancres.add(objet);
+}
+function recaler(x, y) {
+    ORIGINE.x = Math.round(x / 1000) * 1000;
+    ORIGINE.y = Math.round(y / 1000) * 1000;
+    for (const o of ancres) {
+        const [ax, ay] = o.userData.ancre;
+        o.position.x = ax - ORIGINE.x;
+        o.position.z = ORIGINE.y - ay;
+    }
+}
+
+// --- Rendu ---------------------------------------------------------------------
+const hote = document.getElementById('vue');
+const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+renderer.autoClear = false;
+renderer.setClearColor(0x0e1116);
+// Deux rendus par image (le monde, puis la voiture) : compter les deux.
+renderer.info.autoReset = false;
+const RATIO_MAX = Math.min(window.devicePixelRatio || 1, 2);
+let ratio = RATIO_MAX;
+renderer.setPixelRatio(ratio);
+hote.appendChild(renderer.domElement);
+const ANISOTROPIE = Math.min(renderer.capabilities.getMaxAnisotropy(), 8);
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(55, 1, 1.5, 90000);
+// Même brume que l'horizon de la page : rien à 3 km, 15 % à 10 km, 86 % à 35 km.
+const brume = new THREE.FogExp2(0xbcd0e2, 4e-5);
+scene.fog = brume;
+const couleursCiel = { zenith: new THREE.Color(0x4f86c6), horizon: brume.color };
+const ciel = new THREE.Mesh(
+    new THREE.SphereGeometry(1, 32, 16),
+    new THREE.ShaderMaterial({
+        uniforms: { zenith: { value: couleursCiel.zenith }, horizon: { value: couleursCiel.horizon } },
+        vertexShader: 'varying vec3 vDir;\nvoid main() {\n  vDir = position;\n'
+            + '  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);\n}',
+        fragmentShader: 'uniform vec3 zenith;\nuniform vec3 horizon;\nvarying vec3 vDir;\nvoid main() {\n'
+            + '  gl_FragColor = vec4(mix(horizon, zenith, smoothstep(0.0, 0.45, normalize(vDir).y)), 1.0);\n'
+            + '  #include <colorspace_fragment>\n}',
+        side: THREE.BackSide, depthWrite: false, fog: false }));
+ciel.scale.setScalar(80000);
+ciel.renderOrder = -1;
+ciel.frustumCulled = false;
+scene.add(ciel);
+
+const ambiance = new THREE.HemisphereLight(0xdfe8f5, 0x5a5348, 1.5);
+const soleil = new THREE.DirectionalLight(0xfff2dd, 2.0);
+scene.add(ambiance, soleil, soleil.target);
+
+// La Terre se courbe sous la caméra : à 50 km, l'horizon descend de 170 m
+// (rayon apparent R / (1 − k), k = 0,13, la réfraction, comme l'horizon de
+// la page). Ici dans le nuanceur, depuis la caméra qui bouge, et non à la
+// construction des tuiles, depuis un centre fixe.
+const COURBURE = (1 - 0.13) / (2 * 6371000);
+function courber(materiau) {
+    materiau.onBeforeCompile = shader => {
+        shader.vertexShader = shader.vertexShader.replace('#include <project_vertex>',
+            'vec4 mondeP = modelMatrix * vec4(transformed, 1.0);\n'
+            + 'vec2 ecartCam = mondeP.xz - cameraPosition.xz;\n'
+            + `mondeP.y -= dot(ecartCam, ecartCam) * ${COURBURE.toExponential(8)};\n`
+            + 'vec4 mvPosition = viewMatrix * mondeP;\n'
+            + 'gl_Position = projectionMatrix * mvPosition;');
+    };
+    materiau.customProgramCacheKey = () => 'courbe';
+    return materiau;
+}
+
+// --- Altitudes -----------------------------------------------------------------
+// Les tuiles natives du RGE ALTI (WMTS, pyramide WGS84G, 256 × 256 flottants),
+// lues comme l'horizon de la page, et pour les mêmes raisons (le WMS sort en
+// gradins et limite à 40 requêtes par seconde). Un trou (−99 999 : la mer,
+// l'étranger) vaut 0 m.
+const ALTI_URL = (niveau, ligne, colonne) =>
+    'https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0'
+    + '&LAYER=ELEVATION.ELEVATIONGRIDCOVERAGE.HIGHRES&STYLE=normal&FORMAT=image/x-bil;bits=32'
+    + `&TILEMATRIXSET=WGS84G_6_14&TILEMATRIX=${niveau}&TILEROW=${ligne}&TILECOL=${colonne}`;
+const ALTI_NIVEAU_MIN = 6, ALTI_NIVEAU_MAX = 14;
+// Le niveau des tuiles du sol les plus fines (zoom 18 − 5, comme la page :
+// un pixel de 9,5 m sur 6,7 m à 45°) : bâtiments, route et voiture s'y posent.
+const NIVEAU_PROCHE = 13;
+const ALTI_CACHE = 160;                 // 256 Kio chacune
+const altis = new Map();                // "niveau/ligne/colonne" → { promesse, valeurs }
+function tuileAlti(niveau, ligne, colonne) {
+    const cle = `${niveau}/${ligne}/${colonne}`;
+    let t = altis.get(cle);
+    if (t) return t;
+    t = { valeurs: null };
+    t.promesse = (async () => {
+        const reponse = await fetch(ALTI_URL(niveau, ligne, colonne));
+        if (reponse.status === 404) return new Float32Array(256 * 256).fill(NaN);
+        const type = reponse.headers.get('content-type') || '';
+        if (!reponse.ok || !type.startsWith('image/x-bil')) throw new Error(`RGE ALTI : ${reponse.status} ${type}`);
+        const v = new Float32Array(await reponse.arrayBuffer());
+        if (v.length !== 256 * 256) throw new Error('RGE ALTI tronqué');
+        for (let i = 0; i < v.length; i++) if (v[i] < -100) v[i] = NaN;
+        return v;
+    })().then(v => { t.valeurs = v; return v; },
+              e => { if (altis.get(cle) === t) altis.delete(cle); throw e; });
+    t.promesse.catch(() => {});
+    altis.set(cle, t);
+    if (altis.size > ALTI_CACHE) {
+        // Les plus anciennes déjà lues : celles qu'on attend restent.
+        for (const [k, v] of altis) {
+            if (altis.size <= ALTI_CACHE) break;
+            if (v.valeurs) altis.delete(k);
+        }
+    }
+    return t;
+}
+const pasAlti = niveau => 180 / 2 ** niveau / 256;
+
+/** Les tuiles d'altitude qui couvrent une emprise en degrés, lues. */
+function preparerAltitudes(o, s, e, n, niveau) {
+    const p = pasAlti(niveau);
+    const c0 = Math.floor(((o + 180) / p - 1) / 256), c1 = Math.floor(((e + 180) / p + 1) / 256);
+    const l0 = Math.floor(((90 - n) / p - 1) / 256), l1 = Math.floor(((90 - s) / p + 1) / 256);
+    const attentes = [];
+    for (let l = l0; l <= l1; l++) for (let c = c0; c <= c1; c++) attentes.push(tuileAlti(niveau, l, c).promesse);
+    return Promise.all(attentes);
+}
+
+let derniereAlti = { cle: null, valeurs: null };
+function pixelAlti(niveau, i, j) {
+    const cle = `${niveau}/${j >> 8}/${i >> 8}`;
+    let valeurs = derniereAlti.cle === cle ? derniereAlti.valeurs : null;
+    if (!valeurs) {
+        const t = altis.get(cle);
+        if (!t || !t.valeurs) return NaN;
+        valeurs = t.valeurs;
+        derniereAlti = { cle, valeurs };
+    }
+    const v = valeurs[(j & 255) * 256 + (i & 255)];
+    return Number.isNaN(v) ? 0 : v;
+}
+
+/** Altitude bilinéaire, centres des pixels aux demi-entiers ; NaN tant que la tuile n'est pas lue. */
+function altitude(lon, lat, niveau = NIVEAU_PROCHE) {
+    const p = pasAlti(niveau);
+    const fx = (lon + 180) / p - 0.5, fy = (90 - lat) / p - 0.5;
+    const i = Math.floor(fx), j = Math.floor(fy), ax = fx - i, ay = fy - j;
+    return (pixelAlti(niveau, i, j) * (1 - ax) + pixelAlti(niveau, i + 1, j) * ax) * (1 - ay)
+         + (pixelAlti(niveau, i, j + 1) * (1 - ax) + pixelAlti(niveau, i + 1, j + 1) * ax) * ay;
+}
+const altitudeL93 = (x, y) => altitude(...depuisLambert93(x, y));
+
+// --- Sol en tuiles ---------------------------------------------------------------
+// L'horizon de la page, repris pour un monde qui défile : des tuiles WMTS
+// (Web Mercator) de l'orthophoto ou du plan, d'autant plus fines qu'elles
+// sont près de la caméra, et grossières hors du champ ; une tuile ne cède sa
+// place qu'une fois ses quatre enfants prêts. Une caméra fantôme, là où
+// sera la voiture dans quelques secondes, demande d'avance celles qu'elle y
+// verra.
+const SOL_ZOOM_MIN = 9;          // celui du serveur (tuiles.TUILES_ZOOM)
+const SOL_ZOOM_MAX = 18;         // ~150 m de côté, 0,6 m par pixel
+const SOL_MAILLES = 32;
+const SOL_RAYON = 40000;
+const SOL_FINESSE = 1.5;
+const SOL_HORS_CHAMP = 4;
+const SOL_PARALLELE = 10;
+const SOL_CACHE = 360;           // ~340 Ko de texture chacune sur le GPU
+const ANTICIPATION_S = [6, 12];  // la caméra fantôme : où sera la voiture
+const FONDS = {
+    ortho: (z, x, y) => `api/tuile/ortho/${z}/${x}/${y}`,
+    plan: (z, x, y) => `api/tuile/plan/${z}/${x}/${y}`,
+};
+let fond = PARAMS.get('fond') === 'plan' ? 'plan' : 'ortho';
+let generationFond = 0;
+const tuilesSol = new Map();
+let solEnVol = 0;
+let derniereSelectionSol = -Infinity;
+const groupeSol = new THREE.Group();
+scene.add(groupeSol);
+const COULEUR_SOL = new THREE.Color(0x8b8f87);
+// La teinte posée sur l'image des tuiles : blanche le jour, bleu sombre la nuit.
+const teinteSol = new THREE.Color(0xffffff), TEINTE_SOL_NUIT = new THREE.Color(0x56627e);
+
+const versTuile = (lon, lat, z) => {
+    const n = 2 ** z, r = lat * RAD;
+    return [Math.floor((lon + 180) / 360 * n),
+            Math.floor((1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * n)];
+};
+const versLonLat = (x, y, z) => {
+    const n = 2 ** z;
+    return [x / n * 360 - 180, Math.atan(Math.sinh(Math.PI * (1 - 2 * y / n))) / RAD];
+};
+
+function chargerImage(url) {
+    return new Promise((ok, ko) => {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => ok(img);
+        img.onerror = ko;
+        img.src = url;
+    });
+}
+
+// Une tuile refusée au navigateur est relue par le serveur, qui la garde
+// (vue3d/tuiles.py) : l'IGN en refuse de loin en loin une qui existe. Deux à
+// la fois, comme la page.
+const RELECTURES_SIMULTANEES = 2;
+let relecturesEnCours = 0;
+const relecturesEnAttente = [];
+async function relireTuile(url) {
+    if (relecturesEnCours >= RELECTURES_SIMULTANEES) await new Promise(r => relecturesEnAttente.push(r));
+    relecturesEnCours++;
+    try {
+        for (let essai = 0; essai < 3; essai++) {
+            const reponse = await fetch(`${url}?relire=1`);
+            if (reponse.ok) {
+                const lien = URL.createObjectURL(await reponse.blob());
+                try { return await chargerImage(lien); } finally { URL.revokeObjectURL(lien); }
+            }
+            if (reponse.status !== 503) break;
+            await new Promise(r => setTimeout(r, (Number(reponse.headers.get('retry-after')) || 2) * 1000));
+        }
+        throw new Error(`tuile non relue : ${url}`);
+    } finally {
+        relecturesEnCours--;
+        relecturesEnAttente.shift()?.();
+    }
+}
+
+const parentSol = t => t.z > SOL_ZOOM_MIN ? tuilesSol.get(`${t.z - 1}/${t.x >> 1}/${t.y >> 1}`) : undefined;
+
+function tuileSol(z, x, y) {
+    const cle = `${z}/${x}/${y}`;
+    let t = tuilesSol.get(cle);
+    if (t) return t;
+    const [o, n] = versLonLat(x, y, z), [e, s] = versLonLat(x + 1, y + 1, z);
+    const coins = [versLambert93(o, n), versLambert93(e, n), versLambert93(o, s), versLambert93(e, s)];
+    const xs = coins.map(c => c[0]), ys = coins.map(c => c[1]);
+    const p = parentSol({ z, x, y });
+    t = { z, x, y, cle, o, e, s, n,
+          minX: Math.min(...xs), maxX: Math.max(...xs), minY: Math.min(...ys), maxY: Math.max(...ys),
+          image: null, sansImage: -1, fondGen: -1, mesh: null, enCours: false, reessai: 0, vue: 0,
+          ymin: p ? p.ymin : 0, ymax: p ? p.ymax : 0 };
+    t.cx = (t.minX + t.maxX) / 2; t.cy = (t.minY + t.maxY) / 2; t.largeur = t.maxX - t.minX;
+    tuilesSol.set(cle, t);
+    return t;
+}
+
+async function imageSol(t, gen) {
+    for (let a = parentSol(t); a; a = parentSol(a)) if (a.sansImage === gen) { t.sansImage = gen; return null; }
+    const url = FONDS[fond](t.z, t.x, t.y);
+    try { return await chargerImage(url); }
+    catch (e) {
+        try { return await relireTuile(url); }
+        catch (e2) { t.sansImage = gen; return null; }
+    }
+}
+
+function habillerTuile(t) {
+    const m = t.mesh.material;
+    if (m.map) { m.map.dispose(); m.map = null; }
+    let a = t;
+    while (a && !(a.fondGen === generationFond && a.image)) a = parentSol(a);
+    if (a) {
+        const tex = new THREE.Texture(a.image);
+        tex.colorSpace = THREE.SRGBColorSpace;
+        tex.anisotropy = ANISOTROPIE;
+        if (a !== t) {
+            const k = 2 ** (t.z - a.z), ix = t.x - a.x * k, iy = t.y - a.y * k;
+            tex.repeat.set(1 / k, 1 / k);
+            tex.offset.set(ix / k, (k - iy - 1) / k);
+        }
+        tex.needsUpdate = true;
+        m.map = tex;
+        m.color.copy(teinteSol);
+    } else {
+        m.color.copy(COULEUR_SOL);
+    }
+    m.needsUpdate = true;
+}
+
+/**
+ * Le maillage d'une tuile, sommets relatifs à son centre : altitudes au
+ * niveau z − 5 de la pyramide, normales par différences centrées d'une
+ * maille (deux voisines ont la même au bord), et une jupe pendue sous chaque
+ * bord, qui bouche la fente avec une voisine d'un autre zoom.
+ */
+function construireTuile(t, niveau) {
+    const N = SOL_MAILLES, L = N + 1, nb = L * L;
+    const dLon = (t.e - t.o) / N;
+    const pos = new Float32Array((nb + 4 * L) * 3), nor = new Float32Array((nb + 4 * L) * 3);
+    const uv = new Float32Array((nb + 4 * L) * 2);
+    let ymin = Infinity, ymax = -Infinity;
+    for (let j = 0; j < L; j++) {
+        for (let i = 0; i < L; i++) {
+            const k = j * L + i;
+            const [lon, lat] = versLonLat(t.x + i / N, t.y + j / N, t.z);
+            const [x, y] = versLambert93(lon, lat);
+            const a = altitude(lon, lat, niveau) || 0;
+            const dLat = dLon * Math.cos(lat * RAD);
+            const mx = 2 * dLon * 111320 * Math.cos(lat * RAD), my = 2 * dLat * 111320;
+            const gE = ((altitude(lon + dLon, lat, niveau) || 0) - (altitude(lon - dLon, lat, niveau) || 0)) / mx;
+            const gN = ((altitude(lon, lat + dLat, niveau) || 0) - (altitude(lon, lat - dLat, niveau) || 0)) / my;
+            const l = Math.hypot(gE, 1, gN);
+            pos[3 * k] = x - t.cx; pos[3 * k + 1] = a; pos[3 * k + 2] = t.cy - y;
+            nor[3 * k] = -gE / l; nor[3 * k + 1] = 1 / l; nor[3 * k + 2] = gN / l;
+            uv[2 * k] = i / N; uv[2 * k + 1] = 1 - j / N;
+            ymin = Math.min(ymin, a); ymax = Math.max(ymax, a);
+        }
+    }
+    const bords = [];
+    for (let i = 0; i < L; i++) bords.push(i);
+    for (let j = 0; j < L; j++) bords.push(j * L + N);
+    for (let i = N; i >= 0; i--) bords.push(N * L + i);
+    for (let j = N; j >= 0; j--) bords.push(j * L);
+    const jupe = 5 + 0.5 * t.largeur / N;
+    for (let b = 0; b < bords.length; b++) {
+        const k = bords[b], q = nb + b;
+        pos[3 * q] = pos[3 * k]; pos[3 * q + 1] = pos[3 * k + 1] - jupe; pos[3 * q + 2] = pos[3 * k + 2];
+        nor[3 * q] = nor[3 * k]; nor[3 * q + 1] = nor[3 * k + 1]; nor[3 * q + 2] = nor[3 * k + 2];
+        uv[2 * q] = uv[2 * k]; uv[2 * q + 1] = uv[2 * k + 1];
+    }
+    const index = [];
+    for (let j = 0; j < N; j++) {
+        for (let i = 0; i < N; i++) {
+            const a = j * L + i, c = a + L;
+            index.push(a, c, a + 1, c, c + 1, a + 1);
+        }
+    }
+    for (let c = 0; c < 4; c++) {
+        for (let k = 0; k < N; k++) {
+            const b = c * L + k, e0 = bords[b], e1 = bords[b + 1], s0 = nb + b, s1 = s0 + 1;
+            index.push(e0, e1, s0, s0, e1, s1);
+        }
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    geo.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+    geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+    geo.setIndex(index);
+    geo.computeBoundingSphere();
+    t.mesh = new THREE.Mesh(geo, courber(new THREE.MeshLambertMaterial({ color: COULEUR_SOL })));
+    t.mesh.visible = false;
+    t.ymin = ymin; t.ymax = ymax;
+    ancrer(t.mesh, t.cx, t.cy);
+    habillerTuile(t);
+    groupeSol.add(t.mesh);
+}
+
+async function chargerTuileSol(t) {
+    t.enCours = true;
+    solEnVol++;
+    const gen = generationFond;
+    const niveau = Math.min(Math.max(t.z - 5, ALTI_NIVEAU_MIN), ALTI_NIVEAU_MAX);
+    try {
+        const marge = (t.e - t.o) / SOL_MAILLES * 1.5;
+        const [, image] = await Promise.all([
+            t.mesh ? null : preparerAltitudes(t.o - marge, t.s - marge, t.e + marge, t.n + marge, niveau),
+            t.fondGen === gen ? t.image : imageSol(t, gen)]);
+        if (gen === generationFond) { t.image = image; t.fondGen = gen; }
+        if (!tuilesSol.has(t.cle)) return;
+        if (!t.mesh) construireTuile(t, niveau);
+        else habillerTuile(t);
+    } catch (e) {
+        t.reessai = performance.now() + 15000;
+    } finally {
+        t.enCours = false;
+        solEnVol--;
+    }
+}
+
+const champ = new THREE.Frustum(), boite = new THREE.Box3(), matriceChamp = new THREE.Matrix4();
+
+/**
+ * Parcourt l'arbre des tuiles depuis `t` pour un point de vue `pv` ({x, y}
+ * Lambert-93, h altitude, regard(t) → 1 dans le champ, SOL_HORS_CHAMP
+ * hors). Rend vrai si la tuile est couverte ; `liste` reçoit les tuiles à
+ * montrer (null pour la caméra fantôme), `voulues` celles à charger.
+ */
+function couvrirSol(t, pv, liste, voulues, maintenant) {
+    if (liste) t.vue = maintenant;
+    const dx = Math.max(t.minX - pv.x, 0, pv.x - t.maxX);
+    const dy = Math.max(t.minY - pv.y, 0, pv.y - t.maxY);
+    if (Math.hypot(dx, dy) > SOL_RAYON) return true;
+    const dh = Math.max(t.ymin - pv.h, 0, pv.h - t.ymax);
+    const d = Math.hypot(dx, dy, dh);
+    if (t.z < SOL_ZOOM_MAX && pv.regard(t) * d < SOL_FINESSE * t.largeur) {
+        const sous = [];
+        let pretes = true;
+        for (let k = 0; k < 4; k++) {
+            const enfant = tuileSol(t.z + 1, 2 * t.x + (k & 1), 2 * t.y + (k >> 1));
+            if (!couvrirSol(enfant, pv, liste && sous, voulues, maintenant)) pretes = false;
+        }
+        if (pretes) { if (liste) liste.push(...sous); return true; }
+    }
+    if (!t.enCours && (!t.mesh || t.fondGen !== generationFond) && maintenant >= t.reessai) voulues.push({ t, d });
+    if (t.mesh) { if (liste) liste.push(t); return true; }
+    return false;
+}
+
+function racinesSol(x, y) {
+    const [lon, lat] = depuisLambert93(x, y);
+    const dLat = SOL_RAYON / 111320, dLon = dLat / Math.cos(lat * RAD);
+    const [x0, y0] = versTuile(lon - dLon, lat + dLat, SOL_ZOOM_MIN);
+    const [x1, y1] = versTuile(lon + dLon, lat - dLat, SOL_ZOOM_MIN);
+    const r = [];
+    for (let tx = x0; tx <= x1; tx++) for (let ty = y0; ty <= y1; ty++) r.push(tuileSol(SOL_ZOOM_MIN, tx, ty));
+    return r;
+}
+
+function majSol(maintenant) {
+    groupeSol.visible = !voiture.attendu?.provisoire || voiture.vue;
+    if (!groupeSol.visible || maintenant - derniereSelectionSol < 100) return;
+    derniereSelectionSol = maintenant;
+    camera.updateMatrixWorld();
+    champ.setFromProjectionMatrix(matriceChamp.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
+    const cam = { x: camera.position.x + ORIGINE.x, y: ORIGINE.y - camera.position.z, h: camera.position.y,
+        regard: t => {
+            const m = t.largeur / 2;
+            boite.min.set(t.minX - ORIGINE.x - m, t.ymin - m, ORIGINE.y - t.maxY - m);
+            boite.max.set(t.maxX - ORIGINE.x + m, t.ymax + m, ORIGINE.y - t.minY + m);
+            return champ.intersectsBox(boite) ? 1 : SOL_HORS_CHAMP;
+        } };
+    const liste = [], voulues = [];
+    for (const r of racinesSol(cam.x, cam.y)) couvrirSol(r, cam, liste, voulues, maintenant);
+    const montrees = new Set(liste);
+    for (const t of tuilesSol.values()) if (t.mesh) t.mesh.visible = montrees.has(t);
+    voulues.sort((a, b) => a.t.z - b.t.z || a.d - b.d);
+
+    // La caméra fantôme : là où la voiture sera, regardant devant elle.
+    const devant = [];
+    if (voiture.vue && voiture.v > 3 && voiture.chemin) {
+        for (const s of ANTICIPATION_S) {
+            const p = pointDuChemin(voiture.chemin, voiture.dChemin + voiture.v * s);
+            if (!p) continue;
+            const ux = Math.sin(p.cap * RAD), uy = Math.cos(p.cap * RAD);
+            const pv = { x: p.x, y: p.y, h: voiture.alt + 40,
+                regard: t => ((t.cx - p.x) * ux + (t.cy - p.y) * uy > -t.largeur ? 1 : SOL_HORS_CHAMP) };
+            for (const r of racinesSol(p.x, p.y)) couvrirSol(r, pv, null, devant, maintenant);
+        }
+        devant.sort((a, b) => a.d - b.d);
+    }
+    for (const { t } of [...voulues, ...devant]) {
+        if (solEnVol >= SOL_PARALLELE) break;
+        if (!t.enCours) chargerTuileSol(t);
+    }
+
+    if (tuilesSol.size > SOL_CACHE) {
+        const vieilles = [...tuilesSol.values()]
+            .filter(t => !montrees.has(t) && !t.enCours && t.vue < maintenant)
+            .sort((a, b) => a.vue - b.vue)
+            .slice(0, tuilesSol.size - SOL_CACHE);
+        for (const t of vieilles) {
+            if (t.mesh) {
+                groupeSol.remove(t.mesh);
+                ancres.delete(t.mesh);
+                t.mesh.geometry.dispose();
+                t.mesh.material.map?.dispose();
+                t.mesh.material.dispose();
+            }
+            tuilesSol.delete(t.cle);
+        }
+    }
+}
+
+function changerFond(nom) {
+    fond = nom;
+    generationFond++;
+    for (const t of tuilesSol.values()) { t.image = null; t.fondGen = -1; }
+    derniereSelectionSol = -Infinity;
+    document.getElementById('b-fond').textContent = fond === 'ortho' ? 'Plan' : 'Photo';
+}
+
+// --- Carrés : bâtiments et routes ------------------------------------------------
+// Demandés le long de la route prévue, sur une bande de COULOIR_M de part et
+// d'autre, et dans un rayon AUTOUR_M de la voiture ; montrés tant qu'ils
+// sont voulus, défaits CARRE_DEFAIT_S après, oubliés (routes comprises)
+// quand ils sont loin. Un carré lu reste une semaine dans le cache du
+// navigateur : un aller-retour ne redemande rien au serveur.
+const CARRE_M = 500;
+const AUTOUR_M = 450;
+const COULOIR_M = 350;
+const PAS_COULOIR_M = 100;
+const CARRES_VOULUS_MAX = 90;
+const CARRES_PARALLELE = 4;
+const CARRE_DEFAIT_S = 20;
+const CARRE_OUBLI_S = 120, CARRE_OUBLI_M = 4000;
+const carres = new Map();
+let carresEnVol = 0;
+let derniereSelectionCarres = -Infinity;
+const groupeBati = new THREE.Group();
+scene.add(groupeBati);
+
+function carre(i, j) {
+    const cle = `${i},${j}`;
+    let c = carres.get(cle);
+    if (!c) {
+        c = { i, j, cle, etat: 'neuf', donnees: null, mesh: null, voulu: 0, reessai: 0, priorite: Infinity,
+              altiPretes: false, nbBatiments: 0 };
+        carres.set(cle, c);
+    }
+    return c;
+}
+const carreDe = (x, y) => carres.get(`${Math.floor(x / CARRE_M)},${Math.floor(y / CARRE_M)}`);
+
+async function chargerCarre(c) {
+    c.etat = 'charge';
+    carresEnVol++;
+    try {
+        const reponse = await fetch(`api/carre?i=${c.i}&j=${c.j}`);
+        if (reponse.status === 422) { c.etat = 'hors'; return; }
+        if (!reponse.ok) {
+            c.etat = 'erreur';
+            c.reessai = performance.now() + (Number(reponse.headers.get('retry-after')) || 15) * 1000;
+            if (reponse.status === 429) annoncer('Trop de carrés demandés en une heure : le serveur en refuse pour l\'instant.');
+            return;
+        }
+        c.donnees = await reponse.json();
+        c.etat = 'pret';
+        integrerRoutes(c);
+        const coins = [[0, 0], [1, 0], [0, 1], [1, 1]].map(([u, v]) =>
+            depuisLambert93((c.i + u) * CARRE_M, (c.j + v) * CARRE_M));
+        const lons = coins.map(p => p[0]), lats = coins.map(p => p[1]);
+        preparerAltitudes(Math.min(...lons), Math.min(...lats), Math.max(...lons), Math.max(...lats), NIVEAU_PROCHE)
+            .then(() => { c.altiPretes = true; }, () => { c.altiPretes = true; });
+        // La route prévue s'arrêtait peut-être au bord de ce carré.
+        voiture.recalculer = true;
+    } catch (e) {
+        c.etat = 'erreur';
+        c.reessai = performance.now() + 15000;
+    } finally {
+        carresEnVol--;
+    }
+}
+
+// Teintes claires, lisibles sur la photo comme sur le plan ; les toits en
+// pente en tuile au sud, en ardoise au nord de la Loire.
+const TEINTES_MURS = {
+    'Résidentiel': 0xe6dccb, 'Commercial et services': 0xd5dde5, 'Industriel': 0xc6cbd0,
+    'Agricole': 0xd9cdb0, 'Religieux': 0xeee0c2, 'Sportif': 0xd0ddcc, 'Annexe': 0xd8d3ca,
+};
+const TEINTE_MURS = 0xd4cfc7;
+const TEINTE_TOIT_PLAT = 0xaeb3b8;
+const TEINTE_TUILE = 0xb5694c, TEINTE_ARDOISE = 0x6f7884;
+const LAT_ARDOISE = 47.3;
+// Mêmes règles que la page : 3 m par étage, et un toit à deux pans d'au plus
+// 0,6 fois sa largeur de dénivelé (la BD TOPO annonçait un toit à 67° au
+// Mont-Saint-Michel). Les murs descendent sous le sol BD TOPO : le relief
+// lissé du RGE ALTI s'en écarte d'un mètre ou deux sur une pente.
+const HAUTEUR_PAR_ETAGE = 3;
+const PENTE_TOIT_MAX = 0.6;
+const ENFONCEMENT_M = 4;
+// Toit à deux pans seulement sur une emprise presque rectangulaire et pas
+// trop large : ailleurs, le rectangle englobant en inventerait la forme.
+const RECTANGLE_MIN = 0.85, LARGEUR_PIGNON_MAX = 24;
+// Entre la caméra et la voiture, les bâtiments s'ajourent (un pixel sur
+// quatre gardé, en tramage) dans un cône qui s'élargit vers elle : en rue
+// étroite, les façades de 25 m de la rue de Berri la cachaient.
+const uniformsBati = { uVoiture: { value: new THREE.Vector3() }, uRayon: { value: 0 } };
+const MAT_BATI = new THREE.MeshLambertMaterial({ vertexColors: true });
+MAT_BATI.onBeforeCompile = shader => {
+    Object.assign(shader.uniforms, uniformsBati);
+    shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', '#include <common>\nvarying vec3 vMonde;')
+        .replace('#include <project_vertex>',
+            'vec4 mondeP = modelMatrix * vec4(transformed, 1.0);\n'
+            + 'vMonde = mondeP.xyz;\n'
+            + 'vec2 ecartCam = mondeP.xz - cameraPosition.xz;\n'
+            + `mondeP.y -= dot(ecartCam, ecartCam) * ${COURBURE.toExponential(8)};\n`
+            + 'vec4 mvPosition = viewMatrix * mondeP;\n'
+            + 'gl_Position = projectionMatrix * mvPosition;');
+    shader.fragmentShader = shader.fragmentShader
+        .replace('#include <common>', '#include <common>\nvarying vec3 vMonde;\nuniform vec3 uVoiture;\nuniform float uRayon;')
+        .replace('#include <clipping_planes_fragment>', '#include <clipping_planes_fragment>\n'
+            + 'if (uRayon > 0.0) {\n'
+            + '  vec3 axe = uVoiture - cameraPosition;\n'
+            + '  float l = length(axe);\n'
+            + '  vec3 dir = axe / l;\n'
+            + '  float t = dot(vMonde - cameraPosition, dir);\n'
+            + '  if (t > 0.0 && t < l + 3.0) {\n'
+            + '    float r = uRayon * (0.3 + 0.7 * min(t / l, 1.0));\n'
+            + '    float d = length(vMonde - cameraPosition - dir * t);\n'
+            + '    float ajour = 0.75 * (1.0 - smoothstep(0.7 * r, r, d));\n'
+            + '    float bruit = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));\n'
+            + '    if (bruit < ajour) discard;\n'
+            + '  }\n'
+            + '}');
+};
+MAT_BATI.customProgramCacheKey = () => 'bati';
+
+function aireAnneau(p) {
+    let a = 0;
+    for (let k = 0, n = p.length / 2; k < n; k++) {
+        const l = (k + 1) % n;
+        a += p[2 * k] * p[2 * l + 1] - p[2 * l] * p[2 * k + 1];
+    }
+    return a / 2;
+}
+
+/** Le plus petit rectangle englobant (enveloppe convexe, un côté sur une arête). */
+function rectangleMin(p) {
+    const pts = [];
+    for (let k = 0; k < p.length; k += 2) pts.push([p[k], p[k + 1]]);
+    pts.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+    const croix = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+    const bas = [], haut = [];
+    for (const q of pts) { while (bas.length >= 2 && croix(bas[bas.length - 2], bas[bas.length - 1], q) <= 0) bas.pop(); bas.push(q); }
+    for (let k = pts.length - 1; k >= 0; k--) { const q = pts[k]; while (haut.length >= 2 && croix(haut[haut.length - 2], haut[haut.length - 1], q) <= 0) haut.pop(); haut.push(q); }
+    const env = bas.slice(0, -1).concat(haut.slice(0, -1));
+    let meilleur = null;
+    for (let k = 0; k < env.length; k++) {
+        const a = env[k], b = env[(k + 1) % env.length];
+        const ang = Math.atan2(b[1] - a[1], b[0] - a[0]), c = Math.cos(ang), s = Math.sin(ang);
+        let u0 = Infinity, u1 = -Infinity, v0 = Infinity, v1 = -Infinity;
+        for (const q of env) {
+            const u = q[0] * c + q[1] * s, v = -q[0] * s + q[1] * c;
+            u0 = Math.min(u0, u); u1 = Math.max(u1, u); v0 = Math.min(v0, v); v1 = Math.max(v1, v);
+        }
+        const aire = (u1 - u0) * (v1 - v0);
+        if (!meilleur || aire < meilleur.aire) meilleur = { aire, ang, u0, u1, v0, v1 };
+    }
+    if (!meilleur) return null;
+    let { ang, u0, u1, v0, v1 } = meilleur;
+    // L'axe u, celui du faîtage, le long du grand côté.
+    if (v1 - v0 > u1 - u0) { ang += Math.PI / 2; [u0, u1, v0, v1] = [v0, v1, -u1, -u0]; }
+    const c = Math.cos(ang), s = Math.sin(ang), um = (u0 + u1) / 2, vm = (v0 + v1) / 2;
+    return { aire: meilleur.aire, longueur: u1 - u0, largeur: v1 - v0,
+             cx: um * c - vm * s, cy: um * s + vm * c, ux: c, uy: s, vx: -s, vy: c };
+}
+
+/**
+ * Les bâtiments d'un carré en un seul maillage (un appel de dessin) :
+ * murs extrudés de l'emprise, toit à deux pans sur un rectangle, sinon
+ * plat. Sommets relatifs au centre du carré, en coordonnées de la scène
+ * (X est, Y altitude, Z sud), une normale par face.
+ */
+function construireCarre(c) {
+    const d = c.donnees;
+    const cx = (c.i + 0.5) * CARRE_M, cy = (c.j + 0.5) * CARRE_M;
+    const [ox, oy] = d.origine;
+    const dx = ox - cx, dy = oy - cy;
+    const pos = [], nor = [], col = [];
+    const couleur = new THREE.Color(), teinte = new THREE.Color();
+    const ardoise = depuisLambert93(cx, cy)[1] > LAT_ARDOISE;
+    const va = new THREE.Vector3(), vb = new THREE.Vector3(), vn = new THREE.Vector3();
+    // Un triangle (x, alt, y locaux, y vers le nord), tourné pour que sa
+    // normale suive `ref` (ex, ey, ez) : vers le dehors, ou vers le ciel.
+    const tri = (a, b, e, ref, ca, cb = ca, ce = ca) => {
+        const A = [a[0], a[1], -a[2]], B = [b[0], b[1], -b[2]], E = [e[0], e[1], -e[2]];
+        va.set(B[0] - A[0], B[1] - A[1], B[2] - A[2]);
+        vb.set(E[0] - A[0], E[1] - A[1], E[2] - A[2]);
+        vn.crossVectors(va, vb);
+        if (vn.lengthSq() < 1e-8) return;
+        let P = [A, B, E], C = [ca, cb, ce];
+        if (vn.x * ref[0] + vn.y * ref[1] - vn.z * ref[2] < 0) { P = [A, E, B]; C = [ca, ce, cb]; vn.negate(); }
+        vn.normalize();
+        for (let q = 0; q < 3; q++) {
+            pos.push(P[q][0], P[q][1], P[q][2]); nor.push(vn.x, vn.y, vn.z); col.push(C[q].r, C[q].g, C[q].b);
+        }
+    };
+    const pied = new THREE.Color();
+    let n = 0;
+    for (const b of d.batiments) {
+        for (const poly of b.polygones) {
+            // Anneaux en mètres, relatifs au centre ; sans le sommet de fermeture.
+            const anneaux = poly.map(a => {
+                const p = [];
+                for (let k = 0; k + 1 < a.length; k += 2) p.push(a[k] / 10 + dx, a[k + 1] / 10 + dy);
+                if (p.length >= 4 && p[0] === p[p.length - 2] && p[1] === p[p.length - 1]) p.length -= 2;
+                return p;
+            }).filter(p => p.length >= 6);
+            if (!anneaux.length) continue;
+            // Extérieur dans le sens trigonométrique, trous dans l'autre.
+            anneaux.forEach((p, k) => {
+                if ((aireAnneau(p) > 0) !== (k === 0)) {
+                    const r = [];
+                    for (let q = p.length - 2; q >= 0; q -= 2) r.push(p[q], p[q + 1]);
+                    p.splice(0, p.length, ...r);
+                }
+            });
+            const ext = anneaux[0];
+            let mx = 0, my = 0;
+            for (let k = 0; k < ext.length; k += 2) { mx += ext[k]; my += ext[k + 1]; }
+            mx /= ext.length / 2; my /= ext.length / 2;
+            let sol = b.sol;
+            if (sol == null) {
+                const a = altitudeL93(cx + mx, cy + my);
+                sol = Number.isFinite(a) ? a : 0;
+            }
+            const gout = b.gouttiere, fait = b.faitage;
+            let hMur = gout != null && gout > sol + 0.5 ? gout - sol
+                : b.hauteur > 0 ? b.hauteur : b.etages > 0 ? HAUTEUR_PAR_ETAGE * b.etages : 4;
+            hMur = Math.min(Math.max(hMur, 2), 350);
+            const bas = sol - ENFONCEMENT_M, haut = sol + hMur;
+            couleur.setHex(TEINTES_MURS[b.usage] || TEINTE_MURS);
+            // Un écart de teinte par bâtiment : des voisins accolés se
+            // distinguent ; et un pied plus sombre, qui pose les façades.
+            const h = (n * 2654435761 >>> 0) / 4294967296;
+            couleur.multiplyScalar(0.88 + 0.16 * h);
+            pied.copy(couleur).multiplyScalar(0.62);
+            n++;
+            for (const p of anneaux) {
+                const m = p.length / 2;
+                for (let k = 0; k < m; k++) {
+                    const l = (k + 1) % m;
+                    const ax = p[2 * k], ay = p[2 * k + 1], bx = p[2 * l], by = p[2 * l + 1];
+                    const dehors = [by - ay, 0, -(bx - ax)];
+                    tri([ax, bas, ay], [bx, bas, by], [bx, haut, by], dehors, pied, pied, couleur);
+                    tri([ax, bas, ay], [bx, haut, by], [ax, haut, ay], dehors, pied, couleur, couleur);
+                }
+            }
+            const den = gout != null && fait != null ? fait - gout : 0;
+            const aire = aireAnneau(ext) + anneaux.slice(1).reduce((s, p) => s + aireAnneau(p), 0);
+            const r = den > 0.5 && anneaux.length === 1 ? rectangleMin(ext) : null;
+            if (r && aire / r.aire >= RECTANGLE_MIN && r.largeur <= LARGEUR_PIGNON_MAX) {
+                const f = Math.min(den, PENTE_TOIT_MAX * r.largeur);
+                const L = r.longueur / 2, W = r.largeur / 2;
+                const pt = (u, v, z) => [r.cx + u * r.ux + v * r.vx, z, r.cy + u * r.uy + v * r.vy];
+                const a1 = pt(L, W, haut), a2 = pt(-L, W, haut), a3 = pt(-L, -W, haut), a4 = pt(L, -W, haut);
+                const f1 = pt(L, 0, haut + f), f2 = pt(-L, 0, haut + f);
+                teinte.setHex(ardoise ? TEINTE_ARDOISE : TEINTE_TUILE).multiplyScalar(0.92 + 0.12 * h);
+                const versV = [r.vx, 1, r.vy], versMoinsV = [-r.vx, 1, -r.vy];
+                tri(a1, a2, f2, versV, teinte); tri(a1, f2, f1, versV, teinte);
+                tri(a3, a4, f1, versMoinsV, teinte); tri(a3, f1, f2, versMoinsV, teinte);
+                tri(a4, a1, f1, [r.ux, 0, r.uy], couleur);
+                tri(a2, a3, f2, [-r.ux, 0, -r.uy], couleur);
+            } else {
+                const contour = [], trous = [];
+                for (let k = 0; k < ext.length; k += 2) contour.push(new THREE.Vector2(ext[k], ext[k + 1]));
+                for (const p of anneaux.slice(1)) {
+                    const t = [];
+                    for (let k = 0; k < p.length; k += 2) t.push(new THREE.Vector2(p[k], p[k + 1]));
+                    trous.push(t);
+                }
+                // Les indices rendus courent sur le contour puis les trous,
+                // tels que triangulateShape les laisse.
+                const faces = THREE.ShapeUtils.triangulateShape(contour, trous);
+                const tous = contour.concat(...trous);
+                teinte.setHex(TEINTE_TOIT_PLAT).multiplyScalar(0.86 + 0.2 * h);
+                for (const [i0, i1, i2] of faces) {
+                    const A = tous[i0], B = tous[i1], E = tous[i2];
+                    tri([A.x, haut, A.y], [B.x, haut, B.y], [E.x, haut, E.y], [0, 1, 0], teinte);
+                }
+            }
+        }
+    }
+    c.nbBatiments = n;
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+    geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+    geo.computeBoundingSphere();
+    c.mesh = new THREE.Mesh(geo, MAT_BATI);
+    ancrer(c.mesh, cx, cy);
+    groupeBati.add(c.mesh);
+}
+
+function defaireCarre(c) {
+    if (!c.mesh) return;
+    groupeBati.remove(c.mesh);
+    ancres.delete(c.mesh);
+    c.mesh.geometry.dispose();
+    c.mesh = null;
+}
+
+/** Les carrés voulus et leur priorité : la distance à parcourir pour y être. */
+function carresVoulus() {
+    const voulus = new Map();
+    const ajouter = (x, y, rayon, prio) => {
+        const i0 = Math.floor((x - rayon) / CARRE_M), i1 = Math.floor((x + rayon) / CARRE_M);
+        const j0 = Math.floor((y - rayon) / CARRE_M), j1 = Math.floor((y + rayon) / CARRE_M);
+        for (let i = i0; i <= i1; i++) {
+            for (let j = j0; j <= j1; j++) {
+                const ex = Math.max(i * CARRE_M - x, 0, x - (i + 1) * CARRE_M);
+                const ey = Math.max(j * CARRE_M - y, 0, y - (j + 1) * CARRE_M);
+                const d = Math.hypot(ex, ey);
+                if (d > rayon) continue;
+                const cle = `${i},${j}`, p = prio + d;
+                if (!(voulus.get(cle)?.p <= p)) voulus.set(cle, { i, j, p });
+            }
+        }
+    };
+    const v = voiture;
+    const x = v.vue ? v.x : v.attendu.x, y = v.vue ? v.y : v.attendu.y;
+    ajouter(x, y, AUTOUR_M, 0);
+    const ch = v.chemin;
+    if (ch) {
+        const d0 = v.dChemin;
+        for (let d = d0 + PAS_COULOIR_M; d < ch.longueur; d += PAS_COULOIR_M) {
+            const p = pointDuChemin(ch, d);
+            ajouter(p.x, p.y, COULOIR_M, d - d0);
+        }
+        // Au bout d'une route encore inconnue : le carré suivant, d'abord.
+        if (ch.fin === 'inconnu') ajouter(ch.bout[0], ch.bout[1], 1, ch.longueur - d0 - 200);
+    } else if (v.vue && v.v > 2) {
+        for (let d = PAS_COULOIR_M; d <= 1500; d += PAS_COULOIR_M) {
+            ajouter(x + d * Math.sin(v.cap * RAD), y + d * Math.cos(v.cap * RAD), COULOIR_M, d);
+        }
+    }
+    return [...voulus.values()].sort((a, b) => a.p - b.p).slice(0, CARRES_VOULUS_MAX);
+}
+
+let budgetConstruction = 0;
+const durees = [];                     // [ms, bâtiments] des dernières constructions, pour les essais
+function majCarres(maintenant) {
+    if (maintenant - derniereSelectionCarres >= 300 && (voiture.vue || (voiture.attendu && !voiture.attendu.provisoire))) {
+        derniereSelectionCarres = maintenant;
+        const voulus = carresVoulus();
+        const cles = new Set();
+        for (const { i, j, p } of voulus) {
+            const c = carre(i, j);
+            c.voulu = maintenant;
+            c.priorite = p;
+            cles.add(c.cle);
+        }
+        for (const { i, j } of voulus) {
+            if (carresEnVol >= CARRES_PARALLELE) break;
+            const c = carre(i, j);
+            if (c.etat === 'neuf' || (c.etat === 'erreur' && maintenant >= c.reessai)) chargerCarre(c);
+        }
+        const px = voiture.vue ? voiture.x : voiture.attendu.x, py = voiture.vue ? voiture.y : voiture.attendu.y;
+        for (const c of [...carres.values()]) {
+            const voulu = cles.has(c.cle);
+            if (c.mesh) c.mesh.visible = voulu;
+            if (!voulu && c.mesh && maintenant - c.voulu > CARRE_DEFAIT_S * 1000) defaireCarre(c);
+            if (!voulu && c.etat !== 'charge' && maintenant - c.voulu > CARRE_OUBLI_S * 1000
+                && Math.hypot((c.i + 0.5) * CARRE_M - px, (c.j + 0.5) * CARRE_M - py) > CARRE_OUBLI_M) {
+                defaireCarre(c);
+                if (c.donnees) retirerRoutes(c);
+                carres.delete(c.cle);
+            }
+        }
+    }
+    // Un carré construit par image au plus, dans l'ordre de la route : la
+    // voiture ne saccade pas quand une rafale arrive. Médiane de 3,8 ms à
+    // Paris et de 4,8 ms à Lyon, 14,7 ms au pire (398 bâtiments, Chrome sur
+    // Mac M4) ; une machine trois fois plus lente reste sous les 50 ms.
+    budgetConstruction = 0;
+    let meilleur = null;
+    for (const c of carres.values()) {
+        if (c.etat === 'pret' && !c.mesh && c.altiPretes && c.voulu >= derniereSelectionCarres - 1
+            && (!meilleur || c.priorite < meilleur.priorite)) meilleur = c;
+    }
+    if (meilleur) {
+        const t0 = performance.now();
+        construireCarre(meilleur);
+        budgetConstruction = performance.now() - t0;
+        durees.push([budgetConstruction, meilleur.nbBatiments]);
+        if (durees.length > 200) durees.shift();
+    }
+}
+
+// --- Graphe des routes -------------------------------------------------------------
+// Les tronçons de tous les carrés lus, réunis par leurs extrémités (au
+// décimètre près, la précision des carrés : celles d'un même nœud sont
+// identiques), et indexés par cellules de 50 m pour caler la voiture.
+const noeuds = new Map(), aretes = new Map(), grille = new Map();
+const CELLULE_M = 50;
+
+function noeud(cle, x, y) {
+    let n = noeuds.get(cle);
+    if (!n) { n = { cle, x, y, aretes: [] }; noeuds.set(cle, n); }
+    return n;
+}
+function cellules(a, k, faire) {
+    const x0 = a.pts[2 * k], y0 = a.pts[2 * k + 1], x1 = a.pts[2 * k + 2], y1 = a.pts[2 * k + 3];
+    for (let i = Math.floor(Math.min(x0, x1) / CELLULE_M); i <= Math.floor(Math.max(x0, x1) / CELLULE_M); i++) {
+        for (let j = Math.floor(Math.min(y0, y1) / CELLULE_M); j <= Math.floor(Math.max(y0, y1) / CELLULE_M); j++) {
+            faire(`${i},${j}`);
+        }
+    }
+}
+
+function integrerRoutes(c) {
+    const [ox, oy] = c.donnees.origine;
+    for (const r of c.donnees.routes) {
+        const deja = aretes.get(r.id);
+        if (deja) { deja.carres.add(c.cle); continue; }
+        const n = r.ligne.length / 3;
+        if (n < 2) continue;
+        const pts = new Float64Array(2 * n), z = new Float64Array(n), cum = new Float64Array(n);
+        for (let k = 0; k < n; k++) {
+            pts[2 * k] = (ox * 10 + r.ligne[3 * k]) / 10;
+            pts[2 * k + 1] = (oy * 10 + r.ligne[3 * k + 1]) / 10;
+            z[k] = r.ligne[3 * k + 2] == null ? NaN : r.ligne[3 * k + 2] / 10;
+            if (k) cum[k] = cum[k - 1] + Math.hypot(pts[2 * k] - pts[2 * k - 2], pts[2 * k + 1] - pts[2 * k - 1]);
+        }
+        const cleDe = k => `${ox * 10 + r.ligne[3 * k]},${oy * 10 + r.ligne[3 * k + 1]}`;
+        const a = { ...r, pts, z, cum, L: cum[n - 1], carres: new Set([c.cle]) };
+        delete a.ligne;
+        a.n0 = noeud(cleDe(0), pts[0], pts[1]);
+        a.n1 = noeud(cleDe(n - 1), pts[2 * n - 2], pts[2 * n - 1]);
+        if (a.L < 0.05) continue;
+        a.n0.aretes.push(a);
+        if (a.n1 !== a.n0) a.n1.aretes.push(a);
+        aretes.set(r.id, a);
+        for (let k = 0; k < n - 1; k++) cellules(a, k, cle => {
+            let l = grille.get(cle);
+            if (!l) grille.set(cle, l = []);
+            l.push({ a, k });
+        });
+    }
+}
+
+function retirerRoutes(c) {
+    for (const r of c.donnees.routes) {
+        const a = aretes.get(r.id);
+        if (!a) continue;
+        a.carres.delete(c.cle);
+        if (a.carres.size) continue;
+        aretes.delete(r.id);
+        for (const nd of [a.n0, a.n1]) {
+            nd.aretes = nd.aretes.filter(b => b !== a);
+            if (!nd.aretes.length) noeuds.delete(nd.cle);
+        }
+        for (let k = 0; k < a.pts.length / 2 - 1; k++) cellules(a, k, cle => {
+            const l = grille.get(cle);
+            if (!l) return;
+            const reste = l.filter(e => e.a !== a);
+            if (reste.length) grille.set(cle, reste); else grille.delete(cle);
+        });
+    }
+    c.donnees = null;
+}
+
+/** Point de l'arête `a` à l'abscisse `s`, et son cap (degrés, du nord du quadrillage) dans le sens `sens`. */
+function pointArete(a, s, sens = 1) {
+    s = Math.min(Math.max(s, 0), a.L);
+    let k = 0;
+    while (k < a.cum.length - 2 && a.cum[k + 1] < s) k++;
+    const l = a.cum[k + 1] - a.cum[k] || 1, u = (s - a.cum[k]) / l;
+    const x0 = a.pts[2 * k], y0 = a.pts[2 * k + 1], x1 = a.pts[2 * k + 2], y1 = a.pts[2 * k + 3];
+    const cap = Math.atan2((x1 - x0) * sens, (y1 - y0) * sens) / RAD;
+    const z = a.z[k] + (a.z[k + 1] - a.z[k]) * u;
+    return { x: x0 + (x1 - x0) * u, y: y0 + (y1 - y0) * u, cap, z, k };
+}
+
+/** Cap de l'arête au départ du nœud `n`, mesuré sur ses `l` premiers mètres. */
+function capDepuis(a, n, l = 15) {
+    const sens = a.n0 === n ? 1 : -1;
+    const p0 = pointArete(a, sens > 0 ? 0 : a.L), p1 = pointArete(a, sens > 0 ? Math.min(l, a.L) : a.L - Math.min(l, a.L));
+    return Math.atan2(p1.x - p0.x, p1.y - p0.y) / RAD;
+}
+const ecartCap = (a, b) => ((a - b + 540) % 360) - 180;
+const memeVoie = (a, b) => (a.numero && a.numero === b.numero) || (a.nom && a.nom === b.nom);
+const permise = (b, n) => !(b.sens === '+' && b.n0 !== n) && !(b.sens === '-' && b.n1 !== n);
+
+/**
+ * Les suites possibles au nœud `n` pour qui arrive par `a` au cap `capArrivee`,
+ * de la plus probable à la moins : tout droit, sur la même voie, de même
+ * importance, en voiture. Les sens interdits sont écartés, le demi-tour aussi.
+ */
+function suites(a, n, capArrivee) {
+    const options = [];
+    for (const b of n.aretes) {
+        if (b === a || b.n0 === b.n1 || !permise(b, n)) continue;
+        const virage = Math.abs(ecartCap(capDepuis(b, n), capArrivee));
+        if (virage > 160) continue;
+        let score = virage + 12 * Math.abs(b.importance - a.importance);
+        if (memeVoie(a, b)) score -= 30;
+        if (b.nature === 'Chemin' || b.nature === 'Route empierrée') score += 40;
+        if (b.nature === 'Bretelle' && a.nature !== 'Bretelle') score += 25;
+        if (b.acces && b.acces.startsWith('Restreint') && !a.acces) score += 60;
+        options.push({ a: b, sens: b.n0 === n ? 1 : -1, score });
+    }
+    return options.sort((u, v) => u.score - v.score);
+}
+
+const carrePret = (x, y) => carreDe(x, y)?.etat === 'pret';
+
+// Sur un rond-point, la suite « la plus droite » est l'anneau lui-même : la
+// route prévue en faisait le tour et s'arrêtait sur un tronçon déjà vu (au
+// rond-point des Champs-Élysées). On en sort par la branche la plus proche
+// du cap d'entrée, à SORTIE_ROND_POINT près, sinon on continue de tourner.
+const SORTIE_ROND_POINT = 60, TOURS_ROND_POINT_MAX = 12;
+
+/**
+ * La suite de `a` au nœud `n` : la plus probable (suites), hors des tronçons
+ * déjà `vues`, avec la règle des ronds-points. `etat` garde le cap d'entrée
+ * sur l'anneau ; `hasard`, entre 0 et 1, fait prendre une autre branche
+ * hors des ronds-points (la simulation). Null s'il n'y en a pas.
+ */
+function suiteProbable(a, sens, n, etat, vues = null, hasard = 0) {
+    const capArrivee = pointArete(a, sens > 0 ? a.L : 0, sens).cap;
+    const options = suites(a, n, capArrivee).filter(o => !vues || !vues.has(o.a));
+    if (!options.length) return null;
+    let choix = options[0];
+    if (a.nature === 'Rond-point' && etat.capEntree != null) {
+        etat.tours = (etat.tours || 0) + 1;
+        const sorties = options.filter(o => o.a.nature !== 'Rond-point')
+            .map(o => ({ o, ecart: Math.abs(ecartCap(capDepuis(o.a, n), etat.capEntree)) }))
+            .sort((u, v) => u.ecart - v.ecart);
+        const anneau = options.find(o => o.a.nature === 'Rond-point');
+        choix = sorties.length && (sorties[0].ecart < SORTIE_ROND_POINT || !anneau || etat.tours > TOURS_ROND_POINT_MAX)
+            ? sorties[0].o : anneau || options[0];
+    } else if (hasard && options.length > 1 && Math.random() < hasard) {
+        choix = options[1 + Math.floor(Math.random() * (options.length - 1))];
+    }
+    if (choix.a.nature === 'Rond-point' && a.nature !== 'Rond-point') { etat.capEntree = capArrivee; etat.tours = 0; }
+    else if (choix.a.nature !== 'Rond-point') etat.capEntree = null;
+    return choix;
+}
+
+/**
+ * La route prévue depuis `depart` ({a, s, sens}), sur `longueur` mètres :
+ * à chaque carrefour, la suite la plus probable. Elle s'arrête à une
+ * impasse, ou au bord de ce qui est lu (`fin` = 'inconnu', `bout` : le
+ * carré à demander).
+ */
+function cheminDepuis(depart, longueur) {
+    const xs = [], ys = [], cum = [], parcours = [];
+    let { a, s, sens } = depart;
+    const p0 = pointArete(a, s, sens);
+    xs.push(p0.x); ys.push(p0.y); cum.push(0);
+    let total = 0, fin = 'complet', bout = null;
+    const vues = new Set(), etat = { capEntree: depart.capEntree ?? null };
+    const ajouter = (x, y) => {
+        const l = Math.hypot(x - xs[xs.length - 1], y - ys[ys.length - 1]);
+        if (l < 0.01) return;
+        total += l;
+        xs.push(x); ys.push(y); cum.push(total);
+    };
+    for (;;) {
+        parcours.push({ a, sens, debut: total - (sens > 0 ? s : a.L - s) });
+        vues.add(a);
+        if (sens > 0) { for (let k = 1; k < a.cum.length; k++) if (a.cum[k] > s) ajouter(a.pts[2 * k], a.pts[2 * k + 1]); }
+        else { for (let k = a.cum.length - 2; k >= 0; k--) if (a.cum[k] < s) ajouter(a.pts[2 * k], a.pts[2 * k + 1]); }
+        if (total >= longueur) break;
+        const n = sens > 0 ? a.n1 : a.n0;
+        const suite = suiteProbable(a, sens, n, etat, vues);
+        if (!suite) {
+            fin = carrePret(n.x, n.y) ? 'impasse' : 'inconnu';
+            bout = [n.x, n.y];
+            break;
+        }
+        ({ a, sens } = suite);
+        s = sens > 0 ? 0 : a.L;
+    }
+    if (!bout) bout = [xs[xs.length - 1], ys[ys.length - 1]];
+    return { xs, ys, cum, longueur: total, fin, bout, parcours };
+}
+
+/** Point du chemin à la distance `d` de son début, avec son cap ; null hors du chemin. */
+function pointDuChemin(ch, d) {
+    if (!ch || ch.xs.length < 2) return null;
+    d = Math.min(Math.max(d, 0), ch.longueur);
+    let lo = 0, hi = ch.cum.length - 1;
+    while (hi - lo > 1) { const m = (lo + hi) >> 1; if (ch.cum[m] <= d) lo = m; else hi = m; }
+    const l = ch.cum[hi] - ch.cum[lo] || 1, u = (d - ch.cum[lo]) / l;
+    const x = ch.xs[lo] + (ch.xs[hi] - ch.xs[lo]) * u, y = ch.ys[lo] + (ch.ys[hi] - ch.ys[lo]) * u;
+    // Le cap sur 6 m de part et d'autre : une polyligne fine tourne par à-coups.
+    const k0 = Math.max(d - 6, 0), k1 = Math.min(d + 6, ch.longueur);
+    const pa = k0 === d ? { x, y } : pointBrut(ch, k0), pb = k1 === d ? { x, y } : pointBrut(ch, k1);
+    const cap = Math.hypot(pb.x - pa.x, pb.y - pa.y) > 0.01
+        ? Math.atan2(pb.x - pa.x, pb.y - pa.y) / RAD
+        : Math.atan2(ch.xs[hi] - ch.xs[lo], ch.ys[hi] - ch.ys[lo]) / RAD;
+    return { x, y, cap };
+}
+function pointBrut(ch, d) {
+    let lo = 0, hi = ch.cum.length - 1;
+    while (hi - lo > 1) { const m = (lo + hi) >> 1; if (ch.cum[m] <= d) lo = m; else hi = m; }
+    const l = ch.cum[hi] - ch.cum[lo] || 1, u = (d - ch.cum[lo]) / l;
+    return { x: ch.xs[lo] + (ch.xs[hi] - ch.xs[lo]) * u, y: ch.ys[lo] + (ch.ys[hi] - ch.ys[lo]) * u };
+}
+/** L'arête du chemin à la distance `d`, et l'abscisse sur elle. */
+function areteDuChemin(ch, d) {
+    let e = ch.parcours[0];
+    for (const p of ch.parcours) { if (p.debut <= d) e = p; else break; }
+    const s = e.sens > 0 ? d - e.debut : e.a.L - (d - e.debut);
+    return { a: e.a, s: Math.min(Math.max(s, 0), e.a.L), sens: e.sens };
+}
+
+/**
+ * Cale un relevé sur la route : le tronçon le plus proche dans le rayon de
+ * sa précision, dont le sens s'accorde au cap quand on roule, et qui
+ * prolonge de préférence la route prévue. Null hors de toute route.
+ */
+function caler(x, y, precision, cap) {
+    // Large : en ville, le GPS s'égare de 20 à 30 m quand il en annonce 8 ;
+    // le cap et la route prévue départagent les voisines.
+    const rayon = Math.min(Math.max(precision * 2.5, 25), 60);
+    const vus = new Set();
+    const surChemin = new Set(voiture.chemin ? voiture.chemin.parcours.map(p => p.a) : []);
+    let meilleur = null;
+    for (let i = Math.floor((x - rayon) / CELLULE_M); i <= Math.floor((x + rayon) / CELLULE_M); i++) {
+        for (let j = Math.floor((y - rayon) / CELLULE_M); j <= Math.floor((y + rayon) / CELLULE_M); j++) {
+            for (const { a, k } of grille.get(`${i},${j}`) || []) {
+                const cleSeg = a.id + ':' + k;
+                if (vus.has(cleSeg)) continue;
+                vus.add(cleSeg);
+                const x0 = a.pts[2 * k], y0 = a.pts[2 * k + 1], x1 = a.pts[2 * k + 2], y1 = a.pts[2 * k + 3];
+                const lx = x1 - x0, ly = y1 - y0, l2 = lx * lx + ly * ly || 1;
+                const u = Math.min(Math.max(((x - x0) * lx + (y - y0) * ly) / l2, 0), 1);
+                const px = x0 + lx * u, py = y0 + ly * u;
+                const d = Math.hypot(x - px, y - py);
+                if (d > rayon) continue;
+                const capSeg = Math.atan2(lx, ly) / RAD;
+                let sens = 1, penalite = 0;
+                if (cap != null) {
+                    const ecartDirect = Math.abs(ecartCap(cap, capSeg)), ecartInverse = Math.abs(ecartCap(cap, capSeg + 180));
+                    const directOk = a.sens !== '-', inverseOk = a.sens !== '+';
+                    if (directOk && (!inverseOk || ecartDirect <= ecartInverse)) { sens = 1; penalite = ecartDirect; }
+                    else { sens = -1; penalite = ecartInverse; }
+                    penalite = 25 * (1 - Math.cos(penalite * RAD));
+                } else if (voiture.ancre && voiture.ancre.a === a) {
+                    sens = voiture.ancre.sens;
+                }
+                if (a.sol < 0) penalite += 6;            // un tunnel ne se prend pas par erreur
+                const score = d + penalite - (surChemin.has(a) ? 8 : 0);
+                if (!meilleur || score < meilleur.score) {
+                    meilleur = { score, a, sens, s: a.cum[k] + Math.sqrt(l2) * u, x: px, y: py };
+                }
+            }
+        }
+    }
+    return meilleur;
+}
+
+// --- La voiture ---------------------------------------------------------------------
+// Un relevé par seconde au mieux : entre deux, la voiture avance le long de
+// la route prévue à sa vitesse, et l'image se raccorde en douceur au relevé
+// suivant. Sans relevé, elle s'arrête au bout de EXTRAPOLATION_S (bien plus
+// tard dans un tunnel, où le GPS ne capte plus).
+const EXTRAPOLATION_S = 3, EXTRAPOLATION_TUNNEL_S = 40;
+const LISSAGE_POSITION_S = 0.3, LISSAGE_CAP_S = 0.35;
+const SAUT_M = 150;
+const voiture = {
+    fix: null, ancre: null, chemin: null, dChemin: 0, recalculer: false,
+    vue: false, x: 0, y: 0, alt: 0, cap: 0, v: 0, precision: 0, horsRoute: true,
+    attendu: null,                    // le départ, avant le premier relevé
+};
+
+function longueurPrevue() {
+    // Deux minutes et demie de route devant soi, de 2 à 6 km : à 130 km/h,
+    // 5,4 km, lus en quelques secondes (0,2 s par carré, quatre à la fois).
+    return Math.min(Math.max(voiture.v * 150, 2000), 6000);
+}
+
+function recalculerChemin() {
+    voiture.recalculer = false;
+    const an = voiture.ancre;
+    if (!an || !an.a) { voiture.chemin = null; return; }
+    // Le chemin part de la position affichée, pas du relevé : il garde la
+    // même abscisse pour la voiture, que la boucle fait avancer.
+    voiture.chemin = cheminDepuis(an, longueurPrevue());
+    voiture.dChemin = 0;
+    voiture.tChemin = an.t;
+}
+
+const HISTORIQUE_S = 4;
+const historique = [];
+function recevoirPosition(pos) {
+    const c = pos.coords;
+    const [x, y] = versLambert93(c.longitude, c.latitude);
+    const maintenant = performance.now();
+    let v = Number.isFinite(c.speed) && c.speed != null ? c.speed : null;
+    let cap = Number.isFinite(c.heading) && c.heading != null && (v == null || v > 1)
+        ? c.heading - convergence(c.longitude) : null;
+    // Sans vitesse ni cap du GPS : tirés des relevés des dernières secondes,
+    // pas des deux derniers, que leur bruit de quelques mètres faisait
+    // tourner de 40° à 30 km/h.
+    historique.push({ x, y, t: maintenant });
+    while (historique.length > 2 && maintenant - historique[0].t > HISTORIQUE_S * 1000) historique.shift();
+    const ancien = historique[0], dt = (maintenant - ancien.t) / 1000;
+    const d = Math.hypot(x - ancien.x, y - ancien.y);
+    if (v == null && dt > 0.8) v = d / dt;
+    if (cap == null && d > 10) cap = Math.atan2(x - ancien.x, y - ancien.y) / RAD;
+    voiture.fix = { x, y, t: maintenant, precision: c.accuracy || 30, v: v || 0, cap,
+                    lon: c.longitude, lat: c.latitude };
+    voiture.precision = voiture.fix.precision;
+    if (!voiture.vue) {
+        voiture.vue = true;
+        if (Math.hypot(x - ORIGINE.x, y - ORIGINE.y) > RECALAGE_M) recaler(x, y);
+        voiture.x = x; voiture.y = y;
+        voiture.cap = cap ?? 0;
+        camVue.cap = voiture.cap;
+        document.getElementById('accueil').hidden = true;
+        // La France vue de haut, en attendant : on descend derrière la voiture.
+        if (voiture.attendu?.provisoire) {
+            camVue.mode = PARAMS.get('vue') === '2d' ? '2d' : '3d';
+            camVue.hauteur = 320;
+            majBoutonVue();
+        }
+        majLienQuitter();
+    }
+    calerReleve();
+}
+
+function calerReleve() {
+    const f = voiture.fix;
+    const m = caler(f.x, f.y, f.precision, f.v > 1.5 ? f.cap : null);
+    voiture.horsRoute = !m;
+    if (m) {
+        voiture.ancre = { a: m.a, s: m.s, sens: m.sens, x: m.x, y: m.y, t: f.t, v: f.v };
+    } else {
+        voiture.ancre = { a: null, x: f.x, y: f.y, t: f.t, v: f.v, cap: f.cap };
+    }
+    recalculerChemin();
+    // Le relevé arrive un peu derrière la voiture affichée, qui a filé sur
+    // sa lancée : elle garde son avance plutôt que de reculer, pourvu
+    // qu'elle soit sur la route prévue, devant le relevé.
+    const ch = voiture.chemin, an = voiture.ancre;
+    if (ch && an.v > 1) {
+        const d = abscisseSurChemin(ch, voiture.x, voiture.y, Math.max(20, 2.5 * an.v));
+        if (d != null && d > 0) an.t = performance.now() - d / an.v * 1000;
+    }
+}
+
+/** Abscisse sur le chemin du point le plus proche de (x, y) parmi ses `dMax` premiers mètres, à moins de 10 m. */
+function abscisseSurChemin(ch, x, y, dMax) {
+    let meilleur = null;
+    for (let k = 0; k + 1 < ch.xs.length && ch.cum[k] <= dMax; k++) {
+        const lx = ch.xs[k + 1] - ch.xs[k], ly = ch.ys[k + 1] - ch.ys[k], l2 = lx * lx + ly * ly || 1;
+        const u = Math.min(Math.max(((x - ch.xs[k]) * lx + (y - ch.ys[k]) * ly) / l2, 0), 1);
+        const d = Math.hypot(x - ch.xs[k] - lx * u, y - ch.ys[k] - ly * u);
+        if (d < 10 && (!meilleur || d < meilleur.d)) meilleur = { d, s: ch.cum[k] + Math.sqrt(l2) * u };
+    }
+    return meilleur && meilleur.s <= dMax ? meilleur.s : null;
+}
+
+function majVoiture(dt, maintenant) {
+    const v = voiture;
+    if (!v.vue) return;
+    if (v.recalculer && v.fix) calerReleve();
+    const an = v.ancre;
+    // Le dernier relevé tombe avant l'entrée du tunnel : c'est le tronçon où
+    // la voiture arrive sur sa lancée qui compte.
+    const depuis = (maintenant - an.t) / 1000;
+    let limite = EXTRAPOLATION_S;
+    if (v.chemin && an.v > 1 && depuis > EXTRAPOLATION_S
+        && areteDuChemin(v.chemin, an.v * EXTRAPOLATION_S).a.sol < 0) limite = EXTRAPOLATION_TUNNEL_S;
+    const ecoule = Math.min(depuis, limite);
+    let cx, cy, ccap;
+    const p = v.chemin && pointDuChemin(v.chemin, an.v * ecoule);
+    if (p) {
+        v.dChemin = an.v * ecoule;
+        cx = p.x; cy = p.y; ccap = p.cap;
+    } else {
+        const cap = an.cap ?? v.cap;
+        cx = an.x + an.v * ecoule * Math.sin(cap * RAD);
+        cy = an.y + an.v * ecoule * Math.cos(cap * RAD);
+        ccap = cap;
+    }
+    const k = 1 - Math.exp(-dt / LISSAGE_POSITION_S);
+    if (Math.hypot(cx - v.x, cy - v.y) > SAUT_M) { v.x = cx; v.y = cy; }
+    else { v.x += (cx - v.x) * k; v.y += (cy - v.y) * k; }
+    // À l'arrêt, le cap reste : le GPS n'en donne plus, ou un faux.
+    if (an.v > 0.8) v.cap += ecartCap(ccap, v.cap) * (1 - Math.exp(-dt / LISSAGE_CAP_S));
+    // Figée faute de relevé, la voiture affiche 0, pas sa dernière vitesse.
+    v.v += ((depuis > limite ? 0 : an.v || 0) - v.v) * (1 - Math.exp(-dt / 0.8));
+    // L'altitude : celle du relief, sauf sur un pont, où la route BD TOPO
+    // porte la sienne ; lissée, pour ne pas sauter d'une tuile à l'autre.
+    let alt = altitudeL93(v.x, v.y);
+    if (p && an.a) {
+        const e = areteDuChemin(v.chemin, v.dChemin);
+        if (e.a.sol > 0) {
+            const z = pointArete(e.a, e.s).z;
+            if (Number.isFinite(z)) alt = Number.isFinite(alt) ? Math.max(alt, z) : z;
+        }
+        v.arete = e.a;
+    } else {
+        v.arete = null;
+    }
+    if (Number.isFinite(alt)) v.alt = v.altPret ? v.alt + (alt - v.alt) * (1 - Math.exp(-dt / 0.25)) : alt;
+    v.altPret = v.altPret || Number.isFinite(alt);
+    if (Math.hypot(v.x - ORIGINE.x, v.y - ORIGINE.y) > RECALAGE_M) recaler(v.x, v.y);
+    poserVoiture();
+}
+
+// --- Maquette de la voiture --------------------------------------------------------
+// Une berline stylisée, à l'échelle (4,7 × 1,85 m), grossie avec le recul de
+// la caméra comme l'icône d'un GPS : à 70 m, une voiture réelle tiendrait
+// dans 4 % de la largeur de l'écran.
+const maquette = new THREE.Group();
+const MAT_CAISSE = new THREE.MeshLambertMaterial({ color: 0xf2f4f6 });
+const MAT_VITRES = new THREE.MeshLambertMaterial({ color: 0x1b2430 });
+const MAT_PNEUS = new THREE.MeshLambertMaterial({ color: 0x15171a });
+const MAT_PHARES = new THREE.MeshBasicMaterial({ color: 0xfffbe8 });
+const MAT_FEUX = new THREE.MeshBasicMaterial({ color: 0xe0242a });
+(function construireMaquette() {
+    const extruder = (forme, largeur, mat) => {
+        const geo = new THREE.ExtrudeGeometry(forme, { depth: largeur, bevelEnabled: true, bevelThickness: 0.06,
+                                                       bevelSize: 0.06, bevelSegments: 2, curveSegments: 8 });
+        geo.translate(0, 0, -largeur / 2);
+        return new THREE.Mesh(geo, mat);
+    };
+    const caisse = new THREE.Shape();
+    caisse.moveTo(-2.3, 0.3); caisse.lineTo(2.2, 0.3);
+    caisse.quadraticCurveTo(2.36, 0.32, 2.36, 0.56);
+    caisse.quadraticCurveTo(2.32, 0.8, 1.95, 0.86);
+    caisse.lineTo(0.95, 0.95); caisse.lineTo(-1.9, 0.98); caisse.lineTo(-2.1, 0.95);
+    caisse.quadraticCurveTo(-2.3, 0.92, -2.32, 0.7); caisse.lineTo(-2.3, 0.3);
+    maquette.add(extruder(caisse, 1.74, MAT_CAISSE));
+    // Une lunette arrière longue et couchée, en fastback : droite, elle
+    // donnait à la voiture vue de derrière l'air d'une camionnette.
+    const verriere = new THREE.Shape();
+    verriere.moveTo(0.95, 0.94);
+    verriere.quadraticCurveTo(0.35, 1.36, -0.15, 1.4);
+    verriere.quadraticCurveTo(-1.1, 1.4, -1.9, 0.97);
+    verriere.lineTo(0.95, 0.94);
+    maquette.add(extruder(verriere, 1.42, MAT_VITRES));
+    // Le pavillon, couleur de caisse, posé sur la verrière entre le pare-brise
+    // et la lunette (les courbes de celle-ci passent par 1,356 m en x = 0,1
+    // et par 1,331 m en x = −0,89) : vue d'en haut, une berline et non une
+    // vitre d'un seul tenant.
+    const pavillon = new THREE.Shape();
+    pavillon.moveTo(0.1, 1.33); pavillon.lineTo(0.1, 1.372);
+    pavillon.quadraticCurveTo(-0.2, 1.43, -0.89, 1.35); pavillon.lineTo(-0.89, 1.31);
+    pavillon.lineTo(0.1, 1.33);
+    maquette.add(extruder(pavillon, 1.28, MAT_CAISSE));
+    const roue = new THREE.CylinderGeometry(0.34, 0.34, 0.26, 18);
+    roue.rotateX(Math.PI / 2);
+    for (const [x, z] of [[1.42, 0.82], [1.42, -0.82], [-1.42, 0.82], [-1.42, -0.82]]) {
+        const r = new THREE.Mesh(roue, MAT_PNEUS);
+        r.position.set(x, 0.34, z);
+        maquette.add(r);
+    }
+    const feu = new THREE.BoxGeometry(0.08, 0.1, 0.42);
+    for (const z of [0.58, -0.58]) {
+        const p = new THREE.Mesh(feu, MAT_PHARES); p.position.set(2.36, 0.66, z); maquette.add(p);
+        const f = new THREE.Mesh(feu, MAT_FEUX); f.position.set(-2.36, 0.8, z); maquette.add(f);
+    }
+    // L'ombre : une tache douce sous la caisse, sans carte d'ombre.
+    const toile = document.createElement('canvas');
+    toile.width = toile.height = 64;
+    const g = toile.getContext('2d'), grad = g.createRadialGradient(32, 32, 4, 32, 32, 32);
+    grad.addColorStop(0, 'rgba(0,0,0,0.55)'); grad.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = grad; g.fillRect(0, 0, 64, 64);
+    const ombre = new THREE.Mesh(new THREE.PlaneGeometry(5.6, 2.8),
+        new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(toile), transparent: true, depthWrite: false }));
+    ombre.rotation.x = -Math.PI / 2;
+    ombre.position.y = 0.06;
+    maquette.add(ombre);
+})();
+maquette.visible = false;
+// Dessinée après le reste, profondeur effacée : toujours visible, comme le
+// repère d'un GPS, avec ses propres lumières (une lumière n'est que dans
+// une scène).
+const sceneVoiture = new THREE.Scene();
+const ambianceVoiture = new THREE.HemisphereLight(0xdfe8f5, 0x5a5348, 1.5);
+const soleilVoiture = new THREE.DirectionalLight(0xfff2dd, 2.0);
+sceneVoiture.add(maquette, ambianceVoiture, soleilVoiture, soleilVoiture.target);
+// Le halo de la précision du relevé, à plat, à l'échelle réelle.
+const halo = new THREE.Mesh(new THREE.CircleGeometry(1, 48),
+    new THREE.MeshBasicMaterial({ color: 0x3d8bff, transparent: true, opacity: 0.16, depthWrite: false }));
+halo.rotation.x = -Math.PI / 2;
+halo.visible = false;
+scene.add(halo);
+
+function echelleMaquette() {
+    return camVue.mode === '2d' ? Math.min(Math.max(camVue.hauteur / 40, 2), 12)
+                                : Math.min(Math.max(camVue.recul / 24, 1), 7);
+}
+function poserVoiture() {
+    const v = voiture;
+    maquette.visible = true;
+    maquette.position.set(v.x - ORIGINE.x, v.alt + 0.05, ORIGINE.y - v.y);
+    maquette.rotation.y = Math.PI / 2 - v.cap * RAD;
+    maquette.scale.setScalar(echelleMaquette());
+    uniformsBati.uVoiture.value.set(maquette.position.x, maquette.position.y + 1.5 * maquette.scale.x, maquette.position.z);
+    uniformsBati.uRayon.value = camVue.mode === '3d' ? 9 + 3 * maquette.scale.x : 0;
+    halo.visible = v.horsRoute || v.precision > 12;
+    halo.position.set(v.fix.x - ORIGINE.x, v.alt + 0.2, ORIGINE.y - v.fix.y);
+    halo.scale.setScalar(Math.max(v.precision, 3));
+}
+
+// --- La route prévue, en ruban -----------------------------------------------------
+// Le kilomètre suivant, en bleu transparent, comme l'itinéraire d'un GPS :
+// c'est la route que la page suppose, et le long de laquelle elle charge.
+const RUBAN_M = 1200, RUBAN_PAS_M = 8, RUBAN_LARGEUR_M = 5;
+const MAT_RUBAN = courber(new THREE.MeshBasicMaterial({ color: 0x3d8bff, transparent: true, opacity: 0.5,
+    depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -8 }));
+const ruban = new THREE.Mesh(new THREE.BufferGeometry(), MAT_RUBAN);
+ruban.frustumCulled = false;
+ruban.renderOrder = 2;
+scene.add(ruban);
+let dernierRuban = -Infinity;
+function majRuban(maintenant) {
+    if (maintenant - dernierRuban < 250) return;
+    dernierRuban = maintenant;
+    const ch = voiture.chemin;
+    if (!ch || !voiture.vue) { ruban.visible = false; return; }
+    const pos = [], idx = [];
+    const d0 = voiture.dChemin + 4 * echelleMaquette(), d1 = Math.min(voiture.dChemin + RUBAN_M, ch.longueur);
+    const largeur = RUBAN_LARGEUR_M * Math.min(Math.max(echelleMaquette() * 0.6, 1), 4);
+    for (let d = d0; d <= d1; d += RUBAN_PAS_M) {
+        const p = pointDuChemin(ch, d);
+        const e = areteDuChemin(ch, d);
+        let alt = altitudeL93(p.x, p.y);
+        if (e.a.sol > 0) { const z = pointArete(e.a, e.s).z; if (Number.isFinite(z)) alt = Math.max(alt || -1e9, z); }
+        if (!Number.isFinite(alt)) alt = voiture.alt;
+        const nx = Math.cos(p.cap * RAD) * largeur / 2, ny = -Math.sin(p.cap * RAD) * largeur / 2;
+        const k = pos.length / 3;
+        pos.push(p.x - nx - ORIGINE.x, alt + 0.6, ORIGINE.y - (p.y - ny),
+                 p.x + nx - ORIGINE.x, alt + 0.6, ORIGINE.y - (p.y + ny));
+        if (k) idx.push(k - 2, k - 1, k, k - 1, k + 1, k);
+    }
+    ruban.geometry.dispose();
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.setIndex(idx);
+    ruban.geometry = geo;
+    ruban.position.set(0, 0, 0);
+    ruban.visible = pos.length > 6;
+}
+
+// --- Caméra --------------------------------------------------------------------------
+// De derrière (3D), à un recul qui grandit avec la vitesse, ou de dessus (2D),
+// la route vers le haut de l'écran. Un doigt tourne la vue autour de la
+// voiture, deux doigts ou la molette règlent le recul ; huit secondes sans
+// geste, elle revient derrière.
+const camVue = { mode: PARAMS.get('vue') === '2d' ? '2d' : '3d', recul: 70, hauteur: 320,
+                 lacet: 0, tangage: 0, dernierGeste: -Infinity, cap: 0, cible: new THREE.Vector3() };
+const RETOUR_GESTE_S = 8;
+const RECUL = [25, 600], HAUTEUR = [80, 3000];
+function majCamera(dt, maintenant) {
+    const v = voiture;
+    if (!v.vue && !v.attendu) return;
+    const x = v.vue ? v.x : v.attendu.x, y = v.vue ? v.y : v.attendu.y;
+    let alt = v.vue ? v.alt : altitudeL93(x, y);
+    if (!Number.isFinite(alt)) alt = camVue.altAttente ?? 0;
+    camVue.altAttente = alt;
+    if (maintenant - camVue.dernierGeste > RETOUR_GESTE_S * 1000) {
+        const k = 1 - Math.exp(-dt / 1.2);
+        camVue.lacet -= camVue.lacet * k;
+        camVue.tangage -= camVue.tangage * k;
+    }
+    camVue.cap += ecartCap(v.cap, camVue.cap) * (1 - Math.exp(-dt / 0.6));
+    const cap = (camVue.cap + camVue.lacet) * RAD;
+    const ux = Math.sin(cap), uy = Math.cos(cap);
+    const px = x - ORIGINE.x, pz = ORIGINE.y - y;
+    if (camVue.mode === '3d') {
+        // Plus loin et plus haut quand on roule vite : on voit venir.
+        const recul = camVue.recul * (1 + 0.6 * Math.min(v.v / 36, 1));
+        const pente = Math.min(Math.max(30 + camVue.tangage, 6), 80) * RAD;
+        const cx = px - ux * recul * Math.cos(pente), cz = pz + uy * recul * Math.cos(pente);
+        let cy = alt + recul * Math.sin(pente) + 3;
+        const sol = altitudeL93(cx + ORIGINE.x, ORIGINE.y - cz);
+        if (Number.isFinite(sol)) cy = Math.max(cy, sol + 6);
+        camera.position.set(cx, cy, cz);
+        camera.up.set(0, 1, 0);
+        camVue.cible.set(px + ux * recul * 0.35, alt + 2, pz - uy * recul * 0.35);
+    } else {
+        const h = camVue.hauteur;
+        camera.position.set(px + ux * h * 0.18, alt + h, pz - uy * h * 0.18);
+        camera.up.set(ux, 0, -uy);
+        camVue.cible.set(px + ux * h * 0.18, alt, pz - uy * h * 0.18);
+    }
+    camera.lookAt(camVue.cible);
+    ciel.position.copy(camera.position);
+    document.getElementById('aiguille').setAttribute('transform', `rotate(${-(camVue.cap + camVue.lacet)} 26 26)`);
+}
+
+const pointeurs = new Map();
+let pince = null;
+hote.addEventListener('pointerdown', e => {
+    hote.setPointerCapture(e.pointerId);
+    pointeurs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    camVue.dernierGeste = performance.now();
+    if (pointeurs.size === 2) {
+        const [a, b] = [...pointeurs.values()];
+        pince = { d: Math.hypot(a.x - b.x, a.y - b.y), recul: camVue.recul, hauteur: camVue.hauteur };
+    }
+});
+hote.addEventListener('pointermove', e => {
+    const p = pointeurs.get(e.pointerId);
+    if (!p) return;
+    camVue.dernierGeste = performance.now();
+    if (pointeurs.size === 1) {
+        camVue.lacet -= (e.clientX - p.x) * 0.3;
+        if (camVue.mode === '3d') camVue.tangage += (e.clientY - p.y) * 0.15;
+    }
+    p.x = e.clientX; p.y = e.clientY;
+    if (pointeurs.size === 2 && pince) {
+        const [a, b] = [...pointeurs.values()];
+        const k = pince.d / Math.max(Math.hypot(a.x - b.x, a.y - b.y), 1);
+        reglerRecul(pince.recul * k, pince.hauteur * k);
+    }
+});
+const finPointeur = e => { pointeurs.delete(e.pointerId); if (pointeurs.size < 2) pince = null; };
+hote.addEventListener('pointerup', finPointeur);
+hote.addEventListener('pointercancel', finPointeur);
+hote.addEventListener('wheel', e => {
+    e.preventDefault();
+    const k = Math.exp(e.deltaY * 0.0015);
+    reglerRecul(camVue.recul * k, camVue.hauteur * k);
+}, { passive: false });
+function reglerRecul(recul, hauteur) {
+    camVue.recul = Math.min(Math.max(recul, RECUL[0]), RECUL[1]);
+    camVue.hauteur = Math.min(Math.max(hauteur, HAUTEUR[0]), HAUTEUR[1]);
+}
+document.getElementById('b-plus').addEventListener('click', () => reglerRecul(camVue.recul / 1.4, camVue.hauteur / 1.4));
+document.getElementById('b-moins').addEventListener('click', () => reglerRecul(camVue.recul * 1.4, camVue.hauteur * 1.4));
+document.getElementById('boussole').addEventListener('click', () => { camVue.lacet = 0; camVue.tangage = 0; });
+const boutonVue = document.getElementById('b-vue');
+function majBoutonVue() { boutonVue.textContent = camVue.mode === '3d' ? '2D' : '3D'; }
+boutonVue.addEventListener('click', () => { camVue.mode = camVue.mode === '3d' ? '2d' : '3d'; majBoutonVue(); });
+majBoutonVue();
+document.getElementById('b-fond').addEventListener('click', () => changerFond(fond === 'ortho' ? 'plan' : 'ortho'));
+document.getElementById('b-fond').textContent = fond === 'ortho' ? 'Plan' : 'Photo';
+const boutonPlein = document.getElementById('b-plein');
+if (document.fullscreenEnabled) {
+    boutonPlein.hidden = false;
+    boutonPlein.addEventListener('click', () => {
+        if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+        else document.documentElement.requestFullscreen().catch(() => {});
+    });
+}
+window.addEventListener('keydown', e => {
+    if (e.key === '+' || e.key === '=') reglerRecul(camVue.recul / 1.4, camVue.hauteur / 1.4);
+    else if (e.key === '-') reglerRecul(camVue.recul * 1.4, camVue.hauteur * 1.4);
+    else if (e.key === 'v') boutonVue.click();
+    else if (e.key === 'p') document.getElementById('b-fond').click();
+});
+
+// --- Soleil et ciel ------------------------------------------------------------------
+// La position du soleil à l'heure qu'il est (algorithme de la NOAA, comme la
+// page) ; la nuit, une lumière bleutée et un ciel sombre.
+function positionSoleil(instant, lat, lon) {
+    const jj = instant.getTime() / 86400000 + 2440587.5, t = (jj - 2451545) / 36525;
+    const L0 = (280.46646 + t * (36000.76983 + t * 0.0003032)) % 360;
+    const M = 357.52911 + t * (35999.05029 - 0.0001537 * t);
+    const e = 0.016708634 - t * (0.000042037 + 0.0000001267 * t);
+    const centre = Math.sin(M * RAD) * (1.914602 - t * (0.004817 + 0.000014 * t))
+                 + Math.sin(2 * M * RAD) * (0.019993 - 0.000101 * t) + Math.sin(3 * M * RAD) * 0.000289;
+    const omega = 125.04 - 1934.136 * t;
+    const lambda = L0 + centre - 0.00569 - 0.00478 * Math.sin(omega * RAD);
+    const eps0 = 23 + (26 + (21.448 - t * (46.815 + t * (0.00059 - t * 0.001813))) / 60) / 60;
+    const eps = eps0 + 0.00256 * Math.cos(omega * RAD);
+    const decl = Math.asin(Math.sin(eps * RAD) * Math.sin(lambda * RAD)) / RAD;
+    const y = Math.tan(eps / 2 * RAD) ** 2;
+    const eqTemps = 4 / RAD * (y * Math.sin(2 * L0 * RAD) - 2 * e * Math.sin(M * RAD)
+        + 4 * e * y * Math.sin(M * RAD) * Math.cos(2 * L0 * RAD) - 0.5 * y * y * Math.sin(4 * L0 * RAD)
+        - 1.25 * e * e * Math.sin(2 * M * RAD));
+    const minutes = instant.getUTCHours() * 60 + instant.getUTCMinutes() + instant.getUTCSeconds() / 60;
+    const horaire = ((minutes + eqTemps + 4 * lon + 1440) % 1440) / 4 - 180;
+    const cosZ = Math.sin(lat * RAD) * Math.sin(decl * RAD) + Math.cos(lat * RAD) * Math.cos(decl * RAD) * Math.cos(horaire * RAD);
+    const zenith = Math.acos(Math.min(1, Math.max(-1, cosZ))) / RAD;
+    const den = Math.cos(lat * RAD) * Math.sin(zenith * RAD);
+    let azimut = 180;
+    if (Math.abs(den) > 1e-9) {
+        const q = (Math.sin(lat * RAD) * Math.cos(zenith * RAD) - Math.sin(decl * RAD)) / den;
+        const a = Math.acos(Math.min(1, Math.max(-1, q))) / RAD;
+        azimut = horaire > 0 ? (a + 180) % 360 : (540 - a) % 360;
+    }
+    return { azimut, hauteur: 90 - zenith };
+}
+const CIEL = {
+    jour: { zenith: new THREE.Color(0x4f86c6), horizon: new THREE.Color(0xbcd0e2), ciel: new THREE.Color(0xdfe8f5) },
+    nuit: { zenith: new THREE.Color(0x0b1018), horizon: new THREE.Color(0x1c2430), ciel: new THREE.Color(0x6f80a8) },
+};
+let dernierSoleil = -Infinity;
+function majCiel(maintenant) {
+    if (maintenant - dernierSoleil < 30000) return;
+    dernierSoleil = maintenant;
+    const x = voiture.vue ? voiture.x : voiture.attendu?.x, y = voiture.vue ? voiture.y : voiture.attendu?.y;
+    if (x == null) return;
+    const [lon, lat] = depuisLambert93(x, y);
+    const forcee = PARAMS.get('heure');
+    const instant = forcee ? new Date(`${new Date().toISOString().slice(0, 10)}T${forcee}`) : new Date();
+    const { azimut, hauteur } = positionSoleil(Number.isNaN(instant.getTime()) ? new Date() : instant, lat, lon);
+    const jour = Math.min(Math.max((hauteur + 6) / 12, 0), 1);
+    couleursCiel.zenith.copy(CIEL.nuit.zenith).lerp(CIEL.jour.zenith, jour);
+    couleursCiel.horizon.copy(CIEL.nuit.horizon).lerp(CIEL.jour.horizon, jour);
+    ambiance.color.copy(CIEL.nuit.ciel).lerp(CIEL.jour.ciel, jour);
+    ambiance.intensity = 1.5;
+    // La nuit, une lune fixe, haute au sud : sans elle, toutes les façades
+    // prenaient la même teinte, et les rues se perdaient.
+    soleil.color.setHex(jour > 0.5 ? 0xfff2dd : 0x9fb3e0);
+    soleil.intensity = hauteur > 0 ? 2.0 * Math.min(Math.max(hauteur / 10, 0.3), 1) : 0.9;
+    // Rasant, le soleil laisserait les façades à contre-jour noires : 12° au moins.
+    const h = (hauteur > 0 ? Math.max(hauteur, 12) : 40) * RAD, a = (hauteur > 0 ? azimut : 200) * RAD;
+    soleil.position.set(Math.sin(a) * Math.cos(h), Math.sin(h), -Math.cos(a) * Math.cos(h)).multiplyScalar(1000);
+    ambianceVoiture.color.copy(ambiance.color); ambianceVoiture.intensity = ambiance.intensity;
+    soleilVoiture.color.copy(soleil.color); soleilVoiture.intensity = soleil.intensity;
+    soleilVoiture.position.copy(soleil.position);
+    // Le fond de nuit : la photo assombrie, comme vue sous la lune.
+    teinteSol.setHex(0xffffff).lerp(TEINTE_SOL_NUIT, 1 - jour);
+    for (const t of tuilesSol.values()) if (t.mesh && t.mesh.material.map) t.mesh.material.color.copy(teinteSol);
+    document.querySelector('meta[name=theme-color]').content = jour > 0.5 ? '#1f2328' : '#0b1018';
+}
+
+// --- Affichage --------------------------------------------------------------------------
+const PETITS_MOTS = new Set(['de', 'du', 'des', 'la', 'le', 'les', 'et', 'en', 'au', 'aux', 'sur', 'sous', 'à']);
+// Les abréviations du nom collaboratif (« R DE LA CHAUSSEE D'ANTIN »), quand
+// la BAN n'en donne pas.
+const ABREVIATIONS = { r: 'rue', av: 'avenue', ave: 'avenue', bd: 'boulevard', pl: 'place', rte: 'route',
+    che: 'chemin', chem: 'chemin', imp: 'impasse', all: 'allée', qu: 'quai', sq: 'square', crs: 'cours',
+    fg: 'faubourg', pass: 'passage', rpt: 'rond-point', espl: 'esplanade', prom: 'promenade', sen: 'sente' };
+function nomDeVoie(nom) {
+    let brut = String(nom || '').trim();
+    if (!brut) return '';
+    const capitales = brut === brut.toUpperCase();
+    brut = brut.toLowerCase().split(/\s+/).map((m, i) => (i === 0 && capitales && ABREVIATIONS[m]) || m).join(' ');
+    return brut.split(' ').map((mot, i) => {
+        if (i > 0 && PETITS_MOTS.has(mot)) return mot;
+        const m = /^([dl]')(.+)$/.exec(mot);
+        if (i > 0 && m) return m[1] + m[2][0].toUpperCase() + m[2].slice(1);
+        return mot[0].toUpperCase() + mot.slice(1);
+    }).join(' ');
+}
+const NATURES = { 'Type autoroutier': 'Autoroute', 'Bretelle': 'Bretelle', 'Rond-point': 'Rond-point',
+                  'Route à 2 chaussées': 'Route', 'Route à 1 chaussée': 'Route', 'Route empierrée': 'Route empierrée',
+                  'Chemin': 'Chemin', 'Bac ou liaison maritime': 'Bac' };
+
+const elVitesse = document.getElementById('vitesse'), elRue = document.getElementById('rue');
+const elNom = document.getElementById('rue-nom'), elNumero = document.getElementById('rue-numero');
+const elGps = document.getElementById('etat-gps'), elCarres = document.getElementById('etat-carres');
+const elRond = document.querySelector('#etat .rond');
+let dernierHud = -Infinity;
+function majHud(maintenant) {
+    if (maintenant - dernierHud < 250) return;
+    dernierHud = maintenant;
+    const v = voiture;
+    elVitesse.textContent = v.vue ? Math.round(v.v * 3.6) : '–';
+    const a = v.arete;
+    if (a && !v.horsRoute) {
+        const nom = nomDeVoie(a.nom);
+        elNom.textContent = nom || NATURES[a.nature] || 'Route sans nom';
+        elNumero.hidden = !a.numero;
+        if (a.numero) {
+            elNumero.textContent = a.numero;
+            elNumero.className = 'numero ' + ({ D: 'd', E: 'e', C: 'c', V: 'c' }[a.numero[0]] || '');
+        }
+        elRue.hidden = false;
+    } else {
+        elRue.hidden = !v.vue;
+        elNom.textContent = v.vue ? 'Hors des routes' : '';
+        elNumero.hidden = true;
+    }
+    const age = v.fix ? (maintenant - v.fix.t) / 1000 : Infinity;
+    elRond.className = 'rond' + (age > 10 ? ' perdu' : v.precision > 25 ? ' faible' : '');
+    elGps.innerHTML = SIMU ? `Simulation à <b>${VITESSE_SIMU_KMH} km/h</b>`
+        : !v.fix ? 'Position attendue…'
+        : age > 10 ? `<b>Signal GPS perdu</b> depuis ${Math.round(age)} s`
+        : `GPS <b>± ${Math.round(v.precision)} m</b>`;
+    // Jusqu'où les bâtiments sont prêts le long de la route prévue.
+    let pret = 0;
+    const ch = v.chemin;
+    if (ch) {
+        for (let d = v.dChemin; d <= ch.longueur; d += PAS_COULOIR_M) {
+            const p = pointDuChemin(ch, d), c = carreDe(p.x, p.y);
+            if (!c || !(c.mesh || c.etat === 'hors')) break;
+            pret = d - v.dChemin;
+        }
+    }
+    let charges = 0, construits = 0;
+    for (const c of carres.values()) { if (c.etat === 'pret') charges++; if (c.mesh && c.mesh.visible) construits++; }
+    elCarres.innerHTML = ch ? `Bâtiments prêts sur <b>${pret >= 1000 ? (pret / 1000).toFixed(1).replace('.', ',') + ' km'
+        : Math.round(pret / 50) * 50 + ' m'}</b> devant` : `${construits} carrés de bâtiments`;
+    if (v.vue) majLienQuitter();
+}
+
+function majLienQuitter() {
+    const v = voiture;
+    const [lon, lat] = depuisLambert93(v.vue ? v.x : v.attendu.x, v.vue ? v.y : v.attendu.y);
+    document.getElementById('b-quitter').href = `./?lat=${lat.toFixed(4)}&lon=${lon.toFixed(4)}`;
+}
+
+let effacerAnnonce = null;
+function annoncer(texte, duree = 6) {
+    const el = document.getElementById('annonce');
+    el.textContent = texte;
+    el.hidden = false;
+    clearTimeout(effacerAnnonce);
+    effacerAnnonce = setTimeout(() => { el.hidden = true; }, duree * 1000);
+}
+
+function accueil(html, actions) {
+    document.getElementById('accueil-texte').innerHTML = html;
+    const zone = document.getElementById('accueil-actions');
+    zone.replaceChildren(...actions.map(([texte, faire, principal]) => {
+        const el = typeof faire === 'string' ? document.createElement('a') : document.createElement('button');
+        el.textContent = texte;
+        if (typeof faire === 'string') el.href = faire; else el.addEventListener('click', faire);
+        if (principal) el.className = 'principal';
+        return el;
+    }));
+    document.getElementById('accueil').hidden = false;
+}
+
+// --- Position ------------------------------------------------------------------------------
+const MESSAGES_GEOLOC = {
+    1: "La géolocalisation est refusée : à autoriser dans les réglages du site, ou essayez la simulation.",
+    2: "Position indisponible : ni GPS, ni Wi-Fi, ni réseau exploitable.",
+    3: "Le navigateur n'a pas donné de position à temps.",
+};
+const lienSimu = () => {
+    const p = voiture.attendu ? depuisLambert93(voiture.attendu.x, voiture.attendu.y) : [DEPART_SIMU.lon, DEPART_SIMU.lat];
+    return `voiture?simu=1&lat=${p[1].toFixed(5)}&lon=${p[0].toFixed(5)}`;
+};
+let suivi = null;
+function demarrerGps() {
+    if (!navigator.geolocation || !window.isSecureContext) {
+        accueil(`<p>${!window.isSecureContext ? 'La géolocalisation exige une page en https.'
+            : 'Ce navigateur ne donne pas de position.'}</p>`,
+            [['Essayer en simulation', lienSimu(), true], ['Vue 3D', './']]);
+        return;
+    }
+    if (!voiture.vue) {
+        accueil('<p><span class="roue"></span>Recherche de votre position…</p>'
+            + '<p>La vue suit la voiture comme un GPS, et charge les bâtiments le long de la route, devant vous.</p>',
+            [['Essayer en simulation', lienSimu()], ['Vue 3D', './']]);
+    }
+    suivi = navigator.geolocation.watchPosition(recevoirPosition, err => {
+        if (err.code === 1) {
+            navigator.geolocation.clearWatch(suivi);
+            accueil(`<p>${MESSAGES_GEOLOC[1]}</p>`, [['Essayer en simulation', lienSimu(), true], ['Vue 3D', './']]);
+        } else if (voiture.vue) {
+            // Un tunnel, un parking : le suivi continue, la voiture file sur sa route.
+            annoncer(MESSAGES_GEOLOC[err.code] || err.message);
+        }
+    }, { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 });
+}
+
+// L'écran reste allumé tant que la page est au premier plan.
+let verrouEcran = null;
+async function garderEcran() {
+    try { verrouEcran = await navigator.wakeLock?.request('screen'); } catch (e) { /* refusé : tant pis */ }
+}
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') garderEcran(); });
+// Chrome ne l'accorde souvent qu'après un geste.
+window.addEventListener('pointerdown', () => { if (!verrouEcran || verrouEcran.released) garderEcran(); });
+
+// --- Simulation ------------------------------------------------------------------------------
+// Une voiture virtuelle roule sur le graphe à vitesse constante, tourne au
+// hasard aux carrefours (la suite la plus probable deux fois sur trois),
+// fait demi-tour au bout d'une impasse, et attend au bord de ce qui n'est
+// pas encore lu. Elle donne un relevé par seconde, bruité comme un GPS : la
+// page ne sait rien d'autre d'elle.
+const simu = { a: null, s: 0, sens: 1, dernier: -Infinity, etat: { capEntree: null },
+               // Ce que la voiture simulée ne prend pas : chemins, voies réservées.
+               evitees: { has: b => b.nature === 'Chemin' || b.nature === 'Route empierrée'
+                                    || !!(b.acces && b.acces.startsWith('Restreint')) } };
+function gauss() { return Math.sqrt(-2 * Math.log(1 - Math.random())) * Math.cos(2 * Math.PI * Math.random()); }
+function majSimu(dt, maintenant) {
+    if (!simu.a) {
+        const d = voiture.attendu;
+        const m = caler(d.x, d.y, 40, null);
+        if (!m) return;
+        simu.a = m.a; simu.s = m.s;
+        simu.sens = m.a.sens === '-' ? -1 : 1;
+    }
+    let reste = VITESSE_SIMU_KMH / 3.6 * dt;
+    let arrete = false;
+    for (let garde = 0; reste > 0 && garde < 20; garde++) {
+        const a = simu.a;
+        const fin = simu.sens > 0 ? a.L - simu.s : simu.s;
+        if (reste < fin) { simu.s += simu.sens * reste; reste = 0; break; }
+        reste -= fin;
+        simu.s = simu.sens > 0 ? a.L : 0;
+        const n = simu.sens > 0 ? a.n1 : a.n0;
+        if (!carrePret(n.x, n.y)) { arrete = true; break; }
+        const choix = suiteProbable(a, simu.sens, n, simu.etat, simu.evitees, 0.33);
+        if (!choix) { simu.sens = -simu.sens; simu.etat.capEntree = null; continue; }
+        simu.a = choix.a; simu.sens = choix.sens; simu.s = choix.sens > 0 ? 0 : choix.a.L;
+    }
+    if (maintenant - simu.dernier < 1000) return;
+    simu.dernier = maintenant;
+    const p = pointArete(simu.a, simu.s, simu.sens);
+    const [lon, lat] = depuisLambert93(p.x + 2.5 * gauss(), p.y + 2.5 * gauss());
+    recevoirPosition({ coords: { latitude: lat, longitude: lon, accuracy: 5,
+        speed: arrete ? 0 : VITESSE_SIMU_KMH / 3.6, heading: arrete ? null : (p.cap + convergence(lon) + 360) % 360 } });
+}
+
+// --- Boucle ---------------------------------------------------------------------------------
+function dimensionner() {
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    camera.aspect = window.innerWidth / Math.max(window.innerHeight, 1);
+    camera.updateProjectionMatrix();
+}
+window.addEventListener('resize', dimensionner);
+dimensionner();
+
+// Une machine lente (l'ancien ordinateur de bord d'une Tesla) : la
+// résolution baisse d'un quart tant que l'image dépasse 40 ms en moyenne.
+const mesure = { somme: 0, n: 0, debut: performance.now() };
+function adapterResolution(dt, maintenant) {
+    mesure.somme += dt; mesure.n++;
+    if (maintenant - mesure.debut < 3000) return;
+    const moyenne = mesure.somme / mesure.n * 1000;
+    if (moyenne > 40 && ratio > 1) {
+        ratio = Math.max(1, ratio - 0.25);
+        renderer.setPixelRatio(ratio);
+        dimensionner();
+    }
+    mesure.somme = 0; mesure.n = 0; mesure.debut = maintenant;
+}
+
+let precedent = performance.now();
+function boucle(maintenant) {
+    requestAnimationFrame(boucle);
+    const dt = Math.min((maintenant - precedent) / 1000, 0.1);
+    precedent = maintenant;
+    if (SIMU && voiture.attendu) majSimu(dt, maintenant);
+    majVoiture(dt, maintenant);
+    majCamera(dt, maintenant);
+    majCarres(maintenant);
+    majSol(maintenant);
+    majRuban(maintenant);
+    majCiel(maintenant);
+    majHud(maintenant);
+    renderer.info.reset();
+    renderer.clear();
+    renderer.render(scene, camera);
+    if (maquette.visible) {
+        renderer.clearDepth();
+        renderer.render(sceneVoiture, camera);
+    }
+    adapterResolution(dt, maintenant);
+}
+
+// Pour les essais (outils/essai-voiture.mjs) : l'état, en lecture.
+window.__voiture = { voiture, carres, tuilesSol, aretes, camVue, renderer, durees,
+                     get budget() { return budgetConstruction; } };
+
+// --- Départ ---------------------------------------------------------------------------------
+if (DEPART && Number.isFinite(DEPART.lat)) {
+    const [x, y] = versLambert93(DEPART.lon, DEPART.lat);
+    voiture.attendu = { x, y };
+    recaler(x, y);
+    majLienQuitter();
+}
+if (SIMU) {
+    if (!voiture.attendu) {
+        accueil('<p>Point de départ illisible.</p>', [['Vue 3D', './', true]]);
+    }
+} else {
+    if (!voiture.attendu) {
+        // En attendant la position, la caméra regarde la France d'assez
+        // haut ; aucun carré n'y est demandé.
+        const [x, y] = versLambert93(2.35, 46.6);
+        voiture.attendu = { x, y, provisoire: true };
+        recaler(x, y);
+        camVue.mode = '2d';
+        camVue.hauteur = HAUTEUR[1];
+        majBoutonVue();
+    }
+    demarrerGps();
+}
+garderEcran();
+requestAnimationFrame(boucle);
+</script>
+</body>
+</html>

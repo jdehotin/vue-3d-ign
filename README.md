@@ -525,6 +525,25 @@ Chaque premier chargement construit la scène, en quelques secondes.
   quitte la scène et survole l'horizon, sans jamais passer sous le sol ni
   dans un toit ; le curseur « vitesse » règle sa vitesse de pointe, jusqu'à
   216 km/h.
+- **En voiture**, au bouton en forme de voiture sous « Ma position » (ou
+  `/voiture`) : une page à part, qui suit la position comme un GPS, sur un
+  téléphone ou l'écran d'une voiture. La voiture est calée sur la route où
+  l'on roule, vue de derrière (ou de dessus, bouton **2D**), avec sa vitesse
+  et le nom de la rue ou le numéro de la route ; entre deux relevés du GPS,
+  elle avance le long de la route. Le monde défile avec elle : la page
+  prolonge la route devant soi sur le graphe de la BD TOPO (tout droit, sur
+  la même voie, par la sortie d'en face aux ronds-points), la trace en bleu,
+  et charge les bâtiments le long d'elle, sur 2 à 6 km selon la vitesse ; ce
+  qui reste derrière est libéré. Ces bâtiments sont ceux de la BD TOPO seule,
+  par carrés de 500 m : hauteurs et toits déclarés, ni LiDAR ni arbres, mais
+  0,2 s par carré, quand une scène complète en demande 10 à 30. À 130 km/h
+  sur l'A7, ils sont prêts 5,4 à 5,9 km devant la voiture. Le sol est fait
+  des tuiles de l'orthophoto ou du Plan IGN (bouton **Plan**) posées sur le
+  RGE ALTI, plus fines près de la caméra et là où la voiture sera dans
+  quelques secondes. En rue étroite, les façades entre la caméra et la
+  voiture s'ajourent ; la nuit, le ciel et la photo s'assombrissent. Pour
+  l'essayer sans rouler : `/voiture?simu=1&lat=…&lon=…&vitesse=90`, une
+  conduite simulée.
 - **Sur téléphone, sur l'écran d'une voiture, ou en plein écran** (le bouton
   au-dessus du drone) : la vue prend tout l'écran, et le panneau devient un
   tiroir ouvert par ☰. Un bâtiment touché ouvre sa fiche par « Voir la fiche ».
@@ -795,6 +814,7 @@ principales :
 | Route | Réponse |
 |---|---|
 | `GET /?lat=…&lon=…` | La page |
+| `GET /voiture` | La vue en voiture ; `?lat=…&lon=…` pour son départ en attendant le GPS, `&simu=1&vitesse=…` pour une conduite simulée, `&vue=2d`, `&fond=plan`, `&heure=…` |
 | `GET /api/scene?lat=…&lon=…` | La scène, en JSON gzippé |
 | `GET /api/ortho?lat=…&lon=…` | L'orthophoto de la scène, en JPEG |
 | `GET /api/monuments?lat=…&lon=…` | La couche des monuments OSM, en JSON gzippé (`null` sans partie), que la page demande une fois la scène affichée |
@@ -808,6 +828,7 @@ principales :
 | `GET /api/dpe?lat=…&lon=…` | Les DPE de l'ADEME réunis par bâtiment (`batiments`, par `cleabs`) et, sans bâtiment, par adresse (`adresses`), en JSON gzippé, datés (`lu_le`) ; demandés au clic seulement |
 | `GET /api/dvf?lat=…&lon=…` | Les ventes DVF des parcelles de l'emprise (`parcelles`, `ventes`, `resume`), en JSON gzippé, datées ; `absent` nomme les départements sans DVF (Alsace-Moselle) ; au clic seulement |
 | `GET /api/bornes?lat=…&lon=…` | Les bornes de recharge de l'emprise, réunies par station (`stations` : opérateur, points de charge, puissances, prises, accès), en JSON gzippé, datées ; au clic seulement |
+| `GET /api/carre?i=…&j=…` | Un carré de 500 m de la grille Lambert-93 (`i = x // 500`, `j = y // 500`) pour la vue en voiture : bâtiments et routes carrossables BD TOPO, en JSON gzippé, coordonnées en décimètres depuis son coin sud-ouest. Lu à la première demande (0,1 à 0,3 s), gardé ensuite ; 422 hors de France métropolitaine |
 | `GET /api/sante` | `{"ok": true, "vehicules": {"mode": …, "detecteurs": […]}, "panneaux": {"actif": …}}` : le contrôle de vie, et ce que le service sait détecter ou lire |
 | `POST /api/reconstruire?lat=…&lon=…` | Met de côté la scène et ses couches (202) : la demande suivante les reconstruit d'après les données de l'IGN du moment, l'ancienne revenant si l'IGN ne répond pas. 429 moins de 10 min après sa construction, 409 pendant qu'elle ou une de ses couches se calcule |
 
@@ -838,6 +859,7 @@ cherche un autre lieu et s'y rend, et échoue à la moindre erreur JavaScript :
 ```bash
 npm install puppeteer-core
 node outils/essai-navigateur.mjs "http://localhost:8080/?lat=43.9116&lon=5.2003" capture.png
+node outils/essai-voiture.mjs "http://localhost:8080/voiture?simu=1&lat=48.8706&lon=2.3055&vitesse=50" 60 voiture.png   # la vue en voiture, une minute de conduite simulée
 node outils/verifier-recherche.mjs     # la recherche d'un lieu, sous Node, sans réseau
 node outils/verifier-export.mjs essai.ifc essai.gml   # les exports, sous Node (npm install three@0.160.0)
 pip install ifcopenshell pytest && python outils/valider_ifc.py essai.ifc   # l'IFC, comme un logiciel le lirait
