@@ -45,7 +45,9 @@ messages de commit et dans les commentaires des modules.
     bords de toit que le LiDAR voit hors des emprises BD TOPO, classés en
     végétation par une photo un peu verte, en sont écartés : à Paris, ils
     faisaient 80 % des « arbres » de plus de 8 m, des poteaux verts de 15 m
-    le long des façades (la scène les garde, transparents).
+    le long des façades (la scène les garde, transparents). De même pour
+    les tabliers des ponts, que le LiDAR voit comme un arbre : 23
+    houppiers de 6 m sur un pont qui franchit l'A7.
   - **Les routes et les ponts** (même jour) : les tronçons de chaque carré,
     découpés à son bord, en rubans sur le relief à la largeur de chaussée
     BD TOPO (60 %, la photo de l'asphalte passe ; effacés sur le plan), et
@@ -54,9 +56,11 @@ messages de commit et dans les commentaires des modules.
     le vide dépasse 3 m. Les tronçons fictifs, qui ne font que raccorder le
     réseau, ne sont pas dessinés (format des carrés en version 2).
   - **La caméra plus basse** : 45 m de recul sous 18°, soit 17 m au-dessus
-    de la voiture à l'arrêt et 22 m à 130 km/h, contre 38 et 59 m ; elle se
-    tient au-dessus des toits voisins, que la rue étroite de Paris lui
-    faisait traverser.
+    de la voiture à l'arrêt et 22 m à 130 km/h, contre 38 et 59 m, et la
+    voiture plus bas dans l'écran, vers 71 % de sa hauteur (60 % avant).
+    Elle ne change jamais d'angle pour un obstacle — montée au-dessus des
+    toits voisins, elle sautait sans cesse dans un village : les bâtiments
+    et les arbres qui la frôlent ou la séparent de la voiture s'effacent.
   - **La voiture** calée sur la route, vue de derrière ou de dessus, avec
     la vitesse, le nom de la rue et le cartouche de la route (A7, D15) ;
     entre deux relevés, elle avance le long de la route, et dans un tunnel,

@@ -94,8 +94,9 @@ ETATS_ECARTES = ("En projet", "En construction")
 SENS = {"Double sens": "2", "Sens direct": "+", "Sens inverse": "-"}
 
 
-# Version de la couche de végétation, dans son propre dossier.
-VEGETATION_VERSION = 1
+# Version de la couche de végétation, dans son propre dossier. 2 : sans les
+# houppiers des ponts.
+VEGETATION_VERSION = 2
 # Marge de lecture autour du carré : un houppier dont le sommet y tombe est
 # lu en entier (RAYON_MAX_VEGETATION_M = 9 m, et la fenêtre de lissage).
 VEGETATION_MARGE_M = 15
@@ -114,6 +115,14 @@ VEGETATION_PIXELS_MAX = 2048
 # façades. La scène les garde, transparents : son cache ne périme pas.
 DEBORD_RAPPORT = 0.12
 DEBORD_DISTANCE_M = 2.0
+# Un pont : son tablier dépasse du sol comme un arbre, et le LiDAR ne voit
+# pas ce qui pousse dessous. Tout houppier dont le sommet tombe sur un
+# tronçon au-dessus du sol, à sa demi-largeur et PONT_MARGE_M près, en est
+# un morceau : 23 houppiers de 6 m en médiane sur les deux tronçons du pont
+# qui franchit l'A7 au nord de Montélimar, dessinés en arbres sur le tablier.
+PONT_MARGE_M = 3.0
+# Largeur d'un pont sans largeur de chaussée : celle d'une route à deux voies.
+LARGEUR_PONT_M = 5.5
 # Ports des arbres, ceux de la page (PORTS de index.html), dans l'ordre des
 # codes transmis.
 PORTS = ("feuillu", "chene_vert", "pin", "conifere", "peuplier", "arbuste")
@@ -333,13 +342,38 @@ def debords_de_toit(houppiers, batiments):
     return {fins[k] for k in proches.tolist()}
 
 
-def arbres_du_carre(houppiers, i, j, batiments=None):
+def sur_un_pont(houppiers, routes):
+    """Indices des houppiers posés sur un pont (PONT_MARGE_M) ; `routes` en
+    GeoJSON WGS84 de la BD TOPO."""
+    if not houppiers:
+        return set()
+    echelle = np.array([111320 * math.cos(math.radians(houppiers[0]["lat"])), 111320])
+    en_metres = lambda c: c * echelle
+    ponts = []
+    for f in (routes or {}).get("features", []):
+        p = f.get("properties") or {}
+        try:
+            if int(p.get("position_par_rapport_au_sol")) < 1:
+                continue
+            largeur = p.get("largeur_de_chaussee") or LARGEUR_PONT_M
+            ponts.append(shapely.transform(shape(f["geometry"]), en_metres).buffer(largeur / 2 + PONT_MARGE_M))
+        except (TypeError, ValueError, KeyError):
+            continue
+    if not ponts:
+        return set()
+    points = shapely.transform(shapely.points([[h["lon"], h["lat"]] for h in houppiers]), en_metres)
+    dedans, _ = shapely.STRtree(ponts).query(points, predicate="within")
+    return set(dedans.tolist())
+
+
+def arbres_du_carre(houppiers, i, j, batiments=None, routes=None):
     """Les houppiers dont le sommet tombe dans le carré : [x, y, h, r, port],
     x et y en décimètres depuis son coin sud-ouest, h et r en décimètres, port
     un indice de PORTS. Les masses de sursol (murs, véhicules) n'en sont pas,
-    ni les bords de toit (debords_de_toit), quand `batiments` est donné."""
+    ni les bords de toit (debords_de_toit), quand `batiments` est donné, ni
+    les morceaux de pont (sur_un_pont), quand `routes` l'est."""
     x0, y0, x1, y1 = emprise_carre(i, j)
-    debords = debords_de_toit(houppiers, batiments)
+    debords = debords_de_toit(houppiers, batiments) | sur_un_pont(houppiers, routes)
     sortie = []
     for k, h in enumerate(houppiers):
         if k in debords:
@@ -366,13 +400,14 @@ def fetch_vegetation(i, j):
     e, n = max(c[0] for c in coins), max(c[1] for c in coins)
     largeur, hauteur = dimensions_grille(w, s, e, n, HOUPPIERS_RESOLUTION_M, VEGETATION_PIXELS_MAX)
     try:
-        grille, exg, batiments, zones, forets = en_parallele(
+        grille, exg, batiments, zones, forets, routes = en_parallele(
             lambda: fetch_mnh_grid(w, s, e, n, resolution_m=HOUPPIERS_RESOLUTION_M,
                                    max_pixels=VEGETATION_PIXELS_MAX),
             lambda: fetch_exg_grid(w, s, e, n, largeur, hauteur),
             lambda: lire_couche(COUCHE_BATIMENTS, w, s, e, n),
             lambda: lire_couche(COUCHE_VEGETATION, w, s, e, n),
-            lambda: lire_couche(COUCHE_FORET, w, s, e, n))
+            lambda: lire_couche(COUCHE_FORET, w, s, e, n),
+            lambda: lire_couche(COUCHE_ROUTES, w, s, e, n))
     except (requests.RequestException, LectureAbandonnee, ValueError) as exc:
         raise CarreIndisponible(str(exc)) from exc
     houppiers = houppiers_pour_emprise(w, s, e, n, batiments, zones, forets, grille, exg)
@@ -382,7 +417,7 @@ def fetch_vegetation(i, j):
         # lidar_hd : hauteurs mesurées ; mns_mnt : estimées par
         # photogrammétrie ; null : ni l'un ni l'autre ici.
         "source": houppiers["source"], "couvert": houppiers["couvert"], "ports": list(PORTS),
-        "arbres": arbres_du_carre(houppiers["houppiers"], i, j, batiments),
+        "arbres": arbres_du_carre(houppiers["houppiers"], i, j, batiments, routes),
     }
 
 

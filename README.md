@@ -545,7 +545,8 @@ Chaque premier chargement construit la scène, en quelques secondes.
   chaussée, et les ponts des tabliers à leur altitude BD TOPO, sur leurs
   piles : le viaduc de Millau franchit le Tarn, un pont passe au-dessus de
   l'autoroute. La caméra se tient à 17 m au-dessus de la voiture à
-  l'arrêt, et au-dessus des toits voisins en ville. Le sol est fait
+  l'arrêt, sans jamais changer d'angle : ce qui la sépare de la voiture,
+  bâtiment ou arbre, s'efface. Le sol est fait
   des tuiles de l'orthophoto ou du Plan IGN (bouton **Plan**) posées sur le
   RGE ALTI, plus fines près de la caméra et là où la voiture sera dans
   quelques secondes. En rue étroite, les façades entre la caméra et la

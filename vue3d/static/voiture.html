@@ -583,23 +583,32 @@ const champ = new THREE.Frustum(), boite = new THREE.Box3(), matriceChamp = new 
  * hors). Rend vrai si la tuile est couverte ; `liste` reçoit les tuiles à
  * montrer (null pour la caméra fantôme), `voulues` celles à charger.
  */
-function couvrirSol(t, pv, liste, voulues, maintenant) {
+function couvrirSol(t, pv, liste, voulues, maintenant, dMere = 0) {
     if (liste) t.vue = maintenant;
     const dx = Math.max(t.minX - pv.x, 0, pv.x - t.maxX);
     const dy = Math.max(t.minY - pv.y, 0, pv.y - t.maxY);
     if (Math.hypot(dx, dy) > SOL_RAYON) return true;
     const dh = Math.max(t.ymin - pv.h, 0, pv.h - t.ymax);
-    const d = Math.hypot(dx, dy, dh);
-    if (t.z < SOL_ZOOM_MAX && pv.regard(t) * d < SOL_FINESSE * t.largeur) {
+    const d = Math.hypot(dx, dy, dh), facteur = pv.regard(t);
+    if (t.z < SOL_ZOOM_MAX && facteur * d < SOL_FINESSE * t.largeur) {
         const sous = [];
         let pretes = true;
         for (let k = 0; k < 4; k++) {
             const enfant = tuileSol(t.z + 1, 2 * t.x + (k & 1), 2 * t.y + (k >> 1));
-            if (!couvrirSol(enfant, pv, liste && sous, voulues, maintenant)) pretes = false;
+            if (!couvrirSol(enfant, pv, liste && sous, voulues, maintenant, facteur * d)) pretes = false;
         }
         if (pretes) { if (liste) liste.push(...sous); return true; }
     }
-    if (!t.enCours && (!t.mesh || t.fondGen !== generationFond) && maintenant >= t.reessai) voulues.push({ t, d });
+    // Priorité : la distance de la mère, rapportée à la taille de la tuile.
+    // Les quatre sœurs, qui ne remplacent leur mère qu'ensemble, l'ont la
+    // même ; les découpes près de la caméra passent avant celles de
+    // l'horizon, les racines avant tout. Dans l'ordre du zoom, comme
+    // l'horizon de la page, les tuiles du zoom 18 sous la voiture attendaient
+    // derrière toutes celles de l'horizon : aucune après 15 s à 130 km/h sur
+    // l'A7, le sol gris, quand la caméra basse a regardé plus loin.
+    if (!t.enCours && (!t.mesh || t.fondGen !== generationFond) && maintenant >= t.reessai) {
+        voulues.push({ t, d, p: dMere / t.largeur });
+    }
     if (t.mesh) { if (liste) liste.push(t); return true; }
     return false;
 }
@@ -631,7 +640,7 @@ function majSol(maintenant) {
     for (const r of racinesSol(cam.x, cam.y)) couvrirSol(r, cam, liste, voulues, maintenant);
     const montrees = new Set(liste);
     for (const t of tuilesSol.values()) if (t.mesh) t.mesh.visible = montrees.has(t);
-    voulues.sort((a, b) => a.t.z - b.t.z || a.d - b.d);
+    voulues.sort((a, b) => a.p - b.p);
 
     // La caméra fantôme : là où la voiture sera, regardant devant elle.
     const devant = [];
@@ -644,7 +653,7 @@ function majSol(maintenant) {
                 regard: t => ((t.cx - p.x) * ux + (t.cy - p.y) * uy > -t.largeur ? 1 : SOL_HORS_CHAMP) };
             for (const r of racinesSol(p.x, p.y)) couvrirSol(r, pv, null, devant, maintenant);
         }
-        devant.sort((a, b) => a.d - b.d);
+        devant.sort((a, b) => a.p - b.p);
     }
     for (const { t } of [...voulues, ...devant]) {
         if (solEnVol >= SOL_PARALLELE) break;
@@ -687,7 +696,7 @@ function changerFond(nom) {
 const CARRE_M = 500;
 // Les versions des carrés (carres.CARRES_VERSION, VEGETATION_VERSION), dans
 // leur adresse : le navigateur garde un carré une semaine.
-const CARRES_VERSION = 2, VEGETATION_VERSION = 1;
+const CARRES_VERSION = 2, VEGETATION_VERSION = 2;
 const AUTOUR_M = 450;
 const COULOIR_M = 350;
 const PAS_COULOIR_M = 100;
@@ -809,7 +818,14 @@ function ajourer(materiau, cle, proche = null) {
     materiau.customProgramCacheKey = () => cle;
     return materiau;
 }
-const MAT_BATI = ajourer(new THREE.MeshLambertMaterial({ vertexColors: true }), 'bati');
+// L'angle de vue ne change jamais pour un obstacle : une caméra qui montait
+// au-dessus des toits voisins sautait sans cesse dans un village, et Yannick
+// n'en a pas voulu. Ce sont les obstacles qui s'effacent : tout bâtiment à
+// moins de 6 m de la caméra (elle est dans un îlot quand la rue tourne
+// derrière la voiture), estompé jusqu'à 22 m, et ceux qui la séparent de la
+// voiture (le cône).
+const BATI_PROCHES_M = [6, 22];
+const MAT_BATI = ajourer(new THREE.MeshLambertMaterial({ vertexColors: true }), 'bati', BATI_PROCHES_M);
 
 function aireAnneau(p) {
     let a = 0;
@@ -883,9 +899,6 @@ function construireCarre(c) {
     };
     const pied = new THREE.Color();
     let n = 0;
-    // Le plus haut toit de chaque cellule de TOITS_CELLULE_M, sur l'emprise
-    // des bâtiments : la caméra s'en tient au-dessus (majCamera).
-    const toits = new Float32Array(TOITS_CELLULES * TOITS_CELLULES).fill(-Infinity);
     for (const b of d.batiments) {
         for (const poly of b.polygones) {
             // Anneaux en mètres, relatifs au centre ; sans le sommet de fermeture.
@@ -918,18 +931,6 @@ function construireCarre(c) {
                 : b.hauteur > 0 ? b.hauteur : b.etages > 0 ? HAUTEUR_PAR_ETAGE * b.etages : 4;
             hMur = Math.min(Math.max(hMur, 2), 350);
             const bas = sol - ENFONCEMENT_M, haut = sol + hMur;
-            {
-                const sommet = haut + Math.max((b.faitage ?? 0) - (b.gouttiere ?? 0), 0);
-                let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
-                for (let k = 0; k < ext.length; k += 2) {
-                    x0 = Math.min(x0, ext[k]); x1 = Math.max(x1, ext[k]);
-                    y0 = Math.min(y0, ext[k + 1]); y1 = Math.max(y1, ext[k + 1]);
-                }
-                const cel = v => Math.min(Math.max(Math.floor((v + CARRE_M / 2) / TOITS_CELLULE_M), 0), TOITS_CELLULES - 1);
-                for (let i = cel(x0); i <= cel(x1); i++) {
-                    for (let j = cel(y0); j <= cel(y1); j++) toits[j * TOITS_CELLULES + i] = Math.max(toits[j * TOITS_CELLULES + i], sommet);
-                }
-            }
             couleur.setHex(TEINTES_MURS[b.usage] || TEINTE_MURS);
             // Un écart de teinte par bâtiment : des voisins accolés se
             // distinguent ; et un pied plus sombre, qui pose les façades.
@@ -983,7 +984,6 @@ function construireCarre(c) {
         }
     }
     c.nbBatiments = n;
-    c.toits = toits;
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
     geo.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
@@ -995,21 +995,6 @@ function construireCarre(c) {
     c.routes = construireRoutes(c, cx, cy);
     ancrer(c.routes, cx, cy);
     groupeRoutes.add(c.routes);
-}
-
-// La hauteur des toits, par cellules de 25 m : de quoi garder la caméra
-// au-dessus des immeubles sans tester leurs volumes.
-const TOITS_CELLULE_M = 25, TOITS_CELLULES = CARRE_M / TOITS_CELLULE_M;
-/** Le plus haut toit autour de (x, y) Lambert-93, cellule et voisines ; -Infinity sans bâtiment construit. */
-function toitAutour(x, y) {
-    let h = -Infinity;
-    for (const [dx, dy] of [[0, 0], [TOITS_CELLULE_M, 0], [-TOITS_CELLULE_M, 0], [0, TOITS_CELLULE_M], [0, -TOITS_CELLULE_M]]) {
-        const c = carreDe(x + dx, y + dy);
-        if (!c || !c.toits) continue;
-        const i = Math.floor((x + dx - c.i * CARRE_M) / TOITS_CELLULE_M), j = Math.floor((y + dy - c.j * CARRE_M) / TOITS_CELLULE_M);
-        if (i >= 0 && j >= 0 && i < TOITS_CELLULES && j < TOITS_CELLULES) h = Math.max(h, c.toits[j * TOITS_CELLULES + i]);
-    }
-    return h;
 }
 
 function defaireCarre(c) {
@@ -2044,6 +2029,10 @@ const RECUL_DEFAUT = 45, PENTE_DEFAUT = 18, HAUTEUR_DEFAUT = 200;
 const camVue = { mode: PARAMS.get('vue') === '2d' ? '2d' : '3d', recul: RECUL_DEFAUT, hauteur: HAUTEUR_DEFAUT,
                  lacet: 0, tangage: 0, dernierGeste: -Infinity, cap: 0, cible: new THREE.Vector3() };
 const RETOUR_GESTE_S = 8;
+// La voiture sous le centre de l'écran, à cette part de sa demi-hauteur :
+// vers 71 % de la hauteur depuis le haut, plus bas qu'à l'origine (60 %),
+// à la demande de Yannick ; la route devant elle a la place.
+const POSITION_VOITURE = 0.42;
 const RECUL = [15, 600], HAUTEUR = [60, 3000];
 function majCamera(dt, maintenant) {
     const v = voiture;
@@ -2069,24 +2058,21 @@ function majCamera(dt, maintenant) {
         let cy = alt + recul * Math.sin(pente) + 3;
         const sol = altitudeL93(cx + ORIGINE.x, ORIGINE.y - cz);
         if (Number.isFinite(sol)) cy = Math.max(cy, sol + 6);
-        // Basse, la caméra passait dans les immeubles d'une rue étroite de
-        // Paris, ou dans un îlot quand la rue tourne derrière la voiture :
-        // elle se tient au-dessus des toits voisins, à mi-chemin compris, et
-        // y monte ou en descend en douceur.
-        const lx = cx + ORIGINE.x, ly = ORIGINE.y - cz;
-        const toit = Math.max(toitAutour(lx, ly), toitAutour((lx + x) / 2, (ly + y) / 2));
-        const voulue = Number.isFinite(toit) ? Math.max(toit + 4, cy) : cy;
-        camVue.hauteurLissee = Number.isFinite(camVue.hauteurLissee)
-            ? camVue.hauteurLissee + (voulue - camVue.hauteurLissee) * (1 - Math.exp(-dt / 0.6)) : voulue;
-        cy = Math.max(cy, camVue.hauteurLissee);
         camera.position.set(cx, cy, cz);
         camera.up.set(0, 1, 0);
-        camVue.cible.set(px + ux * recul * 0.35, alt + 2, pz - uy * recul * 0.35);
+        // La visée, d'après la place voulue de la voiture à l'écran, et non
+        // un point devant elle : elle reste à POSITION_VOITURE quels que
+        // soient le recul, la vitesse et l'inclinaison réglée au doigt.
+        const versVoiture = Math.atan2(cy - alt - 1, recul * Math.cos(pente));
+        const visee = Math.max(versVoiture - Math.atan(POSITION_VOITURE * Math.tan(camera.fov / 2 * RAD)), 2 * RAD);
+        camVue.cible.set(cx + ux * Math.cos(visee) * 100, cy - Math.sin(visee) * 100, cz - uy * Math.cos(visee) * 100);
     } else {
-        const h = camVue.hauteur;
-        camera.position.set(px + ux * h * 0.18, alt + h, pz - uy * h * 0.18);
+        // De dessus, la caméra vise devant la voiture d'autant : elle se
+        // tient à la même place de l'écran.
+        const h = camVue.hauteur, devant = POSITION_VOITURE * h * Math.tan(camera.fov / 2 * RAD);
+        camera.position.set(px + ux * devant, alt + h, pz - uy * devant);
         camera.up.set(ux, 0, -uy);
-        camVue.cible.set(px + ux * h * 0.18, alt, pz - uy * h * 0.18);
+        camVue.cible.set(px + ux * devant, alt, pz - uy * devant);
     }
     camera.lookAt(camVue.cible);
     ciel.position.copy(camera.position);
@@ -2460,7 +2446,7 @@ function boucle(maintenant) {
 }
 
 // Pour les essais (outils/essai-voiture.mjs) : l'état, en lecture.
-window.__voiture = { voiture, carres, tuilesSol, aretes, camVue, renderer, durees, dureesArbres,
+window.__voiture = { voiture, carres, tuilesSol, aretes, camVue, camera, renderer, durees, dureesArbres,
                      get budget() { return budgetConstruction; } };
 
 // --- Départ ---------------------------------------------------------------------------------

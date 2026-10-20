@@ -242,6 +242,7 @@ def test_les_arbres_se_lisent_comme_ceux_de_la_scene(monkeypatch):
     monkeypatch.setattr(carres, "fetch_mnh_grid", mnh)
     monkeypatch.setattr(carres, "fetch_exg_grid", lambda *a: "exg")
     monkeypatch.setattr(carres, "lire_couche", lambda couche, *emprise: {"features": [], "couche": couche})
+    # Lues aussi : les routes, pour les ponts.
 
     def houppiers(w, s, e, n, bati, zones, forets, grille, exg):
         assert (bati["couche"], zones["couche"], forets["couche"], exg) == \
@@ -323,3 +324,26 @@ def test_la_page_demande_la_version_du_serveur():
     """Le navigateur garde un carré une semaine : son adresse porte la version."""
     page = open(os.path.join(os.path.dirname(carres.__file__), "static", "voiture.html"), encoding="utf-8").read()
     assert f"const CARRES_VERSION = {carres.CARRES_VERSION}, VEGETATION_VERSION = {carres.VEGETATION_VERSION};" in page
+
+
+def test_un_houppier_sur_un_pont_est_le_pont():
+    """Le tablier dépasse du sol comme un arbre : ce qui tombe sur un tronçon
+    au-dessus du sol, à sa demi-largeur et 3 m près, en est un morceau."""
+    def lonlat(dx, dy):
+        return list(carres.wgs84(X0 + dx, Y0 + dy))
+
+    def troncon(sol, dy):
+        return {"geometry": {"type": "LineString", "coordinates": [lonlat(0, dy), lonlat(200, dy)]},
+                "properties": {"position_par_rapport_au_sol": sol, "largeur_de_chaussee": 8}}
+
+    routes = {"features": [troncon("1", 100), troncon("0", 300)]}
+
+    def houppier(dx, dy):
+        lon, lat = lonlat(dx, dy)
+        return {"lon": lon, "lat": lat, "h": 6, "r": 2, "profil": None}
+
+    houppiers = [houppier(50, 106), houppier(50, 108), houppier(50, 300), houppier(50, 200)]
+    # 4 m de demi-largeur et 3 m de marge : 6 m du tablier oui, 8 m non ; la
+    # route au sol ne compte pas.
+    assert carres.sur_un_pont(houppiers, routes) == {0}
+    assert len(carres.arbres_du_carre(houppiers, I, J, routes=routes)) == 3
