@@ -140,12 +140,16 @@ def _station(points):
     }
 
 
-def bornes_pour_emprise(west, south, east, north, brut):
+def bornes_pour_emprise(west, south, east, north, brut, polygone=None):
     """La couche des bornes de l'emprise, réunies par station.
 
     Un point de charge par ligne de la base : ceux d'une même station
     (`id_station_itinerance`, sinon son nom à la même position) en font une
     seule, avec le nombre de ses points, ses puissances et ses prises.
+
+    Args:
+        polygone: contour de la zone (vue3d/polygone.py), s'il y en a un : une
+            station hors du contour n'est pas gardée.
 
     Returns:
         dict(version, lu_le, nombre_points, stations) ; `stations` :
@@ -170,6 +174,8 @@ def bornes_pour_emprise(west, south, east, north, brut):
                or (_texte(ligne.get("nom_station")), round(lon, 5), round(lat, 5)))
         stations.setdefault(cle, []).append({**ligne, "_lon": lon, "_lat": lat})
     liste = [_station(points) for points in stations.values()]
+    if polygone is not None:
+        liste = [s for s in liste if polygone.masque(s["lon"], s["lat"])]
     liste.sort(key=lambda s: (-(s["puissance_max"] or 0), s["nom"]))
     nombre = sum(s["points"] for s in liste)
     journal.info("Bornes de recharge : %d station(s), %d point(s) de charge sur %d ligne(s) lue(s)",

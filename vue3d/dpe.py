@@ -201,7 +201,7 @@ DETAIL = ("numero", "date", "fin_validite", "energie", "climat", "type", "surfac
 DETAIL_MAX = 5
 
 
-def dpe_pour_emprise(west, south, east, north, brut, batiments):
+def dpe_pour_emprise(west, south, east, north, brut, batiments, polygone=None):
     """La couche des DPE de l'emprise, réunis par bâtiment.
 
     Args:
@@ -228,7 +228,8 @@ def dpe_pour_emprise(west, south, east, north, brut, batiments):
         numero = ligne.get("numero_dpe")
         lonlat = _point(ligne)
         if (numero in remplaces or numero in vus or lonlat is None
-                or ligne.get("etiquette_dpe") not in ETIQUETTES):
+                or ligne.get("etiquette_dpe") not in ETIQUETTES
+                or (polygone is not None and not polygone.masque(lonlat[0], lonlat[1]))):
             continue
         vus.add(numero)
         batiment, lien = rattacher(ligne, index)

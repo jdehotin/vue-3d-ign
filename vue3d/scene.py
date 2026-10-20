@@ -65,11 +65,13 @@ import time
 
 import numpy as np
 
-from .batiments import decouper_batiments
+from .batiments import DECOUPE_RETRAIT_M, decouper_batiments
 from .constructions import (COUCHE_PONCTUELLES, COUCHE_RESERVOIRS,
                             constructions_pour_emprise)
 from .couches import (COUCHE_BATIMENTS, COUCHE_FORET, COUCHE_ROUTES,
                       COUCHE_VEGETATION, lire_couche)
+from .polygone import (M_PAR_DEGRE_LAT, Polygone, analyser as analyser_polygone,
+                       decouper_features, decouper_sources)
 from .bornes import BORNES_VERSION, bornes_pour_emprise, fetch_bornes
 from .dpe import DPE_VERSION, dpe_pour_emprise, fetch_dpe
 from .dvf import DVF_VERSION, dvf_pour_emprise, fetch_dvf
@@ -141,6 +143,16 @@ ZONE_MIN_M = 150
 ZONE_MAX_M = 2000
 # Côté nord-sud de l'emprise par défaut, en mètres.
 SCENE_COTE_M = 2 * SCENE_DELTA * 111320
+# Zone en polygone (`poly=`) : c'est sa boîte englobante qui est lue, et tout ce
+# qui pèse — la grille MNH à 0,5 m, les houppiers, la scène elle-même — croît
+# comme sa surface. Une aire de 10 km² est l'ordre de grandeur annoncé à
+# l'utilisateur : la page la mesure et l'avertit (ramage, couches lourdes à
+# éteindre) sans refuser, comme demandé. Au-delà du double, la construction
+# dépasserait la mémoire du service — une zone de 2 000 m (4 km²) tient déjà
+# 3,2 Go au pic — : la boîte est alors refusée, jamais rognée, car rogner
+# publierait une scène que l'utilisateur n'a pas demandée.
+POLY_AIRE_AVERTISSEMENT_M2 = 10_000_000.0
+POLY_AIRE_BOITE_MAX_M2 = 20_000_000.0
 # Étapes d'une construction, que la page affiche pendant l'attente : les
 # seize lectures de construire(), puis les toitures et les houppiers
 # d'assembler(). Un compteur plutôt qu'un pourcentage : les étapes sont très
@@ -170,6 +182,12 @@ RELIEF_POINTS_PAR_KM = 512
 SOURCE_PROBABLE = "lidar_hd"
 LECTURE_GRILLE = "hauteurs du sursol"
 LECTURE_TERRAIN = "terrain sous les toits"
+# Lectures GeoJSON ramenées au contour d'un polygone avant tout calcul. La
+# grille MNH n'y est pas : elle est lue sur la boîte et segmentée pour de bon —
+# les houppiers sont ensuite gardés par leur sommet (houppiers_pour_emprise), et
+# ses cellules servent aussi aux toitures des bâtiments du bord.
+COUCHES_AU_CONTOUR = ("zones de végétation", "BD Forêt", "routes", "étendues d'eau",
+                      "cours d'eau", "réservoirs", "constructions ponctuelles")
 NOM_SCENE = "scene.json.gz"
 NOM_ORTHO = "ortho.jpg"
 NOM_MONUMENTS = "monuments.json.gz"
@@ -292,13 +310,22 @@ def point_normalise(lat, lon):
     return round(lat, SCENE_ARRONDI), round(lon, SCENE_ARRONDI)
 
 
-def zone_normalisee(zone):
-    """Côté de la zone en mètres, arrondi au pas et borné ; None pour
+def zone_normalisee(zone, polygone=None):
+    """La zone de la scène : un polygone si `polygone` en donne un, sinon le
+    côté en mètres d'un carré (`cote`), arrondi au pas et borné ; None pour
     l'emprise par défaut.
 
+    Un Polygone déjà lu est rendu tel quel : les appels internes, qui se
+    repassent la zone du cache, ne la relisent pas.
+
     Raises:
-        ValueError si `zone` n'est pas un nombre.
+        ValueError si `zone` n'est pas un nombre, ou si `polygone` est illisible.
+        HorsEmprise si un sommet du contour sort de l'emprise servie.
     """
+    if polygone:
+        return polygone_normalisee(polygone)
+    if isinstance(zone, Polygone):
+        return zone
     if zone is None or zone == "":
         return None
     cote = float(zone)
@@ -308,17 +335,59 @@ def zone_normalisee(zone):
     return min(max(cote, ZONE_MIN_M), ZONE_MAX_M)
 
 
+def polygone_normalisee(valeur):
+    """Contour de la zone, lu de `?poly=lat,lon;lat,lon;…` (polygone.analyser).
+
+    Raises:
+        ValueError si le contour est illisible, croisé, ou sa boîte trop
+            étendue ; HorsEmprise si un sommet sort de l'emprise servie.
+    """
+    if isinstance(valeur, Polygone):
+        return valeur
+    try:
+        sommets = analyser_polygone(valeur)
+    except ValueError as exc:
+        raise ValueError(f"poly illisible : {exc}") from exc
+    for lat, lon in sommets:
+        if not (EMPRISE_SERVIE["lat"][0] <= lat <= EMPRISE_SERVIE["lat"][1]
+                and EMPRISE_SERVIE["lon"][0] <= lon <= EMPRISE_SERVIE["lon"][1]):
+            raise HorsEmprise(
+                "Contour hors de France métropolitaine : les données IGN n'y sont pas servies.")
+    polygone = Polygone(sommets)
+    aire = (polygone.nord - polygone.sud) * (polygone.est - polygone.ouest) \
+        * M_PAR_DEGRE_LAT ** 2 * math.cos(math.radians((polygone.sud + polygone.nord) / 2))
+    if aire > POLY_AIRE_BOITE_MAX_M2:
+        raise ValueError(
+            f"contour trop étendu : sa boîte fait {aire / 1e6:.1f} km², au-delà de "
+            f"{POLY_AIRE_BOITE_MAX_M2 / 1e6:.0f} km² — c'est elle qui est lue, "
+            "et la scène coûte comme elle.")
+    return polygone
+
+
 def facteur_zone(zone):
     """Rapport du côté de la zone à celui de l'emprise par défaut."""
-    return 1.0 if zone is None else zone / SCENE_COTE_M
+    return 1.0 if zone is None else cote_zone(zone) / SCENE_COTE_M
+
+
+def cote_zone(zone):
+    """Côté de la zone en mètres : le carré demandé, ou le plus grand côté de la
+    boîte d'un polygone. Sert d'échelle à tout ce qui doit grandir avec elle —
+    anneau, brouillard, ombres — et de seuil aux grandes zones du cache."""
+    if isinstance(zone, Polygone):
+        return zone.cote_max_m
+    return zone or 0
 
 
 def emprise(lat, lon, zone=None):
     """Emprise (ouest, sud, est, nord) autour d'un point.
 
     Le même écart en degrés dans les deux sens, comme l'emprise par défaut :
-    plus étroite d'est en ouest qu'en mètres du nord au sud.
+    plus étroite d'est en ouest qu'en mètres du nord au sud. Pour un polygone,
+    c'est sa boîte englobante : les sources s'y lisent, puis sont découpées au
+    contour.
     """
+    if isinstance(zone, Polygone):
+        return zone.ouest, zone.sud, zone.est, zone.nord
     delta = SCENE_DELTA if zone is None else zone / 2 / 111320
     return lon - delta, lat - delta, lon + delta, lat + delta
 
@@ -334,7 +403,7 @@ def emprise_anneau(lat, lon, demi_m=ANNEAU_DEMI_M, zone=None):
 
 def assembler(west, south, east, north, batiments, vegetation, forets, routes,
               grille, exg, relief, anneau=None, sol=None, eau=None, lignes=None,
-              avancer=None, constructions=None):
+              avancer=None, constructions=None, polygone=None):
     """Contenu de la scène à partir des sources déjà obtenues.
 
     Séparée de `construire` pour être testable sans réseau. Les grilles MNH,
@@ -344,7 +413,9 @@ def assembler(west, south, east, north, batiments, vegetation, forets, routes,
     de chaque calcul, toujours dans cet ordre : « toitures » au début des
     toitures, « houppiers » à leur fin — les houppiers ont alors pu commencer
     avec elles. `constructions` : les couches BD TOPO (réservoirs,
-    constructions ponctuelles), None sans elles.
+    constructions ponctuelles), None sans elles. `polygone` : le contour de la
+    zone, s'il y en a un — bâtiments découpés dessus, houppiers gardés par
+    leur sommet, et le contour embarqué pour que la vue masque le terrain.
     """
     from .toits import toitures_au_bassin
     avancer = avancer or (lambda libelle: None)
@@ -353,7 +424,7 @@ def assembler(west, south, east, north, batiments, vegetation, forets, routes,
     # bâtiments entiers : leur masque bâti s'arrête de toute façon à la
     # grille, et dans le retrait de la découpe un toit passerait pour du
     # sursol.
-    decoupes = decouper_batiments(batiments, west, south, east, north)
+    decoupes = decouper_batiments(batiments, west, south, east, north, polygone)
 
     def vegetation_et_constructions():
         # Les constructions et les houppiers lisent la grille en tableau : la
@@ -371,7 +442,7 @@ def assembler(west, south, east, north, batiments, vegetation, forets, routes,
         bati = {"features": ((batiments or {}).get("features", []) + masque["features"]
                              + nappes["features"])}
         return construits, houppiers_pour_emprise(west, south, east, north, bati, vegetation,
-                                                  forets, tableau, exg)
+                                                  forets, tableau, exg, polygone=polygone)
 
     if toitures_au_bassin(decoupes):
         # Les houppiers ne lisent pas les toits. Pendant que le bassin
@@ -408,7 +479,7 @@ def assembler(west, south, east, north, batiments, vegetation, forets, routes,
         toits = toits_pour_emprise(west, south, east, north, decoupes, grille, exg, sol)
         avancer(ETAPES_DE_CALCUL[1])
         construits, veg = vegetation_et_constructions()
-    return {
+    scene = {
         "version": SCENE_VERSION,
         "bbox": [west, south, east, north],
         "batiments": decoupes,
@@ -431,6 +502,12 @@ def assembler(west, south, east, north, batiments, vegetation, forets, routes,
         # Sur l'emprise de l'anneau : une ligne se voit de loin (vue3d/lignes.py).
         "lignes": lignes,
     }
+    if polygone:
+        # Le contour de la zone, pour que la vue y masque le terrain, l'anneau
+        # et l'orthophoto. Absent d'une zone carrée : sa scène reste celle
+        # d'avant, à l'octet près — le cache n'a pas à être invalidé.
+        scene["polygone"] = polygone.anneau()
+    return scene
 
 
 def construire(lat, lon, avancer=None, zone=None):
@@ -441,8 +518,8 @@ def construire(lat, lon, avancer=None, zone=None):
             la page affiche : au départ des lectures et à chacune qui finit,
             avec celles qu'on attend encore (`_lire_ensemble`), puis au début
             des toitures et des houppiers.
-        zone: côté de l'emprise en mètres (`zone_normalisee`), None pour
-            l'emprise par défaut.
+        zone: la zone, de `zone_normalisee` : côté du carré en mètres, ou
+            Polygone (`polygone_normalisee`) ; None pour l'emprise par défaut.
 
     Returns:
         (octets gzip de la scène, octets JPEG de l'orthophoto).
@@ -450,21 +527,23 @@ def construire(lat, lon, avancer=None, zone=None):
         SceneIncomplete si une source n'a pas pu être lue.
     """
     avancer = avancer or (lambda libelle: None)
+    polygone = zone if isinstance(zone, Polygone) else None
     west, south, east, north = emprise(lat, lon, zone)
     bbox = (west, south, east, north)
     anneau_bbox = emprise_anneau(lat, lon, zone=zone)
+    cote = cote_zone(zone)
     # Le relief garde sa maille d'environ 1,4 m quand la zone grandit, jusqu'à
     # 512 points de côté ; au-delà de 1 000 m, une maille d'environ 2 m.
-    taille_relief = min(max(512, round(RELIEF_POINTS_PAR_KM * (zone or 0) / 1000)),
+    taille_relief = min(max(512, round(RELIEF_POINTS_PAR_KM * cote / 1000)),
                         round(RELIEF_TAILLE * max(1.0, facteur_zone(zone))))
     # L'anneau grandit avec la zone (emprise_anneau) : au-delà de 1 000 m, ses
     # points aussi, pour garder la maille de 44 m de l'anneau d'une zone de
     # 1 000 m — 256 points à 2 000 m, 88 m de maille sinon.
-    taille_anneau = round(ANNEAU_TAILLE * max(1.0, (zone or 0) / 1000))
+    taille_anneau = round(ANNEAU_TAILLE * max(1.0, cote / 1000))
     # La mosaïque, plafonnée à 2 048 px (0,49 m par pixel à 1 000 m), en
     # garde autant par kilomètre au-delà : à 2 000 m, 0,98 m sinon, flou sur
     # le sol comme sur les toits qu'elle habille. Lue alors en tuiles.
-    mosaique = ({"max_pixels": round(2048 * zone / 1000)} if (zone or 0) > 1000 else {})
+    mosaique = ({"max_pixels": round(2048 * cote / 1000)} if cote > 1000 else {})
     # L'orthophoto et le terrain se lisent à la taille de la grille MNH, qui
     # ne dépend que de l'emprise : demandés avec elle, pas après elle.
     largeur, hauteur = dimensions_grille(*bbox, TOITS_RESOLUTION_M, GRILLE_PIXELS_MAX)
@@ -503,6 +582,13 @@ def construire(lat, lon, avancer=None, zone=None):
         avancer, terrain)
     lectures_s = time.monotonic() - t0
 
+    if polygone:
+        # Ramenées au contour avant tout calcul : rien hors du contour n'est
+        # découpé, segmenté ni publié. Les bâtiments sont découpés par
+        # decouper_batiments (assembler), avec son retrait.
+        lu = {nom: (decouper_features(brut, polygone) if nom in COUCHES_AU_CONTOUR else brut)
+              for nom, brut in lu.items()}
+
     grille = lu[LECTURE_GRILLE]
     lignes = lignes_pour_emprise(*anneau_bbox, lu["lignes électriques"], lu["pylônes"])
     mosaique, _, _ = lu["mosaïque d'orthophoto"]
@@ -510,7 +596,7 @@ def construire(lat, lon, avancer=None, zone=None):
                       lu["BD Forêt"], lu["routes"], grille, lu["orthophoto"], lu["relief"],
                       lu["relief de l'anneau"], lu[LECTURE_TERRAIN],
                       (lu["étendues d'eau"], lu["cours d'eau"]), lignes, avancer,
-                      (lu["réservoirs"], lu["constructions ponctuelles"]))
+                      (lu["réservoirs"], lu["constructions ponctuelles"]), polygone=polygone)
     journal.info("Scène %.4f, %.4f (zone %s) : %d bâtiment(s), %d houppier(s), source %s, "
                  "lectures en %.1f s",
                  lat, lon, zone or "par défaut", len(scene["batiments"].get("features", [])),
@@ -892,8 +978,12 @@ class Cache:
 
     def _dossier_point(self, lat, lon, zone=None):
         # L'emprise par défaut garde le nom de dossier d'avant les zones : son
-        # cache reste valable.
-        suffixe = f"_z{zone}" if zone else ""
+        # cache reste valable. Un polygone a son dossier par son empreinte : sa
+        # clé, c'est son contour, pas un côté.
+        if isinstance(zone, Polygone):
+            suffixe = f"_{zone}"
+        else:
+            suffixe = f"_z{zone}" if zone else ""
         return os.path.join(self.dossier, f"v{SCENE_VERSION}",
                             f"{lat:.{SCENE_ARRONDI}f}_{lon:.{SCENE_ARRONDI}f}{suffixe}")
 
@@ -947,7 +1037,8 @@ class Cache:
                 # Sans zone, l'appel d'avant les zones : les constructions
                 # injectées par les tests n'ont pas à la connaître.
                 options = {"zone": zone} if zone else {}
-                with (self._grandes_zones if zone and zone > self.GRANDE_ZONE_M
+                cote = cote_zone(zone)
+                with (self._grandes_zones if cote > self.GRANDE_ZONE_M
                       else contextlib.nullcontext()):
                     scene, mosaique = construire(lat, lon, avancer=avancer, **options)
                 os.makedirs(dossier, exist_ok=True)
@@ -1076,6 +1167,11 @@ class Cache:
                 brut = tache.result() if tache else lire(*emprise(lat, lon, zone))
             except Exception as exc:
                 raise indisponible(str(exc)) from exc
+            if isinstance(zone, Polygone):
+                # Sources de forme GeoJSON ramenées au contour avant d'être
+                # assemblées : les murs, anneaux et parcelles s'arrêtent au bord
+                # de la zone. Les autres formes sont filtrées par leur couche.
+                brut = decouper_sources(brut, zone)
             with gzip.open(os.path.join(dossier, NOM_SCENE), "rt", encoding="utf-8") as f:
                 scene = json.load(f)
             couche = assembler(emprise(lat, lon, zone), brut, scene)
@@ -1113,7 +1209,8 @@ class Cache:
             NOM_MONUMENTS, lat, lon, construire, self.lire_monuments,
             lambda message: MonumentsIndisponibles(f"monuments OSM illisibles : {message}"),
             lambda bbox, brut, scene: monuments_pour_emprise(
-                *bbox, brut, scene.get("batiments") or {"features": []}), zone=zone)
+                *bbox, brut, scene.get("batiments") or {"features": []},
+                polygone=zone if isinstance(zone, Polygone) else None), zone=zone)
 
     def prelire_ouvrages(self, lat, lon, zone=None):
         """Lance la lecture des couches d'ouvrages en tâche de fond : quatre
@@ -1173,14 +1270,15 @@ class Cache:
         """
         # Une zone de plus de NUAGE_COTE_MAX_M n'en lit que le carré central.
         lire = self.lire_nuage
-        if (zone_normalisee(zone) or 0) > NUAGE_COTE_MAX_M:
+        if cote_zone(zone_normalisee(zone)) > NUAGE_COTE_MAX_M:
             lire = functools.partial(self.lire_nuage, cote_max_m=NUAGE_COTE_MAX_M)
+        polygone = zone if isinstance(zone, Polygone) else None
         return self._obtenir_couche(
             NOM_NUAGE, lat, lon, construire, lire,
             lambda message: NuageIndisponible(f"nuage LiDAR HD illisible : {message}"),
             lambda bbox, brut, scene: nuage_pour_emprise(
                 *bbox, brut, scene.get("relief"), scene.get("batiments"), scene.get("masses"),
-                scene.get("houppiers")),
+                scene.get("houppiers"), polygone=polygone),
             zone=zone)
 
     def obtenir_nuage_proche(self, lat, lon, construire=construire, zone=None):
@@ -1197,17 +1295,18 @@ class Cache:
             écrit, la demande suivante réessaie.
         """
         normal = point_normalise(lat, lon)
-        cote = zone_normalisee(zone) or SCENE_COTE_M
+        cote = cote_zone(zone_normalisee(zone)) or SCENE_COTE_M
         if (cote < NUAGE_PROCHE_ZONE_MIN_M
                 or os.path.exists(self.chemin(*normal, NOM_NUAGE, zone_normalisee(zone)))):
             return self.obtenir_nuage(lat, lon, construire=construire, zone=zone), NOM_NUAGE
+        polygone = zone if isinstance(zone, Polygone) else None
         return self._obtenir_couche(
             NOM_NUAGE_PROCHE, lat, lon, construire,
             lambda *bbox: self.lire_nuage(*bbox, proche_m=NUAGE_PROCHE_COTE_M),
             lambda message: NuageIndisponible(f"nuage LiDAR HD illisible : {message}"),
             lambda bbox, brut, scene: nuage_pour_emprise(
                 *bbox, brut, scene.get("relief"), scene.get("batiments"), scene.get("masses"),
-                scene.get("houppiers")),
+                scene.get("houppiers"), polygone=polygone),
             zone=zone), NOM_NUAGE_PROCHE
 
     def prelire_panneaux(self, lat, lon, zone=None):
@@ -1229,7 +1328,8 @@ class Cache:
         return self._obtenir_couche(
             NOM_PANNEAUX, lat, lon, construire, self.lire_panneaux,
             lambda message: PanneauxIndisponibles(f"panneaux solaires illisibles : {message}"),
-            lambda bbox, brut, scene: panneaux_pour_emprise(*bbox, brut), zone=zone)
+            lambda bbox, brut, scene: panneaux_pour_emprise(
+                *bbox, brut, polygone=zone if isinstance(zone, Polygone) else None), zone=zone)
 
     def obtenir_dpe(self, lat, lon, construire=construire, zone=None):
         """Chemin du dossier où la couche des DPE du point est écrite.
@@ -1246,7 +1346,9 @@ class Cache:
         return self._obtenir_couche(
             NOM_DPE, lat, lon, construire, self.lire_dpe,
             lambda message: DpeIndisponibles(f"DPE de l'ADEME illisibles : {message}"),
-            lambda bbox, brut, scene: dpe_pour_emprise(*bbox, brut, scene.get("batiments")),
+            lambda bbox, brut, scene: dpe_pour_emprise(
+                *bbox, brut, scene.get("batiments"),
+                polygone=zone if isinstance(zone, Polygone) else None),
             zone=zone)
 
     def obtenir_dvf(self, lat, lon, construire=construire, zone=None):
@@ -1278,7 +1380,8 @@ class Cache:
         return self._obtenir_couche(
             NOM_BORNES, lat, lon, construire, self.lire_bornes,
             lambda message: BornesIndisponibles(f"bornes de recharge illisibles : {message}"),
-            lambda bbox, brut, scene: bornes_pour_emprise(*bbox, brut), zone=zone)
+            lambda bbox, brut, scene: bornes_pour_emprise(
+                *bbox, brut, polygone=zone if isinstance(zone, Polygone) else None), zone=zone)
 
     def _detections(self):
         """Les couches de l'orthophoto du service, dans l'ordre où elles se
@@ -1432,7 +1535,8 @@ class Cache:
             lambda message: VehiculesIndisponibles(f"piscines illisibles : {message}"),
             lambda bbox, brut, scene: piscines_pour_emprise(
                 *bbox, brut, self.mode_vehicules, scene.get("batiments"),
-                scene.get("eau")), zone=zone), nom
+                scene.get("eau"), polygone=zone if isinstance(zone, Polygone) else None),
+            zone=zone), nom
 
     def obtenir_navires(self, lat, lon, construire=construire, zone=None):
         """(dossier, nom du fichier) des navires du point.
@@ -1455,7 +1559,8 @@ class Cache:
             lambda message: VehiculesIndisponibles(f"navires illisibles : {message}"),
             lambda bbox, brut, scene: navires_pour_emprise(
                 *bbox, brut, self.mode_vehicules, scene.get("batiments"),
-                scene.get("eau"), scene.get("routes")), zone=zone), nom
+                scene.get("eau"), scene.get("routes"),
+                polygone=zone if isinstance(zone, Polygone) else None), zone=zone), nom
 
     def obtenir_vehicules(self, lat, lon, detecteur, construire=construire, zone=None):
         """(dossier, nom du fichier) des véhicules du point vus d'un détecteur.
@@ -1472,4 +1577,5 @@ class Cache:
             nom, lat, lon, construire, lambda *bbox: self._relever(genre, lire, cle, marge, bbox),
             lambda message: VehiculesIndisponibles(f"véhicules illisibles : {message}"),
             lambda bbox, brut, scene: vehicules_pour_emprise(
-                *bbox, brut, detecteur, scene.get("batiments"), scene.get("eau")), zone=zone), nom
+                *bbox, brut, detecteur, scene.get("batiments"), scene.get("eau"),
+                polygone=zone if isinstance(zone, Polygone) else None), zone=zone), nom

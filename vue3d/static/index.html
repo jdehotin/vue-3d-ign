@@ -74,6 +74,8 @@
            coupés (iPhone en paysage, 600 px de vue pour 544 de place). */
         #scene { flex:1; position:relative; min-width:0; overflow:hidden; }
         #scene canvas { display:block; position:absolute; left:0; top:0; }
+        /* Pendant le tracé d'une zone, la croix dit que le clic pose un sommet. */
+        #scene canvas.dessine { cursor:crosshair; }
         /* En haut : le bas de la vue est aux crédits, qu'il chevauchait. */
         #haut-gauche { position:absolute; left:12px; top:12px; z-index:2; max-width:calc(100% - 110px);
                        display:flex; flex-direction:column; align-items:flex-start; gap:6px;
@@ -169,6 +171,25 @@
         .zone { display:flex; align-items:center; gap:6px; margin:0 0 6px; font-size:11px; color:var(--muted); }
         .zone select { flex:1; background:#161a1e; color:#e8eaed; border:1px solid #3a4148;
                        border-radius:4px; padding:3px 4px; font-size:12px; }
+        /* Le tracé de la zone : les instructions, puis la surface et les deux
+           boutons. Rien n'y est demandé tant qu'un sommet manque. */
+        #zone-dessin { margin:0 0 6px; font-size:11px; color:var(--muted); }
+        #zone-dessin p { margin:0 0 5px; line-height:1.45; }
+        #zone-dessin b { color:var(--text); font-weight:600; }
+        .zone-boutons { display:flex; gap:6px; }
+        .zone-boutons button { flex:1; border:1px solid var(--line); background:var(--panel-soft);
+                               color:var(--text); border-radius:4px; padding:4px 6px;
+                               font-size:12px; cursor:pointer; }
+        .zone-boutons #btn-dessin-valider { background:#2f6fb0; border-color:#2f6fb0; color:#fff; }
+        .zone-boutons button:disabled { color:var(--muted); background:var(--panel-soft);
+                                        border-color:var(--line); cursor:default; }
+        #zone-dessin.alerte p { color:#f0c27b; }
+        /* Le raccourci du tracé : la même chose que « Dessiner un contour… »
+           au bas de la liste des tailles, mais sans avoir à l'ouvrir. */
+        #btn-dessiner-zone { width:100%; margin:0 0 6px; border:1px solid var(--line);
+                             background:var(--panel-soft); color:var(--text); border-radius:4px;
+                             padding:4px 6px; font-size:12px; text-align:left; cursor:pointer; }
+        #btn-dessiner-zone:hover { border-color:#2f6fb0; }
         #attente { position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
                    z-index:4; pointer-events:none; color:#e8eaed; font-size:13px; text-align:center;
                    line-height:1.6; text-shadow:0 1px 3px #000; }
@@ -366,8 +387,32 @@
                     <option value="500">500 m</option>
                     <option value="700">700 m</option>
                     <option value="1000">1 000 m (par défaut)</option>
+                    <option value="dessiner">✎ Dessiner un contour…</option>
                 </select>
             </label>
+            <!-- Le même tracé qu'en choisissant « Dessiner un contour… » au bas
+                 de la liste des tailles : un bouton se trouve sans l'ouvrir. -->
+            <button type="button" id="btn-dessiner-zone"
+                    title="Tracer un contour au sol : chaque clic pose un sommet, Entrée charge la zone.">✎ Dessiner une zone</button>
+            <!-- Le tracé d'un contour : chaque clic au sol pose un sommet,
+                 l'aperçu est drapé sur le relief, la surface s'affiche pendant
+                 le tracé. Au-delà de 10 km², un avertissement — la scène se
+                 construit quand même, mais elle est longue à venir : la
+                 végétation et le nuage LiDAR se coupent alors d'un clic. -->
+            <div id="zone-dessin" hidden>
+                <p id="note-dessin">Cliquez sur la vue pour poser les sommets du contour, dans l'ordre du tour.
+                    <b>Entrée</b> charge la zone, <b>Retour arrière</b> retire le dernier point, <b>Échap</b> annule.</p>
+                <div class="zone-boutons">
+                    <button type="button" id="btn-dessin-annuler">Annuler</button>
+                    <button type="button" id="btn-dessin-valider" disabled>Charger cette zone</button>
+                </div>
+                <!-- Proposé au-delà de 10 km² : ce sont ces deux couches qui
+                     pèsent et font ramer la vue (houppiers et nuage LiDAR). -->
+                <div class="zone-boutons" id="zone-dessin-allegement" hidden>
+                    <button type="button" id="btn-dessin-veg">Éteindre la végétation</button>
+                    <button type="button" id="btn-dessin-nuage">Éteindre le nuage LiDAR</button>
+                </div>
+            </div>
             <button type="button" id="btn-reconstruire" class="reconstruire"
                     title="Relire les données de l'IGN et reconstruire cette scène et ses couches. Au plus une fois toutes les 10 minutes.">↻ Reconstruire la scène</button>
             <a href="https://github.com/ysimonx/vue-3d-ign#readme" target="_blank" rel="noopener">📐 Méthode et sources ↗</a>
@@ -748,10 +793,14 @@
         const params = new URLSearchParams(location.search);
         const lat = lire(params, 'lat'), lon = lire(params, 'lon');
         const point = lat !== null && lon !== null ? { lat, lon } : ACCUEIL;
-        // Sans zone=, 1 000 m : ZONE_DEFAUT_M, plus bas.
-        const zone = lire(params, 'zone') ?? 1000;
+        // Sans zone=, 1 000 m : ZONE_DEFAUT_M, plus bas. Un contour (`poly=…`)
+        // remplace la zone : il part tel quel, c'est le serveur qui le lit et
+        // le borne (vue3d/polygone.py) — la page, elle, attend la scène.
+        const poly = params.get('poly');
+        const z = lire(params, 'zone') ?? 1000;
         const url = `api/scene?lat=${point.lat}&lon=${point.lon}`
-            + `&zone=${Math.min(Math.max(Math.round(zone / 50) * 50, 150), 2000)}`;
+            + (poly ? `&poly=${encodeURIComponent(poly)}`
+                    : `&zone=${Math.min(Math.max(Math.round(z / 50) * 50, 150), 2000)}`);
         const reponse = fetch(url);
         reponse.catch(() => {});      // l'erreur est traitée par le module
         window.DEMANDE_SCENE = { url, reponse };
@@ -856,20 +905,55 @@ const ZONE_MAX_M = 2000;
 // demande plus : les distances de vue, le brouillard et les ombres ont été
 // réglés pour elle, et la suivent quand la zone grandit.
 const EMPRISE_REFERENCE_M = 2 * 0.0016 * 111320;
-const ZONE = (() => {
-    const v = lireCoord('zone') ?? ZONE_DEFAUT_M;
-    return Math.min(Math.max(Math.round(v / 50) * 50, 150), ZONE_MAX_M);
-})();
+// Zone en polygone : `?poly=lat,lon;lat,lon;…`, les sommets dans l'ordre du
+// tour, comme le lit le serveur (vue3d/polygone.py : séparateurs `;`, espaces
+// ou retours de ligne, six décimales). Elle remplace le carré centré sur le
+// point ; c'est le plus grand côté de sa boîte qui sert d'échelle — distances
+// de vue, brouillard, ombres, anneau — comme `scene.cote_zone`. Le contour part
+// tel quel au serveur, qui le lit, le refuse (moins de trois sommets, contour
+// croisé, hors de France, au-delà de 20 km²) ou le borne, et découpe la scène à
+// son bord. La page, elle, avertit au-delà de 10 km² sans refuser : la scène se
+// construit quand même, plus lentement.
+function lirePolygone(texte) {
+    const sommets = [];
+    for (const morceau of String(texte || '').trim().split(/[;\s]+/)) {
+        if (!morceau) continue;
+        const c = morceau.split(',');
+        if (c.length !== 2) return null;
+        const lat = Number(c[0]), lon = Number(c[1]);
+        if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+        sommets.push([lat, lon]);
+    }
+    return sommets.length >= 3 ? sommets : null;
+}
+const POLY_TEXTE = PARAMS.get('poly');
+const POLY = POLY_TEXTE ? lirePolygone(POLY_TEXTE) : null;
+// Le plus grand côté de la boîte du contour, arrondi et borné comme la zone :
+// au-delà de ZONE_MAX_M, la vue n'est plus réglée pour (brouillard, ombres).
+const ZONE = ZONE_DU_CONTOUR();
+function ZONE_DU_CONTOUR() {
+    if (!POLY) return Math.min(Math.max(Math.round((lireCoord('zone') ?? ZONE_DEFAUT_M) / 50) * 50, 150), ZONE_MAX_M);
+    const lats = POLY.map(p => p[0]), lons = POLY.map(p => p[1]);
+    const lat0 = (Math.max(...lats) + Math.min(...lats)) / 2;
+    const cotes = [(Math.max(...lats) - Math.min(...lats)) * 111320,
+                   (Math.max(...lons) - Math.min(...lons)) * 111320 * Math.cos(lat0 * Math.PI / 180)];
+    return Math.min(Math.max(Math.round(Math.max(...cotes) / 50) * 50, 150), ZONE_MAX_M);
+}
 const ECHELLE_ZONE = Math.max(1, ZONE / EMPRISE_REFERENCE_M);
 // Au-delà de 1 000 m, les fonds en tuiles WMTS descendent d'un zoom : quatre
 // fois la surface en autant de tuiles qu'à 1 000 m. Au même zoom, l'anneau
 // d'une zone de 2 000 m (11 km de côté) en demandait environ 700, sur une
 // toile de 6 900 px que Safari sur iOS refuse (16,7 Mpx au plus).
 const ZOOM_EN_MOINS = ZONE > 1000 ? 1 : 0;
-const PARAM_ZONE = `&zone=${ZONE}`;
+// Le contour réécrit comme le fait le serveur — six décimales, `;` entre les
+// sommets (polygone.Polygone.texte) : l'URL reste stable d'une lecture à
+// l'autre, et c'est bien `poly=` que le serveur reçoit, jamais les deux.
+const POLY_PARAM = POLY && POLY.map(([lat, lon]) => `${lat.toFixed(6)},${lon.toFixed(6)}`).join(';');
+const PARAM_ZONE = POLY_PARAM ? `&poly=${encodeURIComponent(POLY_PARAM)}` : `&zone=${ZONE}`;
 // Dans les liens vers un autre point, la zone par défaut ne s'écrit pas : ils
-// restent courts, comme ceux du sélecteur de zone.
-const PARAM_ZONE_LIEN = ZONE === ZONE_DEFAUT_M ? '' : PARAM_ZONE;
+// restent courts, comme ceux du sélecteur de zone. Un contour, lui, appartient
+// à son point : ces liens repartent de la zone par défaut, sans lui.
+const PARAM_ZONE_LIEN = POLY || ZONE === ZONE_DEFAUT_M ? '' : PARAM_ZONE;
 // Page rechargée par « Ma position » pour se recentrer, ou ouverte sur la
 // position autorisée au départ (moi=1, DEPART) : le suivi
 // reprend de lui-même, sans nouveau recentrage automatique — pas de boucle si
@@ -1305,18 +1389,31 @@ document.getElementById('form-point').addEventListener('submit', async e => {
     if (titre.length) document.title = `${titre.join(' — ')} · Vue 3D IGN`;
 })();
 const selectZone = document.getElementById('in-zone');
-// Une zone hors des choix proposés (?zone=850) s'ajoute à la liste.
-if (![...selectZone.options].some(o => o.value === String(ZONE))) {
-    selectZone.add(new Option(`${ZONE.toLocaleString('fr-FR')} m`, String(ZONE)));
+// Une zone hors des choix proposés (?zone=850) s'ajoute à la liste. Un contour
+// (`?poly=…`) s'y ajoute aussi, avant « Dessiner », et c'est lui qui est
+// affiché : la zone qui en est tirée n'est qu'une échelle.
+const optionDessiner = [...selectZone.options].find(o => o.value === 'dessiner');
+const optionContour = POLY
+    ? new Option(`Contour dessiné (${ZONE.toLocaleString('fr-FR')} m au plus)`, 'contour')
+    : null;
+if (optionContour) selectZone.add(optionContour, optionDessiner);
+else if (![...selectZone.options].some(o => o.value === String(ZONE))) {
+    selectZone.add(new Option(`${ZONE.toLocaleString('fr-FR')} m`, String(ZONE)), optionDessiner);
 }
-selectZone.value = String(ZONE);
+const choixZone = () => (selectZone.value === 'dessiner' ? 'dessiner'
+                         : selectZone.value === 'contour' ? String(ZONE) : selectZone.value);
+selectZone.value = POLY ? 'contour' : String(ZONE);
 selectZone.addEventListener('change', () => {
+    // « Dessiner » n'est pas une zone : on entre en tracé, la scène actuelle
+    // reste affichée dessous (ZONE_DESSIN).
+    if (selectZone.value === 'dessiner') { demarrerDessin(); return; }
     const u = new URL(location.href);
     // Le point s'écrit toujours : sans lui, l'accueil redemanderait la position.
     u.searchParams.set('lat', LAT0);
     u.searchParams.set('lon', LON0);
+    u.searchParams.delete('poly');          // une zone en mètres le remplace
     // La zone par défaut ne s'écrit pas : le lien reste court.
-    if (selectZone.value !== String(ZONE_DEFAUT_M)) u.searchParams.set('zone', selectZone.value);
+    if (choixZone() !== String(ZONE_DEFAUT_M)) u.searchParams.set('zone', choixZone());
     else u.searchParams.delete('zone');
     location.assign(u.pathname + u.search + u.hash);
 });
@@ -4154,12 +4251,36 @@ async function chargerRelief() {
 
     const pos = geo.attributes.position;
     const hauteurs = new Float64Array(pos.count);
+    // Le contour de la zone (`?poly=…`, clé « polygone » de la scène) : une
+    // cellule du maillage dont les quatre coins tombent au-delà n'est pas
+    // tracée, et l'anneau grossier prend le relais (construireAnneau, même
+    // règle) — rien n'est dessiné hors du contour. Sans contour, la scène
+    // carrée est rendue telle quelle.
+    const contour = ARTEFACT && ARTEFACT.polygone;
+    const coinsDedans = contour ? new Uint8Array(pos.count) : null;
     let min = Infinity, max = -Infinity;
     for (let i = 0; i < pos.count; i++) {
         const [lon, lat] = toLonLat(pos.getX(i), -pos.getZ(i));
         const a = source.alt(lon, lat) ?? altitudeRef;
         hauteurs[i] = a;
         min = Math.min(min, a); max = Math.max(max, a);
+        if (coinsDedans) coinsDedans[i] = pointDansAnneau(lon, lat, contour) ? 1 : 0;
+    }
+    if (coinsDedans) {
+        // L'index d'un PlaneGeometry se lit par cellules, six indices d'affilée
+        // (deux triangles), dans l'ordre des lignes puis des colonnes : on les
+        // recopie pour les seules cellules dont les quatre coins sont dedans.
+        const index = geo.getIndex().array;
+        const gardes = [];
+        for (let j = 0, k = 0; j < segZ; j++) {
+            for (let i = 0; i < segX; i++, k += 6) {
+                const a = j * (segX + 1) + i;
+                if (!(coinsDedans[a] && coinsDedans[a + 1]
+                      && coinsDedans[a + segX + 1] && coinsDedans[a + segX + 2])) continue;
+                for (let q = 0; q < 6; q++) gardes.push(index[k + q]);
+            }
+        }
+        geo.setIndex(gardes);
     }
 
     const mesh = new THREE.Mesh(geo, MAT_TERRAIN);
@@ -4252,6 +4373,13 @@ function construireAnneau() {
     const EPS = 1e-6;
     const dedansX = x => x >= finsX[0] - EPS && x <= finsX[finsX.length - 1] + EPS;
     const dedansZ = z => z >= finsZ[0] - EPS && z <= finsZ[finsZ.length - 1] + EPS;
+    // Le contour de la zone (« polygone » de la scène) : au-dedans, la cellule
+    // est laissée au terrain fin — exactement la même règle que lui
+    // (chargerRelief), pour que les deux maillages se partagent les cellules
+    // sans se recouvrir ni laisser de fente. Le trou de l'anneau épouse alors
+    // le contour, et non plus la boîte de l'emprise.
+    const contour = ARTEFACT && ARTEFACT.polygone;
+    const dansContour = contour ? new Uint8Array(nx * nz) : null;
 
     const positions = new Float32Array(nx * nz * 3);
     const hauteurs = new Float64Array(nx * nz);
@@ -4261,18 +4389,25 @@ function construireAnneau() {
             const [lon, lat] = toLonLat(xs[i], -zs[j]);
             // Sur le bord du trou (et dedans, où rien n'est tracé), l'altitude
             // du terrain fin : c'est ce qui ferme le raccord.
-            const a = (dedansX(xs[i]) && dedansZ(zs[j])) ? terrain.alt(lon, lat) : alt(lon, lat);
+            const dedans = contour ? (pointDansAnneau(lon, lat, contour) ? 1 : 0)
+                                   : (dedansX(xs[i]) && dedansZ(zs[j]) ? 1 : 0);
+            if (dansContour) dansContour[k] = dedans;
+            const a = dedans ? terrain.alt(lon, lat) : alt(lon, lat);
             hauteurs[k] = a ?? NaN;
             positions[k * 3] = xs[i];
             positions[k * 3 + 2] = zs[j];
         }
     }
+    const coinDedans = contour
+        ? (i, j) => dansContour[j * nx + i] === 1
+        : (i, j) => dedansX(xs[i]) && dedansZ(zs[j]);
 
     const indices = [];
     let min = Infinity;
     for (let j = 0; j < nz - 1; j++) {
         for (let i = 0; i < nx - 1; i++) {
-            if (dedansX(xs[i]) && dedansX(xs[i + 1]) && dedansZ(zs[j]) && dedansZ(zs[j + 1])) continue;
+            if (coinDedans(i, j) && coinDedans(i + 1, j)
+                && coinDedans(i, j + 1) && coinDedans(i + 1, j + 1)) continue;
             const a = j * nx + i, c = a + nx;          // c : un rang plus au sud
             const coins = [a, a + 1, c, c + 1];
             if (coins.some(q => Number.isNaN(hauteurs[q]))) continue;   // mer, étranger
@@ -10515,6 +10650,10 @@ const VERS = {
     s: { x: 0, z: 1, nom: 'le sud' }, o: { x: -1, z: 0, nom: "l'ouest" },
 };
 const decalage = document.getElementById('decalage');
+// Les flèches déplacent le point d'une fraction d'emprise, la zone restant
+// carrée : un contour dessiné n'a pas de centre à décaler, elles restent
+// cachées (PARAM_ZONE_LIEN est vide, de même).
+const DECALAGE_VISIBLE = !POLY;
 const flechesDecalage = [...decalage.querySelectorAll('button')].map(b => {
     const v = VERS[b.dataset.vers];
     // Le nord est -Z, l'est +X ; l'emprise a le même écart en degrés dans les
@@ -10527,7 +10666,6 @@ const flechesDecalage = [...decalage.querySelectorAll('button')].map(b => {
     b.addEventListener('click', () => decaler(dLat, dLon));
     return { b, pointe: b.firstElementChild, x: v.x, z: v.z };
 });
-
 function decaler(dLat, dLon) {
     // Arrondi comme la clé du cache (scene.SCENE_ARRONDI) : la page est
     // centrée sur le point même de sa scène, et un aller-retour retombe sur
@@ -10565,7 +10703,7 @@ if (window.ResizeObserver) {
     ro.observe(creditsVue);
 }
 mesurerDecalage();
-chargementArtefact.then(a => { if (a) decalage.hidden = false; });
+chargementArtefact.then(a => { if (a && DECALAGE_VISIBLE) decalage.hidden = false; });
 
 const versCible = new THREE.Vector3(), droiteEcran = new THREE.Vector3(), hautEcran = new THREE.Vector3();
 /** Pose chaque flèche dans la direction où son point cardinal part à l'écran. */
@@ -10750,7 +10888,7 @@ function sortirDrone() {
     hudDrone.hidden = true;
     padDrone.hidden = true;
     for (const b of padDrone.querySelectorAll('.appui')) b.classList.remove('appui');
-    decalage.hidden = !ARTEFACT;
+    decalage.hidden = !ARTEFACT || !DECALAGE_VISIBLE;
     controls.update();
     // Cachées pendant le vol, les flèches pointaient encore où elles étaient
     // au décollage jusqu'à l'image suivante.
@@ -11709,6 +11847,214 @@ window.addEventListener('wheel', e => {
     controls.update();
 }, { capture: true, passive: false });
 
+// --- Zone dessinée : un contour au sol ---------------------------------------
+// Le sélecteur « Zone » propose de dessiner un contour : chaque clic pose un
+// sommet sur le sol, l'aperçu est drapé sur le relief, la surface s'affiche
+// pendant le tracé, et « Charger cette zone » écrit le contour dans l'URL
+// (`poly=…`) — la page se recharge, le serveur construit la scène sur ce
+// contour, et la vue masque alors le terrain au-delà (ARTEFACT.polygone). Le
+// contour part au serveur, qui le valide (vue3d/polygone.py) : trois sommets au
+// moins, aire non nulle, contour non croisé, boîte sous 20 km².
+//
+// Au-delà de 10 km², un avertissement : la scène se construit quand même, mais
+// elle est longue à venir et lourde à dessiner. Ce sont la végétation et le
+// nuage LiDAR qui pèsent — 81 875 houppiers pour un seul carré de 2 km à
+// Gordes —, et le panneau propose de les éteindre d'un clic.
+const POLY_AIRE_AVERTISSEMENT_M2 = 10000 * 1000;    // 10 km², comme le serveur
+const POLY_AIRE_MAX_M2 = 20000 * 1000;              // 20 km² : le serveur refuse
+const DESSIN_COULEUR = 0xffc247;
+let dessin = null;                                  // { sommets: [[lat, lon], …] }
+const groupeDessin = new THREE.Group();
+groupeDessin.visible = false;
+scene.add(groupeDessin);
+const MAT_DESSIN = new THREE.LineBasicMaterial({ color: DESSIN_COULEUR });
+const MAT_SOMMET = new THREE.MeshBasicMaterial({ color: DESSIN_COULEUR });
+const GEO_SOMMET = new THREE.SphereGeometry(1, 10, 8);
+const zoneDessin = document.getElementById('zone-dessin');
+const btnDessiner = document.getElementById('btn-dessiner-zone');
+const noteDessin = document.getElementById('note-dessin');
+const btnDessinValider = document.getElementById('btn-dessin-valider');
+const allegementDessin = document.getElementById('zone-dessin-allegement');
+
+/** Le (x, z) de la scène d'un sommet (lat, lon) : z est au sud. */
+function sommetScene([lat, lon]) {
+    const [x, y] = toLocal(lon, lat);
+    return [x, -y];
+}
+
+/** Y de l'aperçu, un peu au-dessus du sol pour ne pas clignoter avec lui. */
+const yDessin = (x, z) => (solSous(x, z, false) ?? 0) + 0.4 * ECHELLE_ZONE;
+
+/** Une arête en segments posés sur le sol, un tous les ~2 m (200 au plus). */
+function areteDessin(a, b) {
+    const n = Math.min(200, Math.max(2, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / (2 * ECHELLE_ZONE))));
+    const points = [];
+    for (let k = 0; k <= n; k++) {
+        const t = k / n;
+        const x = a[0] + (b[0] - a[0]) * t, z = a[1] + (b[1] - a[1]) * t;
+        points.push(new THREE.Vector3(x, yDessin(x, z), z));
+    }
+    return points;
+}
+
+/** Redessine l'aperçu : les arêtes drapées, puis un repère par sommet. */
+function majDessin() {
+    for (const o of [...groupeDessin.children]) {
+        groupeDessin.remove(o);
+        o.geometry?.dispose();
+    }
+    if (!dessin) return;
+    const sommets = dessin.sommets.map(sommetScene);
+    const suites = sommets.length >= 3 ? [...sommets, sommets[0]] : sommets;
+    if (suites.length >= 2) {
+        const points = [];
+        for (let k = 0; k + 1 < suites.length; k++) {
+            points.push(...areteDessin(suites[k], suites[k + 1]));
+        }
+        groupeDessin.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), MAT_DESSIN));
+    }
+    for (const [x, z] of sommets) {
+        const boule = new THREE.Mesh(GEO_SOMMET, MAT_SOMMET);
+        boule.scale.setScalar(2.2 * ECHELLE_ZONE);
+        boule.position.set(x, yDessin(x, z), z);
+        groupeDessin.add(boule);
+    }
+    groupeDessin.visible = sommets.length > 0;
+}
+
+/**
+ * L'aire du contour en m², comme le serveur : formule du lacet sur les sommets
+ * projetés en mètres (polygone.Polygone.aire_m2). C'est elle qui décide de
+ * l'avertissement, pas d'un refus — le serveur, lui, n'accepte pas au-delà de
+ * 20 km².
+ */
+function aireDessin(sommets) {
+    const lats = sommets.map(p => p[0]), lons = sommets.map(p => p[1]);
+    const sud = Math.min(...lats), ouest = Math.min(...lons);
+    const kx = 111320 * Math.cos(((Math.min(...lats) + Math.max(...lats)) / 2) * Math.PI / 180);
+    const xs = lons.map(lon => (lon - ouest) * kx), ys = lats.map(lat => (lat - sud) * 111320);
+    let somme = 0;
+    for (let k = 0; k < xs.length; k++) {
+        const j = (k + 1) % xs.length;
+        somme += xs[k] * ys[j] - xs[j] * ys[k];
+    }
+    return Math.abs(somme) / 2;
+}
+
+const enSurface = m2 => (m2 >= 1000000 ? `${(m2 / 1000000).toFixed(2).replace('.', ',')} km²`
+                      : m2 >= 10000 ? `${(m2 / 10000).toFixed(2).replace('.', ',')} ha`
+                      : `${Math.round(m2)} m²`);
+
+/** L'état du tracé dans le panneau : surface, avertissement, boutons. */
+function majNoteDessin() {
+    const n = dessin ? dessin.sommets.length : 0;
+    const aire = n >= 3 ? aireDessin(dessin.sommets) : 0;
+    let texte;
+    if (n === 0) texte = 'Cliquez sur la vue pour poser le premier sommet du contour.';
+    else if (n < 3) texte = `${n} sommet${n > 1 ? 's' : ''} posé${n > 1 ? 's' : ''} — il en faut trois au moins.`;
+    else texte = `Contour de ${n} sommets, ${enSurface(aire)}.`;
+    if (aire > POLY_AIRE_MAX_M2) {
+        texte += ' Au-delà de 20 km², le serveur refuse le contour : resserrez-le.';
+    } else if (aire > POLY_AIRE_AVERTISSEMENT_M2) {
+        texte += ' Au-delà de 10 km², la scène est longue à construire et la vue peut ramer :'
+               + ' éteignez les données les plus lourdes ci-dessous, ou validez quand même.';
+    }
+    noteDessin.textContent = texte;
+    zoneDessin.classList.toggle('alerte', aire > POLY_AIRE_AVERTISSEMENT_M2);
+    btnDessinValider.disabled = n < 3 || aire > POLY_AIRE_MAX_M2;
+    if (allegementDessin) allegementDessin.hidden = aire <= POLY_AIRE_AVERTISSEMENT_M2;
+}
+
+/** Le (lat, lon) du sol sous un point de la vue, ou null si le rayon se perd. */
+function pointAuSol(e) {
+    const r = renderer.domElement.getBoundingClientRect();
+    souris.x = ((e.clientX - r.left) / r.width) * 2 - 1;
+    souris.y = -((e.clientY - r.top) / r.height) * 2 + 1;
+    raycaster.setFromCamera(souris, camera);
+    // Le terrain fin puis l'anneau grossier ; entre les deux, le plan à 0 : le
+    // clic posé au-dessus de l'horizon ne retient rien.
+    const maillages = [terrain?.mesh, anneauRelief?.mesh].filter(Boolean);
+    const touche = raycaster.intersectObjects(maillages, false)[0];
+    if (touche) {
+        const [lon, lat] = toLonLat(touche.point.x, -touche.point.z);
+        return [lat, lon];
+    }
+    const plan = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+    const p = new THREE.Vector3();
+    if (!raycaster.ray.intersectPlane(plan, p)) return null;
+    const [lon, lat] = toLonLat(p.x, -p.z);
+    return [lat, lon];
+}
+
+function demarrerDessin() {
+    if (dessin) return;
+    dessin = { sommets: [] };
+    zoneDessin.hidden = false;
+    // Le bouton d'entrée s'efface : ce sont « Annuler » et « Charger cette
+    // zone » qui prennent la main tant que le tracé dure.
+    btnDessiner.hidden = true;
+    renderer.domElement.classList.add('dessine');
+    // Les flèches de décalage changent de point, pas de contour : elles
+    // gêneraient le tracé.
+    decalage.hidden = true;
+    majDessin();
+    majNoteDessin();
+}
+
+function arreterDessin() {
+    dessin = null;
+    groupeDessin.visible = false;
+    zoneDessin.hidden = true;
+    btnDessiner.hidden = false;
+    zoneDessin.classList.remove('alerte');
+    renderer.domElement.classList.remove('dessine');
+    decalage.hidden = !ARTEFACT || !DECALAGE_VISIBLE;
+    selectZone.value = POLY ? 'contour' : String(ZONE);
+}
+
+function ajouterSommet(lat, lon) {
+    if (!dessin) return;
+    dessin.sommets.push([lat, lon]);
+    majDessin();
+    majNoteDessin();
+}
+
+function retirerSommet() {
+    if (!dessin || !dessin.sommets.length) return;
+    dessin.sommets.pop();
+    majDessin();
+    majNoteDessin();
+}
+
+function validerDessin() {
+    if (!dessin || dessin.sommets.length < 3) return;
+    const texte = dessin.sommets.map(([lat, lon]) => `${lat.toFixed(6)},${lon.toFixed(6)}`).join(';');
+    const u = new URL(location.href);
+    u.searchParams.set('lat', LAT0);
+    u.searchParams.set('lon', LON0);
+    u.searchParams.delete('zone');
+    u.searchParams.set('poly', texte);
+    location.assign(u.pathname + u.search + u.hash);
+}
+
+document.getElementById('btn-dessin-annuler').addEventListener('click', arreterDessin);
+btnDessiner.addEventListener('click', demarrerDessin);
+document.getElementById('btn-dessin-valider').addEventListener('click', validerDessin);
+// L'allègement proposé au-delà de 10 km² : les deux boutons du panneau, qui
+// portent déjà leur propre logique (matériaux, réservations, curseurs).
+for (const [bouton, cible] of [['btn-dessin-veg', 't-veg'], ['btn-dessin-nuage', 't-nuage']]) {
+    document.getElementById(bouton)?.addEventListener('click', () => {
+        const toggle = document.getElementById(cible);
+        if (toggle?.classList.contains('on')) toggle.click();
+    });
+}
+window.addEventListener('keydown', e => {
+    if (!dessin || e.target.closest?.('input, select, textarea')) return;
+    if (e.key === 'Enter') { e.preventDefault(); validerDessin(); }
+    else if (e.key === 'Backspace' || e.key === 'Delete') { e.preventDefault(); retirerSommet(); }
+    else if (e.key === 'Escape') { e.preventDefault(); arreterDessin(); }
+});
+
 // Un clic doit être distingué de la fin d'une orbite : OrbitControls consomme le
 // glissement, mais le navigateur émet quand même un pointerup au relâchement.
 let departPointeur = null;
@@ -11728,6 +12074,12 @@ renderer.domElement.addEventListener('pointerup', e => {
     raycaster.setFromCamera(souris, camera);
     // Pendant la traque, un clic tire là où il désigne.
     if (jeu.actif) { tirerSelonRayon(raycaster.ray); return; }
+    // Pendant un tracé de zone, le clic pose un sommet au sol.
+    if (dessin) {
+        const point = pointAuSol(e);
+        if (point) ajouterSommet(...point);
+        return;
+    }
     const hit = raycaster.intersectObjects(ciblesSurvol, false)[0];
     if (!hit) return;
     // Un arbre, un véhicule, un bateau, une piscine : pas de fiche, mais son

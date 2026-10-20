@@ -15,6 +15,27 @@ messages de commit et dans les commentaires des modules.
 
 ### Ajouté
 
+- **Une zone de forme libre, dessinée au sol.** **✎ Dessiner une zone**, au
+  panneau — ou l'entrée « Dessiner un contour… » du sélecteur **Zone** — entre
+  en tracé : chaque clic au sol pose un sommet, l'aperçu est drapé sur le
+  relief et la surface s'affiche au fil de l'eau ; **Entrée** charge la zone,
+  **Retour arrière** retire le dernier point, **Échap** ou « Annuler »
+  sortent du tracé. Le contour s'écrit en clair dans l'URL
+  (`&poly=lat,lon;lat,lon;…`, six décimales, comme le lit le serveur) et
+  remplace le carré : la boîte englobante est lue, chaque source BD TOPO est
+  découpée au contour avant tout calcul, les houppiers sont gardés par leur
+  sommet, la scène porte l'anneau et la page masque le terrain au-delà — rien
+  n'est calculé, dessiné ni exporté hors du contour. Le cache est celui du
+  contour (`_poly-<clé>`), et deux contours n'en partagent pas. Un contour
+  croisé, de moins de trois sommets ou d'aire nulle est refusé (400), comme un
+  contour hors de l'emprise servie (422). Au-delà de 10 km² la page prévient —
+  elle propose d'éteindre la végétation et le nuage LiDAR, qui pèsent ; au-delà
+  de 20 km² le service refuse, car c'est la boîte du contour qui est lue, et
+  une zone de 2 000 m (4 km²) tient déjà 3,2 Go au pic.
+  - Vérifié dans la page : un triangle posé de trois clics (26,7 ha) donne
+    « Contour de 3 sommets, 26,68 ha », « Charger cette zone » s'active, et la
+    scène `?poly=…` se construit avec sa clé `polygone`.
+  - 25 tests neufs (`tests/test_polygone.py`), et les 471 précédents passent.
 - **Le service sous `container`, l'outil d'Apple, à la place de Docker
   Desktop.** `run_container.sh` construit le même `Dockerfile` et lance le
   service dans une petite machine virtuelle Linux (macOS 26, Apple silicon,

@@ -46,7 +46,16 @@ au bord de la vue, décalent la scène d'un quart de zone dans leur direction.
 La zone chargée mesure par défaut 1 000 m du nord au
 sud ; le sélecteur **Zone** du panneau la règle de 350 à 1 000 m, et
 `&zone=…` dans l'URL de 150 à 2 000 m (arrondie à 50 m) — 2 000 m n'est pas
-proposé au sélecteur, la vue y rame. Le temps de construction suit la surface et
+proposé au sélecteur, la vue y rame. Un **contour dessiné** remplace ce carré :
+**✎ Dessiner une zone**, au panneau, ou l'entrée « Dessiner un contour… » du
+sélecteur, entrent en tracé — chaque clic au sol pose un sommet, l'aperçu est
+drapé sur le relief et la surface s'affiche au fil de l'eau ; **Entrée** charge
+la zone, **Retour arrière** retire le dernier point, **Échap** annule. Le
+contour s'écrit en clair dans l'URL (`&poly=lat,lon;…`) et tient lieu de zone :
+rien n'est lu, calculé, dessiné ni exporté hors de lui. Au-delà de 10 km² la
+page prévient et propose d'éteindre la végétation et le nuage LiDAR ; au-delà
+du double, le service refuse — il lit la boîte englobante du contour, et une
+zone de 2 000 m (4 km²) tient déjà 3,2 Go au pic. Le temps de construction suit la surface et
 la densité du bâti : à 1 000 m, 4 s à Gordes et 6 s à Strasbourg sur un Mac
 M4 hors conteneur, 4 et 4,5 s dans le conteneur ; à 2 000 m, 9,5 s à Gordes,
 et le service ne construit qu'une zone de plus de 1 000 m à la fois (3,2 Go

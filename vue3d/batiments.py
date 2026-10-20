@@ -53,11 +53,15 @@ def _polygones(geom):
             if g.geom_type == "Polygon" and g.area > 0]
 
 
-def decouper_batiments(batiments, west, south, east, north):
+def decouper_batiments(batiments, west, south, east, north, polygone=None):
     """Bâtiments découpés sur l'emprise, en retrait de DECOUPE_RETRAIT_M.
 
     Args:
         batiments: GeoJSON de la couche BD TOPO des bâtiments.
+        polygone: contour de la zone (vue3d/polygone.py), s'il y en a un. La
+            découpe se fait alors sur son bord, avec le même retrait : une
+            grille MNH ne dépasse pas de la boîte du contour, et un toit mesuré
+            a besoin de cellules au-delà de son bord.
 
     Returns:
         le même GeoJSON, où un bâtiment qui tient dans le cadre est rendu tel
@@ -71,6 +75,8 @@ def decouper_batiments(batiments, west, south, east, north):
     m_lon = 111320 * math.cos(math.radians(lat0))
     cadre = box(west + DECOUPE_RETRAIT_M / m_lon, south + DECOUPE_RETRAIT_M / 111320,
                 east - DECOUPE_RETRAIT_M / m_lon, north - DECOUPE_RETRAIT_M / 111320)
+    if polygone is not None:
+        cadre = polygone.forme(DECOUPE_RETRAIT_M)
     gardes = []
     for f in (batiments or {}).get("features", []):
         try:

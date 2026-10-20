@@ -698,7 +698,7 @@ def _arrondir(valeurs, chiffres):
 
 
 def houppiers_pour_emprise(west, south, east, north, batiments, vegetation, forets,
-                           grille, exg):
+                           grille, exg, polygone=None):
     """Houppiers et masses de sursol d'une emprise, d'après le MNH à 0,5 m.
 
     Args:
@@ -706,6 +706,11 @@ def houppiers_pour_emprise(west, south, east, north, batiments, vegetation, fore
             bâtiment et zone_de_vegetation, et BD Forêt v2 ; None si la
             couche n'a pas répondu — le résultat le dit.
         grille, exg: grille MNH et grille ExG, partagées avec les toitures.
+        polygone: contour de la zone (vue3d/polygone.py), s'il y en a un. Le
+            MNH se segmente sur toute la boîte englobante — c'est elle qui est
+            lue —, et les houppiers comme les masses sont gardés par leur
+            sommet : les masses gardées d'abord, pour que « masses_expliquees »
+            des ouvrages, qui les indexe, le reste.
     Returns:
         dict: source, couvert, resolution_m, seuil_m, ortho, veg_disponible,
         foret_disponible, houppiers, masses, hauteur_max, nb_ortho.
@@ -719,6 +724,10 @@ def houppiers_pour_emprise(west, south, east, north, batiments, vegetation, fore
     }
     if grille.get("couvert"):
         resultat.update(segmenter_emprise(grille, exg, batiments, vegetation, forets))
+        if polygone is not None:
+            for cle in ("houppiers", "masses"):
+                resultat[cle] = [item for item in resultat[cle]
+                                 if polygone.masque(item["lon"], item["lat"])]
     journal.info("Houppiers : %d houppier(s), %d masse(s), source=%s",
                  len(resultat["houppiers"]), len(resultat["masses"]), resultat["source"])
     return resultat

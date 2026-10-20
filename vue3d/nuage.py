@@ -475,7 +475,7 @@ def _b64(tableau):
 
 
 def nuage_pour_emprise(west, south, east, north, brut, relief, batiments=None, masses=None,
-                       houppiers=None):
+                       houppiers=None, polygone=None):
     """La couche du nuage, prête pour la vue.
 
     Args:
@@ -485,8 +485,10 @@ def nuage_pour_emprise(west, south, east, north, brut, relief, batiments=None, m
         batiments: GeoJSON des bâtiments de la scène, pour les ajourés.
         masses, houppiers: masses de sursol et houppiers de la scène, pour
             ceux qu'ils expliquent : le MNH voit la tour Eiffel au-dessus de ses
-            arches, et la scène en fait des masses — ou des houppiers, là où
+            arches, et la scène en fait des masses - ou des houppiers, là où
             l'orthophoto montre la pelouse dessous.
+        polygone: contour de la zone (vue3d/polygone.py), s'il y en a un : les
+            points hors du contour ne sont pas publiés.
 
     Returns:
         None, ou dict(version, origine, n, n_ajoures, lon, lat, h, classe,
@@ -532,6 +534,10 @@ def nuage_pour_emprise(west, south, east, north, brut, relief, batiments=None, m
     lon, lat = depuis_lambert93(x, y)
     h = z - altitudes(relief, lon, lat)
     garde = np.isfinite(h)
+    if polygone is not None:
+        # Le contour de la zone : la boîte est lue entière, seul ce qu'elle
+        # couvre est publié. C'est la couche la plus lourde de la vue.
+        garde &= polygone.masque_tableau(lon, lat)
     x, y, lon, lat, h, classe = x[garde], y[garde], lon[garde], lat[garde], h[garde], classe[garde]
 
     cles, polys, details = ajoures(batiments, brut["grilles"])

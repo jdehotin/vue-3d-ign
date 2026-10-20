@@ -1,7 +1,8 @@
 """Serveur de la vue 3D.
 
-    GET /                          la page ; `?lat=…&lon=…` pour viser un point
-                                   et `&zone=…` pour le côté de la zone, en mètres
+    GET /                          la page ; `?lat=…&lon=…` pour viser un point,
+                                   `&zone=…` pour le côté de la zone, en mètres,
+                                   ou `&poly=lat,lon;…` pour un contour de zone
     GET /api/scene?lat=…&lon=…     la scène, JSON gzippé (construite au besoin)
     GET /api/ortho?lat=…&lon=…     l'orthophoto de la scène, en JPEG
     GET /api/monuments?lat=…&lon=…   la couche des monuments OSM, JSON gzippé
@@ -23,7 +24,10 @@
     GET /api/sante                 contrôle de vie, pour Docker
 
 Chaque route d'API accepte `zone=` (150 à 2 000 m, arrondie à 50 m) : sans
-elle, l'emprise par défaut d'environ 356 m.
+elle, l'emprise par défaut d'environ 356 m. `poly=` la remplace : un contour
+`lat,lon;lat,lon;…` (au moins trois sommets, d'aire non nulle), dont la boîte
+englobante est lue puis découpée au contour — aire conseillée jusqu'à 10 km²,
+refusée au-delà du double.
 
 La première demande d'un point construit sa scène : une vingtaine à une
 trentaine de secondes, que la page annonce. Les suivantes la lisent sur disque.
@@ -61,6 +65,7 @@ from .scene import (NOM_BORNES, NOM_DPE, NOM_DVF, NOM_EMPRISES, NOM_MONUMENTS, N
                     PanneauxIndisponibles, ReconstructionRefusee, SceneIncomplete,
                     VehiculesDesactives, VehiculesIndisponibles, point_normalise,
                     zone_normalisee)
+
 from .scene import construire as construire_scene
 from .toits import autoriser_bassin
 from .tuiles import (COUCHES, TUILES_RELECTURES_PAR_HEURE, Stock, TuileAbsente, TuileIllisible,
@@ -189,16 +194,30 @@ def creer_app(dossier_cache=None, construire=construire_scene, lire_monuments=fe
         relectures = TUILES_RELECTURES_PAR_HEURE if quota else 0
     quota_tuiles = Quota(relectures) if relectures else None
 
-    def point():
-        """(lat, lon, zone) de la requête ; None si l'un d'eux est illisible."""
-        try:
-            return (float(request.args["lat"]), float(request.args["lon"]),
-                    zone_normalisee(request.args.get("zone")))
-        except (KeyError, ValueError):
-            return None
-
     MESSAGE_POINT = ("Paramètres lat et lon attendus, en degrés décimaux ; zone, "
-                     "facultative, en mètres.")
+                     "facultative, en mètres ; poly, facultatif, une suite de "
+                     "« lat,lon » séparés par des points-virgules — trois sommets "
+                     "au moins, d'aire non nulle.")
+
+    def point():
+        """(lat, lon, zone) de la requête ; zone : côté en mètres, ou Polygone.
+
+        Raises:
+            ValueError si lat, lon, zone ou poly manquent ou sont illisibles,
+                avec le détail, que la page affiche.
+            HorsEmprise si le point, ou un sommet du contour, n'est pas servi.
+        """
+        try:
+            lat, lon = float(request.args["lat"]), float(request.args["lon"])
+        except (KeyError, ValueError):
+            raise ValueError(MESSAGE_POINT)
+        try:
+            return lat, lon, zone_normalisee(request.args.get("zone"),
+                                             polygone=request.args.get("poly"))
+        except HorsEmprise:
+            raise
+        except ValueError as exc:
+            raise ValueError(f"{MESSAGE_POINT} — {exc}")
 
     def erreur(code, message):
         return jsonify({"erreur": message}), code
@@ -233,9 +252,12 @@ def creer_app(dossier_cache=None, construire=construire_scene, lire_monuments=fe
         return reponse, code
 
     def dossier_scene(couche=None, prelire=False, detecteur=None):
-        p = point()
-        if p is None:
-            return None, erreur(400, MESSAGE_POINT)
+        try:
+            p = point()
+        except HorsEmprise as exc:
+            return None, erreur(422, str(exc))
+        except ValueError as exc:
+            return None, erreur(400, str(exc))
         *p, zone = p
         try:
             # Toute route qui lit un dossier de scène la construit au besoin,
@@ -521,9 +543,12 @@ def creer_app(dossier_cache=None, construire=construire_scene, lire_monuments=fe
         """Le bouton « Reconstruire la scène » de la page : la scène et ses
         couches sont mises de côté, et la page, rechargée, les reconstruit
         d'après les données de l'IGN du moment (Cache.reconstruire)."""
-        p = point()
-        if p is None:
-            return erreur(400, MESSAGE_POINT)
+        try:
+            p = point()
+        except HorsEmprise as exc:
+            return erreur(422, str(exc))
+        except ValueError as exc:
+            return erreur(400, str(exc))
         *p, zone = p
         try:
             refus = refus_quota(*p, zone, reconstruction=True)
@@ -544,9 +569,12 @@ def creer_app(dossier_cache=None, construire=construire_scene, lire_monuments=fe
     def avancement():
         """Pour la page qui attend sa scène : jamais mis en cache, il change
         d'une seconde à l'autre."""
-        p = point()
-        if p is None:
-            return erreur(400, MESSAGE_POINT)
+        try:
+            p = point()
+        except HorsEmprise as exc:
+            return erreur(422, str(exc))
+        except ValueError as exc:
+            return erreur(400, str(exc))
         try:
             reponse = jsonify(cache.avancement(*p))
         except HorsEmprise as exc:

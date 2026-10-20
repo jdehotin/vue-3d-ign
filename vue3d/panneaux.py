@@ -195,8 +195,13 @@ def lecteur(chemin=None):
     return Lecteur(chemin)
 
 
-def panneaux_pour_emprise(west, south, east, north, brut):
+def panneaux_pour_emprise(west, south, east, north, brut, polygone=None):
     """Installations de l'emprise, découpées dessus, prêtes pour la vue.
+
+    Args:
+        brut: installations du registre (vue3d/panneaux.py).
+        polygone: contour de la zone (vue3d/polygone.py), s'il y en a un : la
+            découpe se fait alors sur son bord plutôt que sur le cadre.
 
     Returns:
         dict(version, panneaux) ; panneaux : [{contour: [[lon, lat], ...] en
@@ -205,7 +210,7 @@ def panneaux_pour_emprise(west, south, east, north, brut):
         un morceau par partie restante.
     """
     from shapely.geometry import Polygon, box
-    cadre = box(west, south, east, north)
+    cadre = box(west, south, east, north) if polygone is None else polygone.forme()
     panneaux = []
     for p in brut or []:
         try:

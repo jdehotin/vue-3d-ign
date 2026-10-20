@@ -198,13 +198,17 @@ def _cote_min_m(polygone_m):
                math.hypot(r[2][0] - r[1][0], r[2][1] - r[1][1]))
 
 
-def monuments_pour_emprise(west, south, east, north, brut, batiments):
+def monuments_pour_emprise(west, south, east, north, brut, batiments, polygone=None):
     """Parties de monuments OSM de l'emprise, prêtes pour la scène.
 
     Args:
         brut: réponse Overpass de `fetch_monuments`.
         batiments: GeoJSON BD TOPO des bâtiments, pour les hauteurs de repli
             et la liste des bâtiments remplacés.
+        polygone: contour de la zone (vue3d/polygone.py), s'il y en a un : une
+            partie hors du contour n'est pas gardée, une partie à cheval est
+            découpée au bord — là où la réponse Overpass, elle, arrive sur
+            toute la boîte.
 
     Returns:
         dict(parties=[{contour, h, h0, toit, nom, bat, estime}],
@@ -227,24 +231,35 @@ def monuments_pour_emprise(west, south, east, north, brut, batiments):
             bati.append((g, en_m(g), f.get("properties") or {}))
 
     brutes = []
+
+    def morceaux(poly):
+        """Les morceaux du contour dans la zone : un anneau par partie gardée."""
+        if polygone is None:
+            return [poly]
+        decoupe = polygone.decouper(poly)
+        if decoupe is None:
+            return []
+        return [g for g in getattr(decoupe, "geoms", [decoupe]) if g.geom_type == "Polygon"]
+
     for tags, pts in _anneaux(brut):
         poly = Polygon(pts).buffer(0)
         if poly.is_empty or poly.area == 0:
             continue
-        centre = poly.representative_point()
-        contenant = next((p for g, _, p in bati if g.contains(centre)), None)
-        if contenant is None:
-            # Un bâtiment coupé par le bord de la scène (vue3d/batiments.py)
-            # ne contient plus le centre d'une partie qui en sort avec lui :
-            # elle reste la sienne, celle du bâtiment coupé qui la recouvre le
-            # plus.
-            recouvre = [(g.intersection(poly).area, p) for g, _, p in bati
-                        if p.get("coupe") and g.intersects(poly)]
-            aire, p = max(recouvre, key=lambda r: r[0], default=(0, None))
-            contenant = p if aire > 0 else None
-        brutes.append({"tags": tags, "pts": pts, "poly_m": en_m(poly),
-                       "contenant": contenant,
-                       "h_osm": _nombre(tags.get("height"))})
+        for morceau in morceaux(poly):
+            centre = morceau.representative_point()
+            contenant = next((p for g, _, p in bati if g.contains(centre)), None)
+            if contenant is None:
+                # Un bâtiment coupé par le bord de la scène (vue3d/batiments.py)
+                # ne contient plus le centre d'une partie qui en sort avec lui :
+                # elle reste la sienne, celle du bâtiment coupé qui la recouvre le
+                # plus.
+                recouvre = [(g.intersection(morceau).area, p) for g, _, p in bati
+                            if p.get("coupe") and g.intersects(morceau)]
+                aire, p = max(recouvre, key=lambda r: r[0], default=(0, None))
+                contenant = p if aire > 0 else None
+            brutes.append({"tags": tags, "pts": list(morceau.exterior.coords),
+                           "poly_m": en_m(morceau), "contenant": contenant,
+                           "h_osm": _nombre(tags.get("height"))})
 
     # Détection des enveloppes : une partie mesurée qui recouvre une autre
     # partie mesurée plus basse l'avalerait — sa hauteur est celle du sommet

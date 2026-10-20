@@ -74,14 +74,16 @@ const NOMS = ['couperPolygone', 'enveloppeConvexe', 'rectangleMin', 'rectangleSe
               'normalesPliees', 'normalesIndexees', 'sphereEnglobante',
               'alea', 'portDe', 'portMesure', 'gabaritHouppier', 'facesHouppier', 'sommetsHouppier', 'ajouterHouppier',
               'nouveauTampon', 'facesHouppierSimple', 'sommetsHouppierSimple', 'ajouterHouppierSimple',
-              'vegetationExtraite', 'partConstruite', 'ecartsSousToits'];
+              'vegetationExtraite', 'partConstruite', 'ecartsSousToits',
+              'lirePolygone', 'aireDessin', 'pointDansAnneau'];
 const CONSTS = ['PAS_ECARTS_M', 'PORTS', 'SEGMENTS_HOUPPIER', 'SEGMENTS_SIMPLE', 'ANGLES_HOUPPIER', 'COS_HOUPPIER', 'BOSSES_HOUPPIER',
                 'EMPRISE_HOUPPIER', 'HAUTEUR_MIN_TRONC', 'PART_LECTURES', 'GABARITS_NAVIRE'];
 const { rectangleMin, rectangleSelonAxe, geometrieToitDecoupe, stationsLeLong, prismeLeLong, dalle,
         blocsVehicule, repereVehicule, blocsNavire, GABARITS_NAVIRE, normalesFacettes, normalesPliees, normalesIndexees, sphereEnglobante,
         alea, portDe, facesHouppier, sommetsHouppier, ajouterHouppier, nouveauTampon, vegetationExtraite, partConstruite,
         facesHouppierSimple, sommetsHouppierSimple, ajouterHouppierSimple,
-        SEGMENTS_HOUPPIER, EMPRISE_HOUPPIER, HAUTEUR_MIN_TRONC, PART_LECTURES, ecartsSousToits } =
+        SEGMENTS_HOUPPIER, EMPRISE_HOUPPIER, HAUTEUR_MIN_TRONC, PART_LECTURES, ecartsSousToits,
+        lirePolygone, aireDessin, pointDansAnneau } =
   new Function('THREE', 'toLocal', CONSTS.map(extraireConst).join('\n') + '\n' + NOMS.map(extraire).join('\n')
                + `\nreturn { ${NOMS.concat(CONSTS).join(', ')} };`)(THREE, toLocal);
 let tout = true;
@@ -719,6 +721,44 @@ const ok = n === 64 && dansRivage && symetrique && toutEnTrous && losange;
 console.log(`${ok ? 'OK ' : 'KO '} trous du relief : ${n} bouchés, entre ${Math.min(...v).toFixed(2)} et 5 m `
             + `${dansRivage ? 'oui' : 'non'}, symétrique ${symetrique ? 'oui' : 'non'}, `
             + `grille vide ${toutEnTrous ? 'laissée' : 'touchée'}, losange ${losange ? 'oui' : 'non'}`);
+tout = tout && ok;
+}
+
+// --- Zone dessinée : lecture du contour et surface ------------------------------
+// La page lit `poly=lat,lon;…`, en calcule la surface pour avertir au-delà de
+// 10 km², et masque le terrain au-delà du contour. La surface doit valoir celle
+// du serveur (polygone.Polygone.aire_m2, formule du lacet sur les sommets
+// projetés en mètres) : c'est elle qui décide de l'avertissement, et le serveur
+// refuse au-delà de 20 km².
+{
+const sommets = lirePolygone('43.910000,5.190000;43.910000,5.192500;\n43.912600,5.192500; 43.912600,5.190000');
+const trois = lirePolygone('43.9,5.2;43.91,5.21;43.92,5.19');
+const refus = ['', '43.9,5.2', '43.9,5.2;43.91,5.21', 'a,b;43.9,5.2;43.91,5.21'];
+const lus = sommets && sommets.length === 4 && trois && trois.length === 3
+    && refus.every(t => lirePolygone(t) === null);
+// Un rectangle de 0,0025° de longitude sur 0,0026° de latitude, à la latitude
+// moyenne : la surface du serveur, au mètre carré près.
+const lats = [43.91, 43.9126], lon = 0.0025, kx = M * Math.cos((43.91 + 43.9126) / 2 * Math.PI / 180);
+const attendue = lon * kx * (lats[1] - lats[0]) * M;
+const aire = aireDessin(sommets);
+// Les mêmes sommets dans l'autre sens donnent la même surface : le lacet est
+// pris en valeur absolue, comme le serveur.
+const aireInversee = aireDessin([...sommets].reverse());
+// Le contour est bien un carré : des points à l'intérieur dedans, les mêmes
+// juste au-delà dehors (l'appartenance d'un point exactement sur le bord n'est
+// pas définie, et n'a pas à l'être : le serveur découpe par shapely).
+const anneau = sommets.map(([lat, lon]) => [lon, lat]);
+const MILIEU = [5.19125, 43.9113];
+const coins = pointDansAnneau(...MILIEU, anneau)
+    && pointDansAnneau(MILIEU[0] - 0.0005, MILIEU[1] - 0.0005, anneau)
+    && pointDansAnneau(MILIEU[0] + 0.0005, MILIEU[1] + 0.0005, anneau)
+    && !pointDansAnneau(5.18, 43.9113, anneau) && !pointDansAnneau(5.2, 43.9113, anneau)
+    && !pointDansAnneau(5.19125, 43.905, anneau) && !pointDansAnneau(5.19125, 43.918, anneau);
+const ok = lus && Math.abs(aire - attendue) < attendue * 1e-9
+    && Math.abs(aireInversee - aire) < aire * 1e-9 && aire > 0 && coins;
+console.log(`${ok ? 'OK ' : 'KO '} zone dessinée : ${sommets.length} sommets, ${aire.toFixed(0)} m² `
+            + `(attendu ${attendue.toFixed(0)}), inversée ${aireInversee.toFixed(0)}, `
+            + `lecture ${lus ? 'oui' : 'non'}, appartenance ${coins ? 'oui' : 'non'}`);
 tout = tout && ok;
 }
 

@@ -109,6 +109,16 @@ l'étage `export` du Dockerfile.
   Géoplateforme passe par `geopf.place()`, toute lecture lancée en parallèle
   par `geopf.en_parallele` ou `Groupe.soumettre` : au premier échec, les
   lectures qui attendent leur place ne partent plus. Un fil nu y échappe.
+- **Le contour dessiné (`?poly=`) est une frontière, pas un filtre d'affichage.**
+  La boîte englobante est lue, puis chaque source GeoJSON est découpée au
+  contour avant tout calcul (`polygone.decouper_features`), la grille MNH est
+  lue sur la boîte — ses cellules servent aux toitures du bord — et les
+  houppiers sont gardés par leur sommet ; la scène porte l'anneau, et la page
+  masque le terrain au-delà. Rien hors contour n'est calculé, dessiné ni
+  exporté. Le cache est celui du contour (`_poly-<clé>`), jamais celui du
+  carré : deux contours différents ne partagent pas une scène. La page et le
+  serveur arrondissent les sommets à six décimales et les écrivent dans le même
+  ordre, sans quoi l'URL et la clé du cache divergeraient.
 - **La géométrie d'un houppier ne doit jamais se retourner** : rayon croissant
   avec la couronne, hauteur décroissante du sommet au bord, dessous qui remonte
   vers le tronc, lobage partagé par tous les anneaux. Un défaut ici passe

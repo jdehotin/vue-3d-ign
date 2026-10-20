@@ -970,7 +970,8 @@ def _en_mer(mer, kx, ky):
     return en_mer
 
 
-def vehicules_pour_emprise(west, south, east, north, brut, detecteur, batiments=None, eau=None):
+def vehicules_pour_emprise(west, south, east, north, brut, detecteur, batiments=None, eau=None,
+                           polygone=None):
     """Véhicules d'un détecteur sur l'emprise, prêts pour la vue.
 
     Args:
@@ -1000,10 +1001,13 @@ def vehicules_pour_emprise(west, south, east, north, brut, detecteur, batiments=
                        [(*b[:5], b[7]) for b in brut.get("boites", [])],
                        f"Véhicules ({detecteur})", (LONGUEUR_MIN_M, math.inf), LARGEUR_M,
                        {"bâti": _batiments(batiments, kx, ky), "eau": _surfaces_eau(eau, kx, ky)})
+    if polygone is not None:
+        vehicules = [v for v in vehicules if polygone.masque(v[0], v[1])]
     return {"version": VEHICULES_VERSION, "detecteur": detecteur, "vehicules": vehicules}
 
 
-def piscines_pour_emprise(west, south, east, north, brut, mode, batiments=None, eau=None):
+def piscines_pour_emprise(west, south, east, north, brut, mode, batiments=None, eau=None,
+                          polygone=None):
     """Piscines de l'emprise, prêtes pour la vue.
 
     Args:
@@ -1024,11 +1028,13 @@ def piscines_pour_emprise(west, south, east, north, brut, mode, batiments=None, 
                       [(*b[:5], b[6]) for b in brut.get("piscines", [])],
                       f"Piscines ({mode})", PISCINE_LONGUEUR_M, PISCINE_LARGEUR_M,
                       {"bâti": _batiments(batiments, kx, ky), "eau": _surfaces_eau(eau, kx, ky)})
+    if polygone is not None:
+        piscines = [p for p in piscines if polygone.masque(p[0], p[1])]
     return {"version": PISCINES_VERSION, "mode": mode, "piscines": piscines}
 
 
 def navires_pour_emprise(west, south, east, north, brut, mode, batiments=None, eau=None,
-                         routes=None):
+                         routes=None, polygone=None):
     """Navires de l'emprise, prêts pour la vue : ceux qui sont sur l'eau.
 
     Args:
@@ -1070,4 +1076,6 @@ def navires_pour_emprise(west, south, east, north, brut, mode, batiments=None, e
                      f"Navires ({mode})", NAVIRE_LONGUEUR_M, NAVIRE_LARGEUR_M,
                      {"bâti": _batiments(batiments, kx, ky), "sur un pont": _ponts(routes, kx, ky)},
                      ecarter)
+    if polygone is not None:
+        navires = [n for n in navires if polygone.masque(n[0], n[1])]
     return {"version": NAVIRES_VERSION, "mode": mode, "navires": navires}
