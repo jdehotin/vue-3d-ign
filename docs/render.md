@@ -1,5 +1,7 @@
 # Déploiement sur Render
 
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/jdehotin/vue-3d-ign)
+
 L'application est un serveur Flask qui interroge la Géoplateforme de l'IGN à la
 demande, met la scène en cache sur disque et sert la page three.js. Render
 l'héberge en HTTPS, ce dont l'extension Trimble Connect a besoin : le panneau
