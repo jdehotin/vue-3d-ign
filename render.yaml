@@ -1,0 +1,39 @@
+# Déploiement Render : le service qui interroge la Géoplateforme et sert la
+# scène. Il ne remplace pas le Dockerfile : il évite seulement le piège du
+# disque, que l'image monte sur /cache alors qu'elle tourne en `USER vue3d`
+# (uid 1000). En natif, Render monte le disque inscriptible par le service, et
+# l'application n'a besoin que de requirements.txt (la couche des véhicules,
+# optionnelle, reste dehors).
+#
+# Une seule instance : un disque Render ne se partage pas. C'est aussi pourquoi
+# il n'y a pas de base de données.
+services:
+  - type: web
+    name: vue3d-ign
+    runtime: python
+    region: frankfurt
+    # 2 Go : numpy, shapely et le LiDAR ne tiennent pas dans l'offre à 512 Mo.
+    # Un disque impose de toute façon une offre payante.
+    plan: standard
+    branch: main
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn --bind 0.0.0.0:$PORT --workers 1 --threads 8 --timeout 180 --access-logfile - vue3d.app:app
+    healthCheckPath: /api/sante
+    autoDeploy: true
+    envVars:
+      # La version est épinglée dans .python-version (3.12) : le défaut de
+      # Render est 3.14, où les houppiers retombent à zéro.
+      - key: VUE3D_CACHE
+        value: /var/data/cache
+      # Un proxy devant le service (celui de Render) : sans cela, tous les
+      # visiteurs auraient l'adresse du proxy et un seul quota.
+      - key: VUE3D_PROXY
+        value: "1"
+      # Scènes neuves par heure et par IP : la Géoplateforme est publique, on
+      # ne veut pas qu'un robot y fasse construire des milliers de scènes.
+      - key: VUE3D_QUOTA
+        value: "60"
+    disk:
+      name: scenes
+      mountPath: /var/data
+      sizeGB: 5
