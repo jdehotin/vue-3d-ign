@@ -5886,8 +5886,13 @@ function stationsLeLong(ligne, pas) {
  */
 function ligneDecalee(ligne, ecart) {
     const pts = ligne.map(([lo, la, z]) => { const [x, y] = toLocal(lo, la); return [x, y, z]; });
+    if (pts.length < 2) return ligne;
     return pts.map((p, i) => {
-        const a = pts[Math.max(i - 1, 0)], b = pts[Math.min(i + 1, pts.length - 1)];
+        // Une ligne à deux points n'a pas de voisin de l'autre côté : les deux
+        // extrémités prennent la normale du seul segment, sinon les deux files
+        // se superposeraient au centre.
+        const a = pts.length === 2 ? pts[0] : pts[Math.max(i - 1, 0)];
+        const b = pts.length === 2 ? pts[1] : pts[Math.min(i + 1, pts.length - 1)];
         const dx = b[0] - a[0], dy = b[1] - a[1], l = Math.hypot(dx, dy) || 1;
         const [lo, la] = toLonLat(p[0] - dy / l * ecart, p[1] + dx / l * ecart);
         return p[2] == null ? [lo, la] : [lo, la, p[2]];
