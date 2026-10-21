@@ -41,7 +41,7 @@ sinon 3.14, où les houppiers retombent à zéro.
 ## Recette après déploiement
 
 - `GET /api/sante` répond 200.
-- `GET /?lat=43.9116&lon=5.2003` construit la scène de Gordes en 4 à 7 s.
+- `GET /?lat=43.9116&lon=5.2003` construit la scène de Gordes en 20 à 30 s.
 - Un second appel est rapide, **et le reste après un redémarrage** du service :
   c'est la preuve que `/var/data/cache` est bien écrit.
 - Les journaux Render ne montrent aucune erreur d'écriture dans le cache.
