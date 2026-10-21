@@ -1610,6 +1610,11 @@ function carresVoulus(autour = AUTOUR_M, couloir = COULOIR_M, devant = Infinity,
     const v = voiture;
     const x = v.vue ? v.x : v.attendu.x, y = v.vue ? v.y : v.attendu.y;
     ajouter(x, y, autour, 0);
+    // En attendant l'itinéraire : la bande entre départ et arrivée.
+    if (VERS && !itineraire && devant === Infinity) {
+        const l = Math.hypot(VERS.x - x, VERS.y - y);
+        for (let t = 0; t <= l; t += CARRE_M / 2) ajouter(x + (VERS.x - x) * t / l, y + (VERS.y - y) * t / l, ITINERAIRE_BANDE_M, t);
+    }
     const ch = v.chemin;
     if (ch) {
         const d0 = v.dChemin, fin = Math.min(ch.longueur, d0 + devant);
@@ -1883,6 +1888,9 @@ function suiteProbable(a, sens, n, etat, vues = null, hasard = 0) {
 function cheminDepuis(depart, longueur) {
     const xs = [], ys = [], cum = [], parcours = [];
     let { a, s, sens } = depart;
+    // Sur l'itinéraire de la simulation : ses étapes, jusqu'à l'arrivée.
+    let k = itineraire ? itineraire.etapes.findIndex((e, i) => i >= itineraire.k && e.a === a && e.sens === sens) : -1;
+    if (k >= 0) itineraire.k = k;
     const p0 = pointArete(a, s, sens);
     xs.push(p0.x); ys.push(p0.y); cum.push(0);
     let total = 0, fin = 'complet', bout = null;
@@ -1896,11 +1904,21 @@ function cheminDepuis(depart, longueur) {
     for (;;) {
         parcours.push({ a, sens, debut: total - (sens > 0 ? s : a.L - s) });
         vues.add(a);
+        if (k >= 0 && k === itineraire.etapes.length - 1) {
+            const sf = itineraire.fin.s;
+            if (sens > 0) { for (let q = 1; q < a.cum.length; q++) if (a.cum[q] > s && a.cum[q] < sf) ajouter(a.pts[2 * q], a.pts[2 * q + 1]); }
+            else { for (let q = a.cum.length - 2; q >= 0; q--) if (a.cum[q] < s && a.cum[q] > sf) ajouter(a.pts[2 * q], a.pts[2 * q + 1]); }
+            const pf = pointArete(a, sf, sens);
+            ajouter(pf.x, pf.y);
+            fin = 'arrivee';
+            bout = [pf.x, pf.y];
+            break;
+        }
         if (sens > 0) { for (let k = 1; k < a.cum.length; k++) if (a.cum[k] > s) ajouter(a.pts[2 * k], a.pts[2 * k + 1]); }
         else { for (let k = a.cum.length - 2; k >= 0; k--) if (a.cum[k] < s) ajouter(a.pts[2 * k], a.pts[2 * k + 1]); }
         if (total >= longueur) break;
         const n = sens > 0 ? a.n1 : a.n0;
-        const suite = suiteProbable(a, sens, n, etat, vues);
+        const suite = k >= 0 ? itineraire.etapes[++k] : suiteProbable(a, sens, n, etat, vues);
         if (!suite) {
             fin = carrePret(n.x, n.y) ? 'impasse' : 'inconnu';
             bout = [n.x, n.y];
@@ -1915,7 +1933,11 @@ function cheminDepuis(depart, longueur) {
 
 /** Point du chemin à la distance `d` de son début, avec son cap ; null hors du chemin. */
 function pointDuChemin(ch, d) {
-    if (!ch || ch.xs.length < 2) return null;
+    if (!ch || !ch.xs.length) return null;
+    // Un chemin d'un seul point : la voiture calée pile sur l'arrivée. Le
+    // préchargement et le panneau y cherchaient un point, et la page
+    // s'arrêtait là (le film de la Bastille à la Nation, à l'arrivée).
+    if (ch.xs.length < 2) return { x: ch.xs[0], y: ch.ys[0], cap: voiture.cap };
     d = Math.min(Math.max(d, 0), ch.longueur);
     let lo = 0, hi = ch.cum.length - 1;
     while (hi - lo > 1) { const m = (lo + hi) >> 1; if (ch.cum[m] <= d) lo = m; else hi = m; }
@@ -1986,6 +2008,12 @@ function caler(x, y, precision, cap) {
             }
         }
     }
+    // Sur l'itinéraire, son sens : à l'arrêt, sans cap, la voiture se
+    // calait dans l'autre, et la route prévue repartait au hasard.
+    if (meilleur && itineraire) {
+        const e = itineraire.etapes.find(e => e.a === meilleur.a);
+        if (e) meilleur.sens = e.sens;
+    }
     return meilleur;
 }
 
@@ -2015,7 +2043,9 @@ function recalculerChemin() {
     if (!an || !an.a) { voiture.chemin = null; return; }
     // Le chemin part de la position affichée, pas du relevé : il garde la
     // même abscisse pour la voiture, que la boucle fait avancer.
-    voiture.chemin = cheminDepuis(an, longueurPrevue());
+    // Sur un itinéraire, jusqu'à l'arrivée (20 km au plus) : la distance qui
+    // reste se lit dès le départ.
+    voiture.chemin = cheminDepuis(an, itineraire ? ITINERAIRE_CHEMIN_MAX_M : longueurPrevue());
     voiture.dChemin = 0;
     voiture.tChemin = an.t;
 }
@@ -2525,7 +2555,12 @@ function majHud(maintenant) {
     }
     const age = v.fix ? (maintenant - v.fix.t) / 1000 : Infinity;
     elRond.className = 'rond' + (age > 10 ? ' perdu' : v.precision > 25 ? ' faible' : '');
-    elGps.innerHTML = SIMU ? `Simulation à <b>${VITESSE_SIMU_KMH} km/h</b>`
+    const resteArrivee = itineraire && v.chemin && v.chemin.fin === 'arrivee' ? v.chemin.longueur - v.dChemin : null;
+    elGps.innerHTML = SIMU && VERS ? (simu.arrive ? `Arrivée${VERS.nom ? ' : <b>' + echapperHtml(VERS.nom) + '</b>' : ''}`
+            : resteArrivee != null ? `${VERS.nom ? echapperHtml(VERS.nom) : 'Arrivée'} dans <b>${resteArrivee >= 1000
+                ? (resteArrivee / 1000).toFixed(1).replace('.', ',') + ' km' : Math.round(resteArrivee / 10) * 10 + ' m'}</b>`
+            : 'Calcul de l\'itinéraire…')
+        : SIMU ? `Simulation à <b>${VITESSE_SIMU_KMH} km/h</b>`
         : !v.fix ? 'Position attendue…'
         : age > 10 ? `<b>Signal GPS perdu</b> depuis ${Math.round(age)} s`
         : `GPS <b>± ${Math.round(v.precision)} m</b>`;
@@ -2624,12 +2659,151 @@ window.addEventListener('pointerdown', () => { if (!verrouEcran || verrouEcran.r
 // fait demi-tour au bout d'une impasse, et attend au bord de ce qui n'est
 // pas encore lu. Elle donne un relevé par seconde, bruité comme un GPS : la
 // page ne sait rien d'autre d'elle.
-const simu = { a: null, s: 0, sens: 1, dernier: -Infinity, etat: { capEntree: null },
+// --- Itinéraire de la simulation ---------------------------------------------------
+// `vers=lat,lon` (et `versnom`, pour l'affichage) : la voiture simulée va
+// quelque part, par le plus court chemin du graphe BD TOPO, sens interdits
+// respectés, grands axes préférés ; la route prévue devient cet itinéraire,
+// jusqu'à l'arrivée. Pour les films et les essais : la page n'a pas de saisie
+// de destination. Les carrés d'une bande de ITINERAIRE_BANDE_M autour de la
+// droite qui joint départ et arrivée sont lus d'abord.
+const VERS = (() => {
+    const m = /^\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*$/.exec(PARAMS.get('vers') || '');
+    if (!SIMU || !m) return null;
+    const [x, y] = versLambert93(Number(m[2]), Number(m[1]));
+    return { x, y, nom: PARAMS.get('versnom') || null };
+})();
+const ITINERAIRE_BANDE_M = 400, ITINERAIRE_CHEMIN_MAX_M = 20000;
+// `attente=1` : la voiture simulée attend au départ que la page l'en libère
+// (window.__voiture.partir()) ; un film commence ainsi sur un sol chargé.
+let simuPartie = PARAMS.get('attente') !== '1';
+// Coût d'un mètre selon l'importance BD TOPO (1 à 6) : les grands axes d'abord.
+const POIDS_IMPORTANCE = [1, 1, 1, 1.1, 1.25, 1.5, 2];
+let itineraire = null;                   // { etapes: [{ a, sens }], fin: { a, s }, k, longueur }
+
+function tasPousser(tas, e) {
+    tas.push(e);
+    for (let i = tas.length - 1; i > 0;) {
+        const p = (i - 1) >> 1;
+        if (tas[p][0] <= tas[i][0]) break;
+        [tas[p], tas[i]] = [tas[i], tas[p]]; i = p;
+    }
+}
+function tasPrendre(tas) {
+    const haut = tas[0], dernier = tas.pop();
+    if (tas.length) {
+        tas[0] = dernier;
+        for (let i = 0; ;) {
+            const g = 2 * i + 1, d = g + 1;
+            let m = i;
+            if (g < tas.length && tas[g][0] < tas[m][0]) m = g;
+            if (d < tas.length && tas[d][0] < tas[m][0]) m = d;
+            if (m === i) break;
+            [tas[m], tas[i]] = [tas[i], tas[m]]; i = m;
+        }
+    }
+    return haut;
+}
+
+/** Les carrés de la bande entre départ et arrivée sont-ils tous lus ? */
+function carresItinerairePrets() {
+    const d = voiture.attendu, l = Math.hypot(VERS.x - d.x, VERS.y - d.y);
+    for (let t = 0; t <= l; t += CARRE_M / 2) {
+        const x = d.x + (VERS.x - d.x) * t / l, y = d.y + (VERS.y - d.y) * t / l;
+        for (const [ex, ey] of [[0, 0], [ITINERAIRE_BANDE_M, 0], [-ITINERAIRE_BANDE_M, 0], [0, ITINERAIRE_BANDE_M], [0, -ITINERAIRE_BANDE_M]]) {
+            const c = carreDe(x + ex, y + ey);
+            if (!c || !(c.etat === 'pret' || c.etat === 'hors')) return false;
+        }
+    }
+    return true;
+}
+
+/** Le plus court chemin, Dijkstra sur les nœuds du graphe ; null s'il n'y en a pas. */
+function calculerItineraire() {
+    const d = voiture.attendu, depart = caler(d.x, d.y, 40, null), arrivee = caler(VERS.x, VERS.y, 40, null);
+    if (!depart || !arrivee) return null;
+    const poids = b => (POIDS_IMPORTANCE[b.importance] || 2) * (simu.evitees.has(b) ? 5 : 1);
+    const dist = new Map(), prec = new Map(), tas = [];
+    const pousser = (n, c, p) => {
+        if (c >= (dist.get(n) ?? Infinity)) return;
+        dist.set(n, c); prec.set(n, p); tasPousser(tas, [c, n]);
+    };
+    const a0 = depart.a, a2 = arrivee.a;
+    if (a0.sens !== '-') pousser(a0.n1, (a0.L - depart.s) * poids(a0), { a: a0, sens: 1, de: null });
+    if (a0.sens !== '+') pousser(a0.n0, depart.s * poids(a0), { a: a0, sens: -1, de: null });
+    let meilleur = null;
+    while (tas.length) {
+        const [c, n] = tasPrendre(tas);
+        if (c > (dist.get(n) ?? Infinity)) continue;
+        if (meilleur && c >= meilleur.c) break;
+        if (n === a2.n0 && a2.sens !== '-') {
+            const t = c + arrivee.s * poids(a2);
+            if (!meilleur || t < meilleur.c) meilleur = { c: t, n, sens: 1 };
+        }
+        if (n === a2.n1 && a2.sens !== '+') {
+            const t = c + (a2.L - arrivee.s) * poids(a2);
+            if (!meilleur || t < meilleur.c) meilleur = { c: t, n, sens: -1 };
+        }
+        for (const b of n.aretes) {
+            if (b.n0 === b.n1 || !permise(b, n)) continue;
+            pousser(b.n0 === n ? b.n1 : b.n0, c + b.L * poids(b), { a: b, sens: b.n0 === n ? 1 : -1, de: n });
+        }
+    }
+    if (!meilleur) return null;
+    const etapes = [{ a: a2, sens: meilleur.sens }];
+    for (let n = meilleur.n; n;) {
+        const p = prec.get(n);
+        etapes.unshift({ a: p.a, sens: p.sens });
+        n = p.de;
+    }
+    let longueur = 0;
+    for (const e of etapes) longueur += e.a.L;
+    return { etapes, depart, fin: { a: a2, s: arrivee.s }, k: 0, longueur };
+}
+
+const simu = { a: null, s: 0, sens: 1, dernier: -Infinity, etat: { capEntree: null }, v: 0, k: 0, arrive: false,
                // Ce que la voiture simulée ne prend pas : chemins, voies réservées.
                evitees: { has: b => b.nature === 'Chemin' || b.nature === 'Route empierrée'
                                     || !!(b.acces && b.acces.startsWith('Restreint')) } };
 function gauss() { return Math.sqrt(-2 * Math.log(1 - Math.random())) * Math.cos(2 * Math.PI * Math.random()); }
+// Avec un itinéraire, la voiture simulée ralentit avant un virage (à 90°,
+// au tiers de sa vitesse) et s'arrête à l'arrivée ; sa vitesse suit en une
+// seconde.
+const VIRAGE_APPROCHE_M = 35, ARRIVEE_APPROCHE_M = 45;
+function vitesseVoulueSimu() {
+    const vmax = VITESSE_SIMU_KMH / 3.6;
+    if (!itineraire || simu.arrive) return simu.arrive ? 0 : vmax;
+    const a = simu.a, fin = simu.sens > 0 ? a.L - simu.s : simu.s;
+    if (simu.k === itineraire.etapes.length - 1) {
+        const reste = Math.abs(itineraire.fin.s - simu.s);
+        return vmax * Math.min(Math.max(reste / ARRIVEE_APPROCHE_M, 0.15), 1);
+    }
+    const suite = itineraire.etapes[simu.k + 1];
+    if (!suite || fin > VIRAGE_APPROCHE_M) return vmax;
+    const n = simu.sens > 0 ? a.n1 : a.n0;
+    const virage = Math.abs(ecartCap(capDepuis(suite.a, n), pointArete(a, simu.sens > 0 ? a.L : 0, simu.sens).cap));
+    return vmax * Math.min(Math.max(1 - virage / 120, 0.33), 1);
+}
+
 function majSimu(dt, maintenant) {
+    if (VERS && !itineraire) {
+        // En attendant l'itinéraire, la voiture attend au départ.
+        if (maintenant - (simu.essaiItineraire || 0) > 1000 && carresItinerairePrets()) {
+            simu.essaiItineraire = maintenant;
+            itineraire = calculerItineraire();
+            if (itineraire) {
+                const e = itineraire.etapes[0];
+                simu.a = e.a; simu.sens = e.sens; simu.s = itineraire.depart.s; simu.k = 0;
+                voiture.recalculer = true;
+            }
+        }
+        if (!itineraire) {
+            if (maintenant - simu.dernier < 1000) return;
+            simu.dernier = maintenant;
+            const [lon, lat] = depuisLambert93(voiture.attendu.x, voiture.attendu.y);
+            recevoirPosition({ coords: { latitude: lat, longitude: lon, accuracy: 5, speed: 0, heading: null } });
+            return;
+        }
+    }
     if (!simu.a) {
         const d = voiture.attendu;
         const m = caler(d.x, d.y, 40, null);
@@ -2637,18 +2811,27 @@ function majSimu(dt, maintenant) {
         simu.a = m.a; simu.s = m.s;
         simu.sens = m.a.sens === '-' ? -1 : 1;
     }
-    let reste = VITESSE_SIMU_KMH / 3.6 * dt;
-    let arrete = false;
-    for (let garde = 0; reste > 0 && garde < 20; garde++) {
+    simu.v += ((simuPartie ? vitesseVoulueSimu() : 0) - simu.v) * (1 - Math.exp(-dt / 1.0));
+    let reste = simu.v * dt;
+    let arrete = simu.arrive;
+    for (let garde = 0; reste > 0 && garde < 20 && !simu.arrive; garde++) {
         const a = simu.a;
+        if (itineraire && simu.k === itineraire.etapes.length - 1) {
+            const jusqua = Math.abs(itineraire.fin.s - simu.s);
+            if (reste >= jusqua) { simu.s = itineraire.fin.s; simu.arrive = true; arrete = true; break; }
+        }
         const fin = simu.sens > 0 ? a.L - simu.s : simu.s;
         if (reste < fin) { simu.s += simu.sens * reste; reste = 0; break; }
         reste -= fin;
         simu.s = simu.sens > 0 ? a.L : 0;
         const n = simu.sens > 0 ? a.n1 : a.n0;
         if (!carrePret(n.x, n.y)) { arrete = true; break; }
-        const choix = suiteProbable(a, simu.sens, n, simu.etat, simu.evitees, HASARD_SIMU);
-        if (!choix) { simu.sens = -simu.sens; simu.etat.capEntree = null; continue; }
+        const choix = itineraire ? itineraire.etapes[++simu.k]
+            : suiteProbable(a, simu.sens, n, simu.etat, simu.evitees, HASARD_SIMU);
+        if (!choix) {
+            if (itineraire) { simu.arrive = true; arrete = true; break; }
+            simu.sens = -simu.sens; simu.etat.capEntree = null; continue;
+        }
         simu.a = choix.a; simu.sens = choix.sens; simu.s = choix.sens > 0 ? 0 : choix.a.L;
     }
     if (maintenant - simu.dernier < 1000) return;
@@ -2656,7 +2839,7 @@ function majSimu(dt, maintenant) {
     const p = pointArete(simu.a, simu.s, simu.sens);
     const [lon, lat] = depuisLambert93(p.x + 2.5 * gauss(), p.y + 2.5 * gauss());
     recevoirPosition({ coords: { latitude: lat, longitude: lon, accuracy: 5,
-        speed: arrete ? 0 : VITESSE_SIMU_KMH / 3.6, heading: arrete ? null : (p.cap + convergence(lon) + 360) % 360 } });
+        speed: arrete ? 0 : simu.v, heading: arrete ? null : (p.cap + convergence(lon) + 360) % 360 } });
 }
 
 // --- Boucle ---------------------------------------------------------------------------------
@@ -2709,7 +2892,9 @@ function boucle(maintenant) {
 }
 
 // Pour les essais (outils/essai-voiture.mjs) : l'état, en lecture.
-window.__voiture = { voiture, carres, tuilesSol, aretes, camVue, camera, renderer, durees, dureesArbres, statsCache,
+const echapperHtml = t => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+window.__voiture = { voiture, carres, tuilesSol, aretes, camVue, camera, renderer, durees, dureesArbres, statsCache, simu,
+                     get itineraire() { return itineraire; }, partir: () => { simuPartie = true; },
                      manquees, statsPrecharge,
                      get budget() { return budgetConstruction; } };
 

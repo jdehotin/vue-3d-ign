@@ -75,6 +75,15 @@ messages de commit et dans les commentaires des modules.
     (pas de réseau, IGN en panne) est notée, gardée d'une session à
     l'autre, et redemandée plus tard, les plus demandées d'abord ; le
     panneau d'état dit combien attendent le réseau.
+  - **Une destination pour la conduite simulée** : `vers=lat,lon` (et
+    `versnom`) ; la page lit les carrés entre départ et arrivée, calcule le
+    plus court chemin sur le graphe BD TOPO (sens interdits respectés,
+    grands axes préférés), la voiture simulée le suit en ralentissant dans
+    les virages et s'arrête à l'arrivée ; la route bleue est l'itinéraire,
+    le panneau dit la distance qui reste. De la Bastille à la Nation :
+    2 202 m par le faubourg Saint-Antoine. `outils/film-voiture.mjs` en
+    tire un film, muet, image par image (`attente=1` : la voiture attend au
+    départ que tout soit chargé).
   - **La voiture** calée sur la route, vue de derrière ou de dessus, avec
     la vitesse, le nom de la rue et le cartouche de la route (A7, D15) ;
     entre deux relevés, elle avance le long de la route, et dans un tunnel,

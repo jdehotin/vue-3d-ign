@@ -555,7 +555,8 @@ Chaque premier chargement construit la scène, en quelques secondes.
   là où la voiture sera dans quelques secondes. En rue étroite, les façades entre la caméra et la
   voiture s'ajourent ; la nuit, le ciel et la photo s'assombrissent. Pour
   l'essayer sans rouler : `/voiture?simu=1&lat=…&lon=…&vitesse=90`, une
-  conduite simulée.
+  conduite simulée ; avec `&vers=lat,lon`, elle va quelque part, par le plus
+  court chemin, l'itinéraire tracé en bleu et la distance qui reste affichée.
 - **Sur téléphone, sur l'écran d'une voiture, ou en plein écran** (le bouton
   au-dessus du drone) : la vue prend tout l'écran, et le panneau devient un
   tiroir ouvert par ☰. Un bâtiment touché ouvre sa fiche par « Voir la fiche ».
@@ -873,6 +874,7 @@ cherche un autre lieu et s'y rend, et échoue à la moindre erreur JavaScript :
 npm install puppeteer-core
 node outils/essai-navigateur.mjs "http://localhost:8080/?lat=43.9116&lon=5.2003" capture.png
 node outils/essai-voiture.mjs "http://localhost:8080/voiture?simu=1&lat=48.8706&lon=2.3055&vitesse=50" 60 voiture.png   # la vue en voiture, une minute de conduite simulée
+node outils/film-voiture.mjs "http://localhost:8080/voiture?simu=1&lat=48.8532&lon=2.3692&vers=48.8483,2.3958&versnom=Nation&vitesse=40" docs/demo/demo-voiture-paysage.mp4   # le film d'un trajet, de la Bastille à la Nation
 node outils/verifier-recherche.mjs     # la recherche d'un lieu, sous Node, sans réseau
 node outils/verifier-export.mjs essai.ifc essai.gml   # les exports, sous Node (npm install three@0.160.0)
 pip install ifcopenshell pytest && python outils/valider_ifc.py essai.ifc   # l'IFC, comme un logiciel le lirait

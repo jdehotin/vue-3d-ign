@@ -26,6 +26,7 @@ python outils/valider_citygml.py essai.gml       # géométrie du CityGML ; son 
 python3 -m http.server -d outils 8000            # visionneuse-ifc.html : un IFC exporté, relu par web-ifc, propriétés au clic
 npm install puppeteer-core && node outils/essai-navigateur.mjs "http://localhost:8080/?lat=43.9116&lon=5.2003"
 node outils/essai-voiture.mjs "http://localhost:8080/voiture?simu=1&lat=48.8706&lon=2.3055&vitesse=50" 60 voiture.png   # la vue en voiture, conduite simulée
+node outils/film-voiture.mjs "http://localhost:8080/voiture?simu=1&lat=48.8532&lon=2.3692&vers=48.8483,2.3958&versnom=Nation&vitesse=40" docs/demo/demo-voiture-paysage.mp4   # film d'un trajet simulé (vers = destination)
 ```
 
 ## Architecture
