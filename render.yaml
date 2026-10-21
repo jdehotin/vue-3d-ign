@@ -9,7 +9,7 @@
 # il n'y a pas de base de données.
 services:
   - type: web
-    name: vue3d-ign
+    name: vue3d-ign-jdehotin
     runtime: python
     region: frankfurt
     # 2 Go : numpy, shapely et le LiDAR ne tiennent pas dans l'offre à 512 Mo.

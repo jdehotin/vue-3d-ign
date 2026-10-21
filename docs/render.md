@@ -19,7 +19,7 @@ scènes, sur le disque Render monté dans `/var/data`.
 4. Si l'option est proposée, régler *Auto-Deploy* sur **After CI Checks Pass** :
    un `pytest` rouge ne partira pas en production.
 5. Noter l'adresse du service, par exemple
-   `https://vue3d-ign.onrender.com` : c'est elle qui ira dans le `config.json`
+   `https://vue3d-ign-jdehotin.onrender.com` : c'est elle qui ira dans le `config.json`
    de l'extension.
 
 Le premier déploiement est plus lent : Render installe les dépendances, puis le
