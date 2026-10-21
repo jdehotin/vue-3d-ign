@@ -3,8 +3,9 @@ import base64
 
 import numpy as np
 import pytest
+import requests
 
-from vue3d import relief
+from vue3d import geopf, relief
 from vue3d.relief import RELIEF_NODATA, RELIEF_SENTINELLE
 
 
@@ -66,24 +67,115 @@ def test_un_relief_de_plus_de_3276_m_garde_ses_sommets(bil):
     assert alt(2.0, 48.0) == pytest.approx(1000.0, abs=0.1)
 
 
-def test_l_anneau_garde_ses_trous_et_les_elargit(bil):
-    """Mer ou frontière : l'anneau est servi, ses trous restent vides. Le
-    service mélange ses −99 999 aux voisins : les altitudes aberrantes autour
-    d'un trou (ici −61 m) partent avec lui, élargies de deux pixels."""
-    g = np.full((12, 12), 30.0)
-    g[:, :3] = RELIEF_NODATA
-    g[:, 3] = -61.0
-    bil(g)
-    r = relief.fetch_relief_anneau(2, 48, 2.1, 48.1, taille=12)
-    q = _decoder(r)
-    trous = q == RELIEF_SENTINELLE
-    assert trous[:, :6].all() and not trous[:, 6:].any()
-    assert r["zero_m"] == 30.0
+# --- Anneau, lu dans les tuiles natives -----------------------------------------
+# Une emprise de 44 m de maille (l'anneau d'une zone de 1 000 m) à cheval sur
+# deux lignes et deux colonnes de tuiles du niveau 11, près de la
+# Sainte-Victoire.
+ANNEAU = (5.59, 43.48, 5.66, 43.53)
+P11 = relief._pixel_deg(11)
 
 
-def test_l_anneau_entierement_hors_couverture_est_absent(bil):
-    bil(np.full((8, 8), RELIEF_NODATA))
-    assert relief.fetch_relief_anneau(2, 48, 2.1, 48.1, taille=8) is None
+@pytest.fixture
+def natives(monkeypatch):
+    """Remplace les tuiles WMTS par une fonction des pixels natifs (colonne X,
+    ligne Y, comptées depuis −180°, 90°) ; rend la liste des tuiles lues."""
+    lues = []
+
+    def poser(altitude):
+        def tuile(niveau, ligne, colonne):
+            lues.append((niveau, ligne, colonne))
+            y, x = np.mgrid[0:256, 0:256]
+            return altitude(colonne * 256 + x, ligne * 256 + y).astype(np.float64)
+        monkeypatch.setattr(relief, "_tuile_native", tuile)
+        return lues
+    return poser
+
+
+def _noeuds(emprise, taille):
+    """Coordonnées des nœuds de l'anneau en pixels natifs du niveau 11."""
+    o, s, e, n = emprise
+    x = (o + (e - o) * np.arange(taille) / (taille - 1) + 180) / P11 - 0.5
+    y = (90 - (n - (n - s) * np.arange(taille) / (taille - 1))) / P11 - 0.5
+    return x, y
+
+
+def test_l_anneau_interpole_les_pixels_natifs_a_travers_les_tuiles(natives):
+    """Centres des pixels aux demi-entiers, tuiles raboutées sans décalage :
+    un plan incliné ressort exact à chaque nœud (au décimètre près), même à
+    travers les coutures des quatre tuiles."""
+    lues = natives(lambda x, y: 200 + 0.5 * (x - 540_500) + 0.25 * (y - 135_200))
+    r = relief.fetch_relief_anneau(*ANNEAU, taille=128)
+    assert sorted(lues) == [(11, 528, 2111), (11, 528, 2112), (11, 529, 2111), (11, 529, 2112)]
+    x, y = _noeuds(ANNEAU, 128)
+    attendu = 200 + 0.5 * (x[None, :] - 540_500) + 0.25 * (y[:, None] - 135_200)
+    obtenu = r["zero_m"] + _decoder(r) * r["pas_m"]
+    assert np.abs(obtenu - attendu).max() <= 0.05 + 1e-9
+
+
+def test_le_niveau_natif_est_le_plus_grossier_sous_la_maille():
+    assert relief._niveau_natif(43.48, 43.53, 128) == 11        # 44 m : 38 m
+    assert relief._niveau_natif(43.0, 43.018, 128) == 13        # 16 m : 9,6 m
+    assert relief._niveau_natif(43.0, 43.001, 128) == 14        # sous le natif
+
+
+def test_l_anneau_garde_ses_trous_et_les_elargit_d_un_pixel(natives):
+    """Mer ou frontière : l'anneau est servi, ses trous restent vides. La
+    pyramide mêle ses −99 999 aux voisins : l'altitude aberrante au bord d'un
+    trou (ici −61 m) part avec lui, puis un pixel de plus ; un nœud dont un
+    pixel voisin est un trou en est un."""
+    x_trou = 540_600
+    natives(lambda x, y: np.where(x < x_trou, RELIEF_NODATA, np.where(x == x_trou, -61.0, 30.0)))
+    r = relief.fetch_relief_anneau(*ANNEAU, taille=128)
+    trous = _decoder(r) == RELIEF_SENTINELLE
+    x, _ = _noeuds(ANNEAU, 128)
+    attendus = np.floor(x) <= x_trou + 1
+    assert attendus.any() and not attendus.all()
+    assert (trous == attendus[None, :]).all()
+    assert r["zero_m"] == 30.0 and (_decoder(r)[~trous] == 0).all()
+
+
+def test_l_anneau_entierement_hors_couverture_est_absent(natives):
+    natives(lambda x, y: np.full(x.shape, float(RELIEF_NODATA)))
+    assert relief.fetch_relief_anneau(*ANNEAU, taille=8) is None
+
+
+class _Reponse:
+    def __init__(self, code, contenu=b"", type_="image/x-bil;bits=32"):
+        self.status_code = code
+        self.ok = code < 400
+        self.content = contenu
+        self.text = contenu.decode("latin-1")
+        self.headers = {"Content-Type": type_}
+
+
+@pytest.fixture
+def service(monkeypatch):
+    """Le service WMTS, réponse par réponse, sans attente entre les reprises."""
+    monkeypatch.setattr(geopf, "_places", geopf._Places(geopf.GEOPF_SIMULTANEES))
+    monkeypatch.setattr(geopf.time, "sleep", lambda s: None)
+    reponses = []
+    monkeypatch.setattr(geopf.requests, "get", lambda url, timeout: reponses.pop(0))
+    return reponses
+
+
+def test_une_tuile_hors_de_la_pyramide_est_un_trou_un_refus_un_echec(service):
+    """Un 404 jusqu'au bout est le large ou l'étranger : des trous. Un refus
+    passager est réessayé ; persistant, ou une page d'erreur rendue en 200,
+    la lecture échoue — la scène aussi, plutôt que d'être écrite trouée."""
+    plat = np.full((256, 256), 12.5, dtype="<f4").tobytes()
+    service[:] = [_Reponse(404)] * geopf.GEOPF_ESSAIS
+    assert (relief._tuile_native(11, 528, 2111) == RELIEF_NODATA).all()
+    service[:] = [_Reponse(400), _Reponse(200, plat)]
+    assert (relief._tuile_native(11, 528, 2111) == 12.5).all()
+    service[:] = [_Reponse(502)] * geopf.GEOPF_ESSAIS
+    with pytest.raises(requests.RequestException):
+        relief._tuile_native(11, 528, 2111)
+    service[:] = [_Reponse(200, b"<ExceptionReport/>", "application/xml")]
+    with pytest.raises(requests.RequestException):
+        relief._tuile_native(11, 528, 2111)
+    service[:] = [_Reponse(200, plat[:1000])]
+    with pytest.raises(requests.RequestException, match="tronquée"):
+        relief._tuile_native(11, 528, 2111)
 
 
 def test_l_echantillonneur_relit_le_relief_comme_la_vue(bil):

@@ -29,13 +29,14 @@ laisser la vue basculer sur son repli mondial que rapiécer.
 """
 
 import base64
+import functools
 import math
 import struct
 
 import numpy as np
 import requests
 
-from .geopf import get_avec_reprise, place
+from .geopf import en_parallele, get_avec_reprise, place
 
 RELIEF_LAYER = "ELEVATION.ELEVATIONGRIDCOVERAGE.HIGHRES"
 RELIEF_TAILLE = 256
@@ -176,10 +177,33 @@ ANNEAU_TAILLE = 128
 # quart de trous à Saint-Malo comme à Menton. Il n'est donc pas refusé pour
 # autant, ses trous restent simplement vides.
 #
-# Ses trous mêlés aux voisins (RELIEF_TROU_SOUS_M) : mesuré à Saint-Malo et
-# Menton, un élargissement de deux pixels (31 m) est le premier qui ne laisse
-# que des altitudes plausibles (−5 m au plus bas, sur l'estran).
-ANNEAU_ELARGISSEMENT = 2
+# Il est lu dans les tuiles WMTS natives de la pyramide, et non au WMS. Le
+# WMS rééchantillonne au plus proche, et à la maille de 44 m de l'anneau
+# d'une zone de 1 000 m il glisse en plus, toutes les 8 lignes environ, une
+# ligne prise 3,3 pixels natifs (130 m) plus au nord : recalée, elle colle au
+# RGE ALTI à 2 m près, en place elle s'en écarte de 11 à 37 m (RMS de la
+# ligne) au Regagnas, jusqu'à 190 m sous la Sainte-Victoire. La vue y
+# dessinait des arêtes est-ouest d'un bout à l'autre de l'anneau. Mesuré le
+# 2026-10-21 : 20 à 40 lignes aberrantes sur 128 dans les scènes vallonnées
+# du cache, presque aucune colonne. Les tuiles natives n'ont ni ligne
+# répétée ni ligne déplacée, du niveau 9 au niveau 14 ; l'horizon de la vue
+# les lit déjà, pour la même raison (static/index.html, « Horizon »).
+ALTI_WMTS = ("https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0"
+             f"&LAYER={RELIEF_LAYER}&STYLE=normal&FORMAT=image/x-bil;bits=32"
+             "&TILEMATRIXSET=WGS84G_6_14&TILEMATRIX={niveau}&TILEROW={ligne}&TILECOL={colonne}")
+ALTI_NIVEAU_MIN, ALTI_NIVEAU_MAX = 6, 14
+ALTI_TUILE_PX = 256
+# La pyramide mêle elle aussi ses −99 999 aux voisins près de la mer, à tous
+# les niveaux. Plus basse altitude restante sous le seuil RELIEF_TROU_SOUS_M,
+# élargi de k pixels natifs (niveaux 11, 12, 13), mesurée le 2026-10-21 :
+#
+#                   k=0                    k=1
+#   Saint-Malo   −16,1  −19,2  −17,5    −5,0  −5,0  −5,0   (l'estran)
+#   Menton       −17,7   −1,5  −18,2     0,1   0,0  −0,4
+#   Nice         −15,4   −7,1  −16,4    −0,1  −0,1  −0,2
+#
+# Un pixel suffit, deux ne changent rien.
+ANNEAU_ELARGISSEMENT = 1
 
 
 def _elargir(masque, pas):
@@ -194,16 +218,100 @@ def _elargir(masque, pas):
     return masque
 
 
+def _pixel_deg(niveau):
+    """Côté d'un pixel natif du niveau, en degrés (WGS84G : 2 tuiles sur 360°
+    au niveau 0)."""
+    return 180 / 2 ** niveau / ALTI_TUILE_PX
+
+
+def _niveau_natif(south, north, taille):
+    """Le plus grossier dont le pixel ne dépasse pas la maille nord-sud de la
+    grille : 11 (38 m) pour les 44 m de l'anneau d'une zone de 1 000 m."""
+    maille = (north - south) / max(taille - 1, 1)
+    for niveau in range(ALTI_NIVEAU_MIN, ALTI_NIVEAU_MAX + 1):
+        if _pixel_deg(niveau) <= maille:
+            return niveau
+    return ALTI_NIVEAU_MAX
+
+
+def _tuile_native(niveau, ligne, colonne):
+    """Une tuile de 256 × 256 altitudes, ligne 0 au nord.
+
+    Hors des limites de la pyramide (le large, l'étranger), le service répond
+    404 à chaque reprise : un fait, rendu en trous. Tout autre échec lève.
+    """
+    url = ALTI_WMTS.format(niveau=niveau, ligne=ligne, colonne=colonne)
+    try:
+        with place():
+            reponse = get_avec_reprise(url)
+    except requests.RequestException as exc:
+        if getattr(exc, "response", None) is not None and exc.response.status_code == 404:
+            return np.full((ALTI_TUILE_PX, ALTI_TUILE_PX), float(RELIEF_NODATA))
+        raise
+    if "bil" not in reponse.headers.get("Content-Type", ""):
+        raise requests.RequestException(
+            f"Tuile d'altitudes inattendue ({reponse.headers.get('Content-Type')}): "
+            f"{reponse.text[:200]}")
+    attendu = ALTI_TUILE_PX * ALTI_TUILE_PX * 4
+    if len(reponse.content) < attendu:
+        raise requests.RequestException("Tuile d'altitudes tronquée")
+    return np.frombuffer(reponse.content[:attendu], dtype="<f4").reshape(
+        ALTI_TUILE_PX, ALTI_TUILE_PX).astype(np.float64)
+
+
+def _altitudes_natives(west, south, east, north, taille):
+    """Grille de `taille` points de côté, nœuds aux bords de l'emprise, ligne
+    0 au nord, interpolée bilinéairement entre les centres des pixels natifs
+    — la même lecture que l'horizon de la vue. NaN là où un pixel voisin est
+    un trou, élargi de ANNEAU_ELARGISSEMENT."""
+    niveau = _niveau_natif(south, north, taille)
+    p = _pixel_deg(niveau)
+    # Pixels natifs entourant l'emprise ; leurs centres sont aux demi-entiers.
+    x0 = math.floor((west + 180) / p - 0.5)
+    x1 = math.floor((east + 180) / p - 0.5) + 1
+    y0 = math.floor((90 - north) / p - 0.5)
+    y1 = math.floor((90 - south) / p - 0.5) + 1
+    n = ALTI_TUILE_PX
+    tuiles = [(ligne, colonne) for ligne in range(y0 // n, y1 // n + 1)
+              for colonne in range(x0 // n, x1 // n + 1)]
+    lues = en_parallele(*(functools.partial(_tuile_native, niveau, ligne, colonne)
+                          for ligne, colonne in tuiles))
+    pixels = np.empty((y1 - y0 + 1, x1 - x0 + 1))
+    for (ligne, colonne), valeurs in zip(tuiles, lues):
+        ya, yb = max(y0, ligne * n), min(y1, ligne * n + n - 1)
+        xa, xb = max(x0, colonne * n), min(x1, colonne * n + n - 1)
+        pixels[ya - y0:yb - y0 + 1, xa - x0:xb - x0 + 1] = \
+            valeurs[ya - ligne * n:yb - ligne * n + 1, xa - colonne * n:xb - colonne * n + 1]
+    pixels[_elargir(pixels < RELIEF_TROU_SOUS_M, ANNEAU_ELARGISSEMENT)] = np.nan
+
+    lons = west + (east - west) * np.arange(taille) / (taille - 1)
+    lats = north - (north - south) * np.arange(taille) / (taille - 1)
+    fx = np.clip((lons + 180) / p - 0.5 - x0, 0, x1 - x0)
+    fy = np.clip((90 - lats) / p - 0.5 - y0, 0, y1 - y0)
+    i = np.minimum(np.floor(fx).astype(int), x1 - x0 - 1)
+    j = np.minimum(np.floor(fy).astype(int), y1 - y0 - 1)
+    ax, ay = (fx - i)[None, :], (fy - j)[:, None]
+    jj, ii = j[:, None], i[None, :]
+    # Un trou voisin rend NaN : 0 × NaN reste NaN.
+    return ((pixels[jj, ii] * (1 - ax) + pixels[jj, ii + 1] * ax) * (1 - ay)
+            + (pixels[jj + 1, ii] * (1 - ax) + pixels[jj + 1, ii + 1] * ax) * ay)
+
+
 def fetch_relief_anneau(west, south, east, north, taille=ANNEAU_TAILLE):
-    """Relief grossier autour de la scène, trous compris.
+    """Relief grossier autour de la scène, trous compris, lu dans les tuiles
+    natives du RGE ALTI.
 
     Même format que `fetch_relief`. None seulement si rien n'est couvert.
+
+    Raises:
+        requests.RequestException si une tuile n'a pas pu être lue.
     """
     west, south, east, north = map(float, (west, south, east, north))
-    grille = _bil(west, south, east, north, taille, taille).astype(np.float64)
-    trous = _elargir(grille < RELIEF_TROU_SOUS_M, ANNEAU_ELARGISSEMENT)
+    grille = _altitudes_natives(west, south, east, north, taille)
+    trous = np.isnan(grille)
     if trous.all():
         return None
+    grille[trous] = 0.0
     return _quantifier(grille, trous, west, south, east, north)
 
 

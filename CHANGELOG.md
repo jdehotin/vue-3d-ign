@@ -398,6 +398,17 @@ messages de commit et dans les commentaires des modules.
 
 ### Corrigé
 
+- **Les longues arêtes est-ouest de l'anneau de relief** (21 octobre 2026,
+  Sainte-Victoire, Regagnas) : le WMS de l'IGN, qui fournissait l'anneau
+  autour de la scène, y glisse toutes les 8 lignes environ une ligne prise
+  130 m plus au nord. Sur un versant, chacune devenait un mur ou une bande
+  sombre d'un bout à l'autre de l'anneau, jusqu'à 190 m de haut sous la
+  Sainte-Victoire. L'anneau est désormais lu dans les tuiles natives du RGE
+  ALTI, comme l'horizon : écart médian à une référence plus fine de 0,5 m
+  au lieu de 2,5 à 2,8 m, 25 m au plus au lieu de 117 à 196 m, même poids.
+  Presque toutes les scènes vallonnées du cache avaient 20 à 40 lignes
+  fausses sur 128 : `outils/reparer_anneaux.py` relit leur anneau sans les
+  reconstruire, rien d'autre dans la scène n'en dépendant.
 - **Pincer pour zoomer, en drone et au cortège.** En vol, la page coupe les
   gestes de la vue, et deux doigts n'y faisaient plus rien. Ils règlent
   désormais le recul de la caméra, comme la molette, y compris pendant le
