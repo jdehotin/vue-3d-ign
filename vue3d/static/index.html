@@ -36,6 +36,11 @@
                   padding:5px 10px; border-radius:5px; font-size:11px; cursor:pointer; }
         .toggle:hover { border-color:var(--muted); }
         .toggle.on { background:var(--accent); border-color:var(--accent); color:#fff; }
+        .legende-qualite { display:flex; flex-wrap:wrap; gap:4px 10px; margin-top:8px;
+                           font-size:10px; color:var(--muted); }
+        .legende-qualite[hidden] { display:none; }
+        .legende-qualite i { display:inline-block; width:9px; height:9px; border-radius:2px;
+                             margin-right:3px; vertical-align:-1px; }
         /* Une couche que la scène ne porte pas : éteinte, et pour de bon. */
         .toggle:disabled { cursor:default; opacity:.4; }
         .toggle:disabled:hover { border-color:var(--line); }
@@ -428,13 +433,15 @@
                 <button class="toggle on" id="t-fond">Photo aérienne</button>
                 <button class="toggle" id="t-plan">Plan IGN</button>
                 <button class="toggle on" id="t-relief">Relief</button>
+                <button class="toggle" id="t-qualite" hidden title="Source et précision du RGE ALTI, le MNT à 1 m : vert = LiDAR, bleu = images, orange = radar, rouge = BD ALTI. Là où le LiDAR HD existe, la scène le préfère.">Qualité MNT</button>
                 <button class="toggle on" id="t-horizon" title="Le paysage alentour jusqu'à 60 km, en tuiles : orthophoto et RGE ALTI de l'IGN">Horizon</button>
                 <button class="toggle" id="t-veg">Végétation</button>
                 <button class="toggle on" id="t-eau">Eau</button>
                 <button class="toggle on" id="t-routes">Routes</button>
                 <button class="toggle on" id="t-lignes">Lignes HT</button>
                 <button class="toggle on" id="t-constructions" hidden title="Réservoirs, torchères, cheminées, antennes et mâts de la BD TOPO">Réservoirs, mâts</button>
-                <button class="toggle on" id="t-ouvrages" hidden title="Murs, ponts, voies ferrées et terrains de sport de la BD TOPO">Murs, ponts, rails</button>
+                <button class="toggle on" id="t-ouvrages" hidden title="Murs, ponts et terrains de sport de la BD TOPO">Murs, ponts</button>
+                <button class="toggle on" id="t-voies" hidden title="Voies ferrées et tramways de la BD TOPO">Voies ferrées</button>
                 <button class="toggle on" id="t-cimetieres" hidden title="Cimetières civils et militaires de la BD TOPO">Cimetières</button>
                 <button class="toggle on" id="t-aerodromes" hidden title="Aérodromes, héliports et leurs pistes, de la BD TOPO">Aéroports</button>
                 <button class="toggle on" id="t-postes" hidden title="Postes de transformation électrique de la BD TOPO">Postes élec.</button>
@@ -447,6 +454,13 @@
                 <button class="toggle" id="t-dpe" title="Diagnostics de performance énergétique (ADEME) des bâtiments autour du point : lus au premier clic">DPE</button>
                 <button class="toggle" id="t-dvf" title="Ventes immobilières des cinq dernières années (DVF) autour du point : lues au premier clic">Ventes DVF</button>
                 <button class="toggle" id="t-bornes" title="Bornes de recharge pour véhicules électriques (base nationale IRVE, data.gouv.fr) autour du point : lues au premier clic">Bornes de recharge</button>
+            </div>
+            <div class="legende-qualite" id="legende-qualite" hidden>
+                <span><i style="background:#c2d69b"></i>LiDAR</span>
+                <span><i style="background:#4f81bd"></i>Images</span>
+                <span><i style="background:#e36c0a"></i>Radar</span>
+                <span><i style="background:#943636"></i>BD ALTI</span>
+                <span><i style="background:#b7b7b7"></i>Limite</span>
             </div>
             <div class="row">
                 <label for="speed" title="Orbite : degrés par seconde. Drone : vitesse de pointe, 3 m/s par cran.">vitesse</label>
@@ -948,6 +962,10 @@ function lirePolygone(texte) {
 }
 const POLY_TEXTE = PARAMS.get('poly');
 const POLY = POLY_TEXTE ? lirePolygone(POLY_TEXTE) : null;
+// D'où vient le contour : `origine=tc` est posé par le panneau Trimble
+// Connect. Il ne change que le libellé du sélecteur de zone ; le contour, lui,
+// se lit comme tous les autres.
+const ORIGINE = (PARAMS.get('origine') || '').toLowerCase();
 // Le plus grand côté de la boîte du contour, arrondi et borné comme la zone :
 // au-delà de ZONE_MAX_M, la vue n'est plus réglée pour (brouillard, ombres).
 const ZONE = ZONE_DU_CONTOUR();
@@ -1414,7 +1432,9 @@ const selectZone = document.getElementById('in-zone');
 // affiché : la zone qui en est tirée n'est qu'une échelle.
 const optionDessiner = [...selectZone.options].find(o => o.value === 'dessiner');
 const optionContour = POLY
-    ? new Option(`Contour dessiné (${ZONE.toLocaleString('fr-FR')} m au plus)`, 'contour')
+    ? new Option(ORIGINE === 'tc'
+        ? `Emprise du projet Trimble Connect (${ZONE.toLocaleString('fr-FR')} m au plus)`
+        : `Contour dessiné (${ZONE.toLocaleString('fr-FR')} m au plus)`, 'contour')
     : null;
 if (optionContour) selectZone.add(optionContour, optionDessiner);
 else if (![...selectZone.options].some(o => o.value === String(ZONE))) {
@@ -1432,6 +1452,7 @@ selectZone.addEventListener('change', () => {
     u.searchParams.set('lat', LAT0);
     u.searchParams.set('lon', LON0);
     u.searchParams.delete('poly');          // une zone en mètres le remplace
+    u.searchParams.delete('origine');       // et n'est plus l'emprise Trimble Connect
     // La zone par défaut ne s'écrit pas : le lien reste court.
     if (choixZone() !== String(ZONE_DEFAUT_M)) u.searchParams.set('zone', choixZone());
     else u.searchParams.delete('zone');
@@ -1660,6 +1681,16 @@ let terrain = null;      // { alt, min, max, mesh, hauteurs }
 let altitudeRef = 0;     // altitude du centre du site — l'origine des Y de la scène
 let relief = true;
 let exagVert = 1;
+// Masque de source du RGE ALTI, drapé sur le terrain quand on l'affiche.
+let qualiteRelief = null;
+let qualiteVisible = false;
+
+/** Le masque et sa légende suivent les boutons Relief et Qualité MNT. */
+function majQualite() {
+    if (qualiteRelief) qualiteRelief.visible = relief && qualiteVisible;
+    const legende = document.getElementById('legende-qualite');
+    if (legende) legende.hidden = !(qualiteRelief && relief && qualiteVisible);
+}
 
 /**
  * Y de la scène pour un point posé sur le terrain.
@@ -4018,6 +4049,67 @@ function deplacerTerrain() {
 }
 
 /**
+ * Drape le masque de source du RGE ALTI sur le terrain.
+ *
+ * Le PNG vient de la scène (`relief.qualite`), demandé par le serveur au même
+ * WMS et à la même emprise que le relief. Il est translucide : vert = LiDAR,
+ * bleu = corrélation d'images, orange = radar, rouge = BD ALTI. Le shader
+ * calcule ses coordonnées depuis la position des sommets, si bien que le
+ * masque suit le maillage et l'exagération sans second jeu d'UV.
+ */
+function construireQualiteRelief(r) {
+    if (!r || !r.qualite || !terrain) return;
+    const image = new Image();
+    image.onload = () => {
+        if (!terrain) return;
+        const texture = new THREE.Texture(image);
+        texture.flipY = false;          // la première ligne du PNG est au nord
+        // Les couleurs du PNG sont celles de la légende, déjà en sRGB : on les
+        // rend telles quelles, sans conversion, pour qu'elles restent lisibles.
+        texture.minFilter = THREE.LinearFilter;
+        texture.magFilter = THREE.LinearFilter;
+        texture.needsUpdate = true;
+        const [ax, ay] = toLocal(BORNES.o, BORNES.n);
+        const [bx, by] = toLocal(BORNES.e, BORNES.s);
+        const largeur = bx - ax, profondeur = ay - by;
+        if (!(largeur > 0 && profondeur > 0)) return;
+        const materiau = new THREE.ShaderMaterial({
+            uniforms: {
+                uCarte: { value: texture },
+                uBoite: { value: new THREE.Vector4(ax, -ay, 1 / largeur, 1 / profondeur) },
+                uOpacite: { value: 0.9 },
+            },
+            vertexShader: `
+                uniform vec4 uBoite;
+                varying vec2 vUv;
+                void main() {
+                    vUv = vec2((position.x - uBoite.x) * uBoite.z,
+                               (position.z - uBoite.y) * uBoite.w);
+                    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                }`,
+            fragmentShader: `
+                uniform sampler2D uCarte;
+                uniform float uOpacite;
+                varying vec2 vUv;
+                void main() {
+                    vec4 c = texture2D(uCarte, vUv);
+                    gl_FragColor = vec4(c.rgb, c.a * uOpacite);
+                }`,
+            transparent: true, depthWrite: false, side: THREE.FrontSide,
+            polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1,
+        });
+        qualiteRelief = new THREE.Mesh(terrain.mesh.geometry, materiau);
+        qualiteRelief.renderOrder = 1;
+        qualiteRelief.frustumCulled = false;
+        scene.add(qualiteRelief);
+        majQualite();
+        document.getElementById('t-qualite').hidden = false;
+    };
+    image.onerror = () => console.warn('Masque de qualité illisible : bouton masqué.');
+    image.src = `data:image/png;base64,${r.qualite}`;
+}
+
+/**
  * Repose chaque bâtiment sur son emprise. Aucune géométrie n'est retouchée.
  *
  * Seule la BASE suit l'exagération : le bâtiment reçoit l'élévation du sol
@@ -4125,7 +4217,7 @@ function appliquerExageration() {
     if (drapes.length) placerDrapes();
     if (lignesElec.length) placerLignes();
     if (constructionsPosees && constructionsPosees.length) placerConstructions();
-    if (ouvragesPoses && ouvragesPoses.length) placerOuvrages();
+    if ((ouvragesPoses && ouvragesPoses.length) || (voiesPoses && voiesPoses.length)) placerOuvrages();
     if (emprisesPosees && emprisesPosees.length) placerEmprises();
     if (pointsNuage) placerNuage();
     if (vehiculesPoses && vehiculesPoses.length) placerVehicules();
@@ -4148,6 +4240,7 @@ function appliquerExageration() {
 /** Bascule du relief : le fond passe du plan plat au maillage, ou l'inverse. */
 function appliquerRelief() {
     if (terrain) terrain.mesh.visible = relief;
+    majQualite();
     // Sans relief, la scène repose sur le grand plan à 0 : un anneau à plat
     // le z-fighterait sans rien montrer de plus.
     if (anneauRelief) anneauRelief.mesh.visible = relief;
@@ -4311,6 +4404,7 @@ async function chargerRelief() {
     mesh.castShadow = true;
     scene.add(mesh);
     terrain = { alt: source.alt, min, max, mesh, hauteurs, lignes };
+    construireQualiteRelief(ARTEFACT && ARTEFACT.relief);
     construireAnneau();
     construireEau();
     construireRoutes();
@@ -5727,6 +5821,13 @@ const MAT_TABLIER = new THREE.MeshStandardMaterial({ color: 0x8b8f95, roughness:
 const MAT_BALLAST_VOLUME = new THREE.MeshStandardMaterial({ color: 0x6a5f58, roughness: 1, flatShading: true });
 const MAT_BALLAST = MAT_ROUTE.clone();
 MAT_BALLAST.color.set(0x6a5f58);
+// Deux filets d'acier sur le ballast : sans eux, une voie au sol se lit comme
+// un chemin de terre sur l'orthophoto. L'écartement est celui de la voie
+// normale, 1,435 m.
+const RAIL_ECART = 0.7175;
+const RAIL_LARGEUR = 0.09;
+const MAT_RAIL = new THREE.MeshStandardMaterial({
+    color: 0xb9bec4, roughness: 0.55, metalness: 0.35 });
 // L'orthophoto montre déjà le terrain : l'aplat s'y superpose, translucide, et
 // le dit encore sur le Plan IGN.
 const COULEURS_TERRAIN = {
@@ -5745,8 +5846,10 @@ function materiauTerrain(nature) {
 }
 let OUVRAGES = null;
 var groupeOuvrages = new THREE.Group();
-scene.add(groupeOuvrages);
+var groupeVoies = new THREE.Group();
+scene.add(groupeOuvrages, groupeVoies);
 var ouvragesPoses = [];        // volumes : { mesh, alts, hauts }
+var voiesPoses = [];           // voies sur ouvrage : { mesh, alts, hauts }
 var ouvragesSurvol = [];
 // Le relief a répondu, ou a fini d'échouer : les ouvrages peuvent être posés.
 var reliefRegle = false;
@@ -5773,6 +5876,21 @@ function stationsLeLong(ligne, pas) {
         const a = pts[Math.max(i - 1, 0)], b = pts[Math.min(i + 1, pts.length - 1)];
         const dx = b[0] - a[0], dy = b[1] - a[1], l = Math.hypot(dx, dy) || 1;
         return { x: p[0], y: p[1], z: p[2], nx: -dy / l, ny: dx / l };
+    });
+}
+
+/**
+ * La même ligne, décalée de `ecart` mètres vers la gauche du sens de parcours
+ * (négatif : vers la droite). Sert aux deux files de rail, de part et d'autre
+ * de l'axe du ballast.
+ */
+function ligneDecalee(ligne, ecart) {
+    const pts = ligne.map(([lo, la, z]) => { const [x, y] = toLocal(lo, la); return [x, y, z]; });
+    return pts.map((p, i) => {
+        const a = pts[Math.max(i - 1, 0)], b = pts[Math.min(i + 1, pts.length - 1)];
+        const dx = b[0] - a[0], dy = b[1] - a[1], l = Math.hypot(dx, dy) || 1;
+        const [lo, la] = toLonLat(p[0] - dy / l * ecart, p[1] + dx / l * ecart);
+        return p[2] == null ? [lo, la] : [lo, la, p[2]];
     });
 }
 
@@ -5891,7 +6009,7 @@ function placerPoses(poses) {
     }
 }
 
-function placerOuvrages() { placerPoses(ouvragesPoses); }
+function placerOuvrages() { placerPoses(ouvragesPoses); placerPoses(voiesPoses); }
 
 function construireOuvrages() {
     if (!OUVRAGES || !reliefRegle || ouvragesConstruits) return;
@@ -5899,9 +6017,16 @@ function construireOuvrages() {
     const polygones = g => g.type === 'Polygon' ? [g.coordinates]
                          : g.type === 'MultiPolygon' ? g.coordinates : [];
     // Un maillage par matériau plutôt que par objet, comme les routes.
-    const ballast = [];
-    for (const v of OUVRAGES.voies) if (v.au_sol) ballast.push(...trianglesRuban(v.ligne, v.largeur_m));
-    if (ballast.length) maillageDrape(ballast, MAT_BALLAST, groupeOuvrages, VOIE_DECALAGE);
+    const ballast = [], rails = [];
+    for (const v of OUVRAGES.voies) {
+        if (!v.au_sol) continue;
+        ballast.push(...trianglesRuban(v.ligne, v.largeur_m));
+        for (const cote of [-1, 1]) {
+            rails.push(...trianglesRuban(ligneDecalee(v.ligne, cote * RAIL_ECART), RAIL_LARGEUR));
+        }
+    }
+    if (ballast.length) maillageDrape(ballast, MAT_BALLAST, groupeVoies, VOIE_DECALAGE);
+    if (rails.length) maillageDrape(rails, MAT_RAIL, groupeVoies, VOIE_DECALAGE + 0.03);
     const parNature = new Map();
     for (const t of OUVRAGES.terrains) {
         if (!parNature.has(t.nature)) parNature.set(t.nature, []);
@@ -5946,18 +6071,29 @@ function construireOuvrages() {
                 + '<br><i>piles et arches ne sont pas décrites</i>' };
             ouvragesSurvol.push(mesh);
         }
-        // Voies sur ouvrage : un ballast posé à leur altitude, sur le tablier.
-        const ballastHaut = [];
+        // Voies sur ouvrage : un ballast posé à leur altitude, sur le tablier,
+        // et les deux files de rail à son sommet.
+        const ballastHaut = [], railsHaut = [];
         for (const v of OUVRAGES.voies) {
             if (v.au_sol) continue;
             const stations = stationsLeLong(v.ligne, OUVRAGE_PAS);
-            if (stations.length >= 2) ballastHaut.push(...prismeLeLong(stations, v.largeur_m, sommet(BALLAST_EPAISSEUR), sommet(0)));
+            if (stations.length < 2) continue;
+            ballastHaut.push(...prismeLeLong(stations, v.largeur_m, sommet(BALLAST_EPAISSEUR), sommet(0)));
+            for (const cote of [-1, 1]) {
+                const file = stationsLeLong(ligneDecalee(v.ligne, cote * RAIL_ECART), OUVRAGE_PAS);
+                if (file.length >= 2) {
+                    railsHaut.push(...prismeLeLong(file, RAIL_LARGEUR,
+                        sommet(BALLAST_EPAISSEUR + 0.04), sommet(BALLAST_EPAISSEUR + 0.02)));
+                }
+            }
         }
-        if (ballastHaut.length) maillagePose(ballastHaut, MAT_BALLAST_VOLUME, TABLIER_PLANCHER);
+        if (ballastHaut.length) maillagePose(ballastHaut, MAT_BALLAST_VOLUME, TABLIER_PLANCHER, groupeVoies, voiesPoses);
+        if (railsHaut.length) maillagePose(railsHaut, MAT_RAIL, TABLIER_PLANCHER, groupeVoies, voiesPoses);
         ouvragesEnVolume = ouvragesSurvol.length > 0;
         placerOuvrages();
     }
     document.getElementById('t-ouvrages').hidden = !groupeOuvrages.children.length;
+    document.getElementById('t-voies').hidden = !groupeVoies.children.length;
     majCiblesSurvol();
     // Les masses qu'un mur ou un tablier explique quittent la végétation.
     if (ouvragesEnVolume && vegPrete) construireVegetation();
@@ -5994,6 +6130,11 @@ document.getElementById('t-ouvrages').addEventListener('click', e => {
     e.currentTarget.classList.toggle('on', groupeOuvrages.visible);
     majCiblesSurvol();
     if (ouvragesEnVolume && vegPrete) construireVegetation();
+});
+
+document.getElementById('t-voies').addEventListener('click', e => {
+    groupeVoies.visible = !groupeVoies.visible;
+    e.currentTarget.classList.toggle('on', groupeVoies.visible);
 });
 
 // --- Emprises : cimetières, aéroports, postes, haies ---------------------------
@@ -12236,6 +12377,7 @@ function validerDessin() {
     u.searchParams.set('lat', LAT0);
     u.searchParams.set('lon', LON0);
     u.searchParams.delete('zone');
+    u.searchParams.delete('origine');       // c'est un contour dessiné, pas un projet
     u.searchParams.set('poly', texte);
     location.assign(u.pathname + u.search + u.hash);
 }
@@ -12310,6 +12452,13 @@ btnRelief.addEventListener('click', () => {
     relief = !relief;
     btnRelief.classList.toggle('on', relief);
     appliquerRelief();
+});
+
+const btnQualite = document.getElementById('t-qualite');
+btnQualite.addEventListener('click', () => {
+    qualiteVisible = !qualiteVisible;
+    btnQualite.classList.toggle('on', qualiteVisible);
+    majQualite();
 });
 
 const curseurExag = document.getElementById('exag');

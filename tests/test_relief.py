@@ -1,8 +1,11 @@
-"""Relief RGE ALTI (vue3d/relief.py) : quantification et trous, sans réseau."""
+"""Relief RGE ALTI (vue3d/relief.py) : quantification, trous et LiDAR, sans réseau."""
 import base64
+import io
 
 import numpy as np
 import pytest
+import requests
+from PIL import Image
 
 from vue3d import relief
 from vue3d.relief import RELIEF_NODATA, RELIEF_SENTINELLE
@@ -15,10 +18,30 @@ def _decoder(r):
 
 @pytest.fixture
 def bil(monkeypatch):
-    """Remplace le WMS par une grille donnée."""
+    """Remplace le WMS par une grille donnée, sans masque de source."""
     def poser(grille):
         monkeypatch.setattr(relief, "_bil", lambda *a: np.asarray(grille, dtype="<f4"))
+        def pas_de_masque(*a):
+            raise requests.RequestException("masque non simulé")
+        monkeypatch.setattr(relief, "_qualite", pas_de_masque)
     return poser
+
+
+def _png_qualite(classes):
+    """Un PNG RGBA du masque, une couleur de la légende par classe."""
+    couleurs = {
+        "laser30": (194, 214, 155),
+        "images70": (198, 217, 241),
+        "radar": (227, 108, 10),
+    }
+    hauteur, largeur = classes.shape
+    image = Image.new("RGBA", (largeur, hauteur))
+    for y in range(hauteur):
+        for x in range(largeur):
+            image.putpixel((x, y), (*couleurs[classes[y, x]], 255))
+    tampon = io.BytesIO()
+    image.save(tampon, format="PNG")
+    return tampon.getvalue()
 
 
 def test_le_relief_est_quantifie_au_decimetre_au_dessus_du_minimum(bil):
@@ -94,3 +117,37 @@ def test_l_echantillonneur_relit_le_relief_comme_la_vue(bil):
     assert alt(2.05, 48.05) == pytest.approx(106.0)
     assert alt(2.2, 48.05) is None
     assert relief.echantillonneur(None) is None
+
+
+def test_le_lidar_remplace_le_rge_ou_le_masque_n_est_pas_laser(monkeypatch):
+    """Une moitié « images » passe au MNT LiDAR, l'autre, déjà laser, reste
+    au RGE ALTI. La transition est fondue sur quelques pixels."""
+    taille = 8
+    classes = np.full((taille, taille), "laser30", dtype=object)
+    classes[:, :taille // 2] = "images70"
+    monkeypatch.setattr(relief, "_bil", lambda *a: np.full((taille, taille), 100.0, dtype="<f4"))
+    monkeypatch.setattr(relief, "_bil_lidar", lambda *a: np.full((taille, taille), 110.0, dtype="<f4"))
+    monkeypatch.setattr(relief, "_qualite", lambda *a: _png_qualite(classes))
+
+    r = relief.fetch_relief(2, 48, 2.1, 48.1, taille=taille)
+    alt = relief.echantillonneur(r)
+    assert r["source"] == "LiDAR HD + RGE ALTI"
+    assert 0 < r["lidar_part"] < 1
+    assert r["qualite"]
+    assert alt(2.01, 48.05) == pytest.approx(110.0, abs=0.1)
+    assert alt(2.09, 48.05) == pytest.approx(100.0, abs=0.1)
+
+
+def test_le_lidar_n_est_pas_lu_quand_le_rge_est_deja_laser(monkeypatch):
+    """Le masque dit que le RGE ALTI vient du LiDAR : inutile de le relire."""
+    taille = 8
+    classes = np.full((taille, taille), "laser30", dtype=object)
+    monkeypatch.setattr(relief, "_bil", lambda *a: np.full((taille, taille), 100.0, dtype="<f4"))
+    monkeypatch.setattr(relief, "_qualite", lambda *a: _png_qualite(classes))
+    monkeypatch.setattr(relief, "_bil_lidar",
+                        lambda *a: (_ for _ in ()).throw(AssertionError("LiDAR lu à tort")))
+
+    r = relief.fetch_relief(2, 48, 2.1, 48.1, taille=taille)
+    assert r["source"] == "RGE ALTI (IGN)"
+    assert r["lidar_part"] == 0.0
+    assert r["qualite"]

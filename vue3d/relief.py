@@ -29,15 +29,49 @@ laisser la vue basculer sur son repli mondial que rapiécer.
 """
 
 import base64
+import io
+import logging
 import math
 import struct
 
 import numpy as np
 import requests
+from PIL import Image
 
 from .geopf import get_avec_reprise, place
 
+journal = logging.getLogger(__name__)
+
 RELIEF_LAYER = "ELEVATION.ELEVATIONGRIDCOVERAGE.HIGHRES"
+# Le MNT LiDAR HD, même emprise et même WMS que le RGE ALTI. Il sert de
+# remplacement là où le RGE ALTI vient d'une source moins précise.
+LIDAR_LAYER = "IGNF_LIDAR-HD_MNT_ELEVATION.ELEVATIONGRIDCOVERAGE.WGS84G"
+# Le masque de source du RGE ALTI : la couche qui dit d'où vient chaque dalle et
+# quelle est son erreur maximale. `ELEVATION.ELEVATIONGRIDCOVERAGE.THRESHOLD`,
+# souvent confondue avec elle, est la carte des seuils de pente pour
+# l'agriculture et ne dit rien de la précision du MNT.
+QUALITE_LAYER = "ELEVATIONGRIDCOVERAGE.HIGHRES.QUALITY"
+# Couleurs de la légende du masque (IGN). Le WMS les rend à un ou deux points
+# près, avec un canal alpha : la classe est la plus proche, à moins de 30.
+QUALITE_COULEURS = (
+    ((194, 214, 155), "laser30"),
+    ((234, 241, 221), "laser50"),
+    ((118, 146, 60), "laser80"),
+    ((198, 217, 241), "images70"),
+    ((0, 176, 240), "images5"),
+    ((79, 129, 189), "images10"),
+    ((227, 108, 10), "radar"),
+    ((148, 54, 52), "bdalti"),
+    ((0, 0, 0), "autre"),
+    ((183, 183, 183), "limite"),
+)
+QUALITE_LASER = frozenset(("laser30", "laser50", "laser80"))
+QUALITE_TOLERANCE = 30
+# Altitudes LiDAR aberrantes : la mer et les dalles non couvertes. Le RGE ALTI
+# borne déjà ses trous à -20 m ; le LiDAR descend plus bas sur les côtes.
+LIDAR_SOUS_M = -20
+LIDAR_SUR_M = 9000
+
 RELIEF_TAILLE = 256
 RELIEF_NODATA = -99999
 # Au-delà, l'emprise est en bord de couverture : on ne renvoie rien.
@@ -69,8 +103,8 @@ RELIEF_TROU_ELARGISSEMENT_M = 6
 M_PAR_DEGRE_LAT = 111320
 
 
-def _bil(west, south, east, north, largeur, hauteur):
-    """GetMap BIL32 sur la couche d'altitude, décodé en grille de flottants.
+def _bil_layer(layer, west, south, east, north, largeur, hauteur):
+    """GetMap BIL32 d'une couche d'altitude, décodé en grille de flottants.
 
     Trois pièges, tous vérifiés contre le service : en WMS 1.3.0 avec EPSG:4326
     la BBOX s'écrit lat,lon ; le corps est du float32 petit-boutiste brut,
@@ -79,7 +113,7 @@ def _bil(west, south, east, north, largeur, hauteur):
     """
     url = (
         "https://data.geopf.fr/wms-r/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap"
-        f"&LAYERS={RELIEF_LAYER}&STYLES=&CRS=EPSG:4326"
+        f"&LAYERS={layer}&STYLES=&CRS=EPSG:4326"
         "&FORMAT=image/x-bil;bits=32"
         f"&WIDTH={largeur}&HEIGHT={hauteur}"
         f"&BBOX={south},{west},{north},{east}"
@@ -95,6 +129,69 @@ def _bil(west, south, east, north, largeur, hauteur):
     if len(reponse.content) < attendu:
         raise requests.RequestException("BIL relief tronqué")
     return np.frombuffer(reponse.content[:attendu], dtype="<f4").reshape(hauteur, largeur)
+
+
+def _bil(west, south, east, north, largeur, hauteur):
+    """RGE ALTI, la source de référence de la scène."""
+    return _bil_layer(RELIEF_LAYER, west, south, east, north, largeur, hauteur)
+
+
+def _bil_lidar(west, south, east, north, largeur, hauteur):
+    """MNT LiDAR HD, la source de remplacement quand elle couvre l'emprise."""
+    return _bil_layer(LIDAR_LAYER, west, south, east, north, largeur, hauteur)
+
+
+def _qualite(west, south, east, north, largeur, hauteur):
+    """PNG du masque de source du RGE ALTI, en 4 canaux (RGBA)."""
+    url = (
+        "https://data.geopf.fr/wms-r/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap"
+        f"&LAYERS={QUALITE_LAYER}&STYLES=&CRS=EPSG:4326"
+        "&FORMAT=image/png"
+        f"&WIDTH={largeur}&HEIGHT={hauteur}"
+        f"&BBOX={south},{west},{north},{east}"
+    )
+    with place():
+        reponse = get_avec_reprise(url)
+    reponse.raise_for_status()
+    if "png" not in reponse.headers.get("Content-Type", ""):
+        raise requests.RequestException(
+            f"Masque de source inattendu ({reponse.headers.get('Content-Type')}): "
+            f"{reponse.text[:200]}")
+    return reponse.content
+
+
+def _classes_qualite(png, largeur, hauteur):
+    """Classe de chaque pixel du masque, -1 quand la couleur n'est pas connue.
+
+    Le PNG du WMS est translucide et anticrénelé : les pixels de bord ne
+    tombent pas exactement sur une couleur de la légende. On les laisse
+    inconnus, donc au RGE ALTI, plutôt que de deviner.
+    """
+    with Image.open(io.BytesIO(png)) as image:
+        image = image.convert("RGBA")
+        if image.size != (largeur, hauteur):
+            image = image.resize((largeur, hauteur), Image.NEAREST)
+        pixels = np.asarray(image)
+    rgb = pixels[..., :3].astype(np.int32)
+    couleurs = np.asarray([couleur for couleur, _ in QUALITE_COULEURS], dtype=np.int32)
+    distances = ((rgb[:, :, None, :] - couleurs[None, None, :, :]) ** 2).sum(axis=-1)
+    index = distances.argmin(axis=-1)
+    connus = ((distances.min(axis=-1) <= QUALITE_TOLERANCE ** 2)
+              & (pixels[..., 3] >= 32))
+    classes = np.full((hauteur, largeur), -1, dtype=np.int8)
+    classes[connus] = index[connus]
+    return classes
+
+
+def _flou(masque, rayon=2):
+    """Moyenne 5 points répétée : une transition de quelques pixels entre les
+    deux sources, plutôt qu'une marche à la frontière de deux dalles."""
+    doux = masque.astype(np.float64)
+    for _ in range(rayon):
+        p = np.pad(doux, 1, mode="edge")
+        doux = (p[1:-1, 1:-1] + p[:-2, 1:-1] + p[2:, 1:-1]
+                + p[1:-1, :-2] + p[1:-1, 2:]) / 5.0
+    return doux
 
 
 def fetch_altitudes(west, south, east, north, taille):
@@ -135,24 +232,75 @@ def _quantifier(grille, trous, west, south, east, north):
     }
 
 
-def fetch_relief(west, south, east, north, taille=RELIEF_TAILLE):
+def fetch_relief(west, south, east, north, taille=RELIEF_TAILLE, lidar=True):
     """Relief de l'emprise, prêt à embarquer dans la scène.
+
+    Le RGE ALTI reste la source de référence. Là où son masque de source dit
+    qu'il vient d'images, de radar ou de BD ALTI — donc d'une source moins
+    précise que le LiDAR —, le MNT LiDAR HD le remplace cellule pour cellule
+    quand il couvre l'emprise. Ailleurs, le RGE ALTI est déjà issu du LiDAR ou
+    le LiDAR manque : il est conservé tel quel.
+
+    `qualite` porte le PNG du masque de source, pour la vue qui l'affiche ;
+    `lidar_part` dit quelle part de la grille a effectivement changé de source.
 
     Returns:
         dict(width, height, bbox, zero_m, pas_m, altitudes) où `altitudes` est
         un tableau d'entiers 16 bits encodé en base64, en pas de 0,1 m au-dessus
         de `zero_m`, ligne 0 au nord. Les trous valent RELIEF_SENTINELLE.
+        `lidar_part` dit la part de la grille venue du LiDAR, `source` et
+        `precision` le disent en clair quand elle n'est pas nulle, et `qualite`
+        porte le PNG du masque en base64 quand il a été lu.
         None si l'emprise n'est pas couverte.
     """
     west, south, east, north = map(float, (west, south, east, north))
     grille = _bil(west, south, east, north, taille, taille).astype(np.float64)
+
+    qualite_png = None
+    classes = None
+    if lidar:
+        # Le masque est un confort : s'il manque, le RGE ALTI suffit et la
+        # scène ne doit pas échouer pour lui.
+        try:
+            qualite_png = _qualite(west, south, east, north, taille, taille)
+            classes = _classes_qualite(qualite_png, taille, taille)
+        except Exception as exc:  # noqa: BLE001 - service public, panne banale
+            journal.warning("Masque de source du RGE ALTI indisponible : %s", exc)
+
+    poids = None
+    if classes is not None:
+        indices_non_laser = [i for i, (_, nom) in enumerate(QUALITE_COULEURS)
+                             if nom not in QUALITE_LASER]
+        a_remplacer = np.isin(classes, indices_non_laser)
+        if a_remplacer.any():
+            try:
+                lidar_grid = _bil_lidar(west, south, east, north, taille, taille).astype(np.float64)
+            except Exception as exc:  # noqa: BLE001 - le RGE ALTI reste valable
+                journal.warning("MNT LiDAR HD indisponible : %s", exc)
+            else:
+                valide = (lidar_grid > LIDAR_SOUS_M) & (lidar_grid < LIDAR_SUR_M)
+                poids = _flou((a_remplacer & valide).astype(np.float64), 2)
+                if poids.max() > 0:
+                    grille = grille * (1.0 - poids) + lidar_grid * poids
+                else:
+                    poids = None
+
     maille = (north - south) * M_PAR_DEGRE_LAT / max(taille - 1, 1)
     trous = _elargir(grille < RELIEF_TROU_SOUS_M, math.ceil(RELIEF_TROU_ELARGISSEMENT_M / maille))
     if trous.mean() > RELIEF_PART_TROUS_MAX:
         return None
     if trous.all():
         return None
-    return _quantifier(grille, trous, west, south, east, north)
+    relief = _quantifier(grille, trous, west, south, east, north)
+    part = round(float(poids.mean()), 3) if poids is not None else 0.0
+    relief["lidar_part"] = part
+    if part > 0:
+        relief["source"] = "LiDAR HD + RGE ALTI"
+        relief["precision"] = ("1 m, LiDAR HD là où le RGE ALTI vient d'images, "
+                               "de radar ou de BD ALTI")
+    if qualite_png:
+        relief["qualite"] = base64.b64encode(qualite_png).decode("ascii")
+    return relief
 
 
 # --- Anneau de contexte ---------------------------------------------------

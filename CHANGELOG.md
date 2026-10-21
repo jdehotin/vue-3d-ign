@@ -11,6 +11,59 @@ Les plus récents en premier. Les chiffres cités sont ceux mesurés au moment d
 changement, sur des lieux publics ; le détail et la méthode sont dans les
 messages de commit et dans les commentaires des modules.
 
+## Scène v16 — 21 octobre 2026
+
+### Ajouté
+
+- **Le relief bascule sur le LiDAR HD là où le RGE ALTI n'est pas laser.** Le
+  masque de source du RGE ALTI
+  (`ELEVATIONGRIDCOVERAGE.HIGHRES.QUALITY`, et non
+  `ELEVATION.ELEVATIONGRIDCOVERAGE.THRESHOLD`, qui donne des seuils de pente
+  agricoles) dit, pour chaque cellule, si le MNT à 1 m vient déjà du LiDAR
+  (laser30, laser50, laser80) ou d'une source moins précise (images, radar,
+  BD ALTI). `relief.fetch_relief` garde le RGE ALTI dans le premier cas et
+  remplace les cellules du second par le MNT LiDAR HD
+  (`IGNF_LIDAR-HD_MNT_ELEVATION.ELEVATIONGRIDCOVERAGE.WGS84G`) quand il est
+  valide — altitude entre -20 et 9 000 m —, avec un fondu de deux pixels pour
+  éviter une marche entre les deux sources. Le masque PNG est embarqué dans la
+  scène (`relief.qualite`), qui déclare aussi `source`, `precision` et
+  `lidar_part`. Mesuré : Bordeaux (44,84, -0,58) passe à 100 % LiDAR HD,
+  Gordes reste au RGE ALTI (déjà laser30), Saint-Malo aussi (LiDAR invalide sur
+  l'emprise). Première scène : 9,9 s à Gordes, 20,8 s à Bordeaux ; masque de
+  7,7 Ko et 1,8 Ko. Une panne du masque ou du LiDAR laisse le RGE ALTI et la
+  scène se construit.
+- **La source du MNT se voit.** Le bouton **Qualité MNT** drape le masque sur
+  le terrain, aux couleurs de la légende de l'IGN — vert pour le LiDAR, bleu
+  pour les images, orange pour le radar, rouge pour la BD ALTI —, sans second
+  jeu d'UV : le shader lit la position des sommets, donc le masque suit le
+  maillage et l'exagération. Il n'apparaît que si la scène porte le masque.
+- **Les voies ferrées ont leur propre bouton et leurs rails.** Les voies
+  quittent le groupe des murs et des ponts pour `groupeVoies`, avec le bouton
+  **Voies ferrées** ; chacune porte deux files d'acier de 0,09 m, écartées de
+  1,435 m, au sol comme sur un ouvrage, en plus du ballast. Le bouton n'est
+  révélé que si la scène a des voies : 60 à Part-Dieu, aucune à Gordes, où
+  l'ancien bouton restait caché faute de murs ou de ponts.
+- **L'emprise d'un projet Trimble Connect est une zone proposée.** Le panneau
+  lit désormais `address.geometry` avant `location` : un projet qui donne à la
+  fois un point d'ancrage et un contour garde son emprise. Celle-ci est le
+  choix par défaut, à côté des zones de 500 m, 1 km et 2 km, et le bouton
+  **Emprise** permet d'y revenir après avoir choisi une zone. Le lien porte
+  `origine=tc` ; la page y lit le libellé « Emprise du projet Trimble
+  Connect ». Changer de zone ou dessiner un contour retire `origine`, qui ne
+  décrit plus la scène.
+
+### Vérifié
+
+- 499 tests Python passent sous Windows ; les trois échecs connus restent
+  propres à Windows (`test_toits_rapides[pret]`, `test_toits_rapides[tot]`,
+  `test_tuiles`) et passent sous Linux. 18 tests Node passent dans l'extension.
+- Scène de Gordes (500 m) : `s-src` affiche « RGE ALTI (IGN) », le bouton
+  **Qualité MNT** apparaît, **Voies ferrées** reste caché. Scène de Bordeaux
+  (500 m) : « LiDAR HD + RGE ALTI », **Qualité MNT** et **Voies ferrées**
+  apparaissent. Page avec `?poly=…&origine=tc` : le sélecteur affiche
+  « Emprise du projet Trimble Connect (150 m au plus) », et le passage à 500 m
+  retire `origine` et `poly` de l'URL.
+
 ## Scène v15 — 15 octobre 2026
 
 ### Ajouté

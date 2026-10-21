@@ -119,7 +119,10 @@ journal = logging.getLogger(__name__)
 #      refroidissement (constructions.py).
 # 15 : toits-terrasses en pans, même proches du toit résumé
 #      (toits.TOITS_PLAT_PENTE_DEG) : le résumé n'a qu'une pente.
-SCENE_VERSION = 15
+# 16 : relief LiDAR HD là où le masque de source du RGE ALTI montre des
+#      images, du radar ou de la BD ALTI (relief.fetch_relief), et masque de
+#      source embarqué pour la vue.
+SCENE_VERSION = 16
 # Demi-côté de l'emprise, en degrés : ~178 m de part et d'autre du point.
 SCENE_DELTA = 0.0016
 # Demi-côté de l'anneau, en mètres et non en degrés : carré sur le terrain.

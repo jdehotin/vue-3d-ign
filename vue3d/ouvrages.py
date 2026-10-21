@@ -52,7 +52,8 @@ journal = logging.getLogger(__name__)
 
 # Format de la couche. L'incrémenter ne refait que la couche, pas les scènes :
 # le numéro est dans le nom du fichier de cache (scene.NOM_OUVRAGES).
-OUVRAGES_VERSION = 1
+# 2 : hauteurs comptées depuis le relief LiDAR HD de la scène 16.
+OUVRAGES_VERSION = 2
 
 COUCHES = {
     "lineaires": "BDTOPO_V3:construction_lineaire",

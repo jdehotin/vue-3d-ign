@@ -56,7 +56,8 @@ journal = logging.getLogger(__name__)
 # 2 : la raison de chaque ouvrage ajouré (ajoures_detail), que la fiche dit.
 # 3 : le sol vu sous une structure, et non plus le sol vu seul — une cour à
 #     ciel ouvert n'est plus un ouvrage ajouré.
-NUAGE_VERSION = 3
+# 4 : hauteurs relatives au relief LiDAR HD de la scène 16.
+NUAGE_VERSION = 4
 
 COUCHE_DALLES = "IGNF_LIDAR-HD_METADONNEE:metadata"
 CLASSE_SOL = 2
