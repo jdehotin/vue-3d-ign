@@ -40,11 +40,16 @@ sinon 3.14, où les houppiers retombent à zéro.
 
 ## Recette après déploiement
 
+Service en ligne : `https://vue3d-ign-jdehotin.onrender.com`.
+
 - `GET /api/sante` répond 200.
 - `GET /?lat=43.9116&lon=5.2003` construit la scène de Gordes en 20 à 30 s.
 - Un second appel est rapide, **et le reste après un redémarrage** du service :
   c'est la preuve que `/var/data/cache` est bien écrit.
 - Les journaux Render ne montrent aucune erreur d'écriture dans le cache.
+
+Mesures du 21 octobre 2026 : première scène de Gordes à 500 m en 11 s, relue
+en 3,3 s ; contour `poly` en 4,6 s.
 
 ## Ce que ce service ne fait pas
 
