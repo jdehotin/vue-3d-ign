@@ -20,9 +20,27 @@ scènes, sur le disque Render monté dans `/var/data`.
 3. Render lit `render.yaml` et crée le service et son disque de 5 Go.
 4. Si l'option est proposée, régler *Auto-Deploy* sur **After CI Checks Pass** :
    un `pytest` rouge ne partira pas en production.
-5. Noter l'adresse du service, par exemple
-   `https://vue3d-ign-jdehotin.onrender.com` : c'est elle qui ira dans le `config.json`
-   de l'extension.
+5. Noter l'adresse du service : `https://vue3d-ign-oncdesncf.onrender.com`.
+   C'est elle qui ira dans le `config.json` de l'extension.
+
+### Le nom et l'adresse ne sont pas la même chose
+
+Render attribue le sous-domaine `onrender.com` **au moment de la création du
+service**, d'après son nom. Renommer un service dans le dashboard (*Settings →
+Name*) change son nom — celui que voit le Blueprint et qui figure dans
+`render.yaml` — mais **pas son adresse** : l'ancienne continue de répondre et
+la nouvelle renvoie 404. Le service affiché dans le dashboard sous le nom
+`vue3d-ign-oncdesncf` répond donc toujours sur
+`https://vue3d-ign-jdehotin.onrender.com`.
+
+Le Blueprint, lui, identifie un service **par son nom** : si `render.yaml` porte
+un nom qu'aucun service ne porte, Render **recrée** un service à ce nom — avec
+un disque neuf et une facture en plus. Le nom de `render.yaml` doit donc
+toujours être celui du service existant.
+
+Pour obtenir une nouvelle adresse `onrender.com`, il faut donc recréer le
+service, pas le renommer. La marche à suivre est décrite dans
+[Changer l'adresse du service](#changer-ladresse-du-service).
 
 Le premier déploiement est plus lent : Render installe les dépendances, puis le
 service démarre à froid. Les suivants partent à chaque push sur `main`.
@@ -38,9 +56,29 @@ service démarre à froid. Les suivants partent à chaque push sur `main`.
 La version de Python est épinglée par `.python-version` (`3.12`). Render prend
 sinon 3.14, où les houppiers retombent à zéro.
 
+## Changer l'adresse du service
+
+L'adresse `onrender.com` étant figée à la création, une nouvelle adresse
+suppose un **nouveau service**. Render le crée à partir du Blueprint, qui
+identifie le service par son nom : changer le `name:` de `render.yaml` suffit
+à demander cette création.
+
+1. Renommer le service existant dans le dashboard (*Settings → Name*), avec un
+   nom de repli, par exemple `vue3d-ign-oncdesncf-ancien`. Son adresse ne change
+   pas : `https://vue3d-ign-jdehotin.onrender.com` reste le secours.
+2. Changer le `name:` de `render.yaml` pour le nom voulu, ici
+   `vue3d-ign-oncdesncf`, et le pousser.
+3. Render crée le service et son disque. Le Blueprint ne supprime jamais une
+   ressource : l'ancien service reste, avec son cache.
+4. Une fois le nouveau service **Live** et vérifié, supprimer l'ancien service
+   et son disque. Sans cela, deux instances payantes tournent en parallèle.
+
+Le cache est propre à chaque disque : la première scène du nouveau service
+prend 20 à 30 s, comme après n'importe quel premier déploiement.
+
 ## Recette après déploiement
 
-Service en ligne : `https://vue3d-ign-jdehotin.onrender.com`.
+Service en ligne : `https://vue3d-ign-oncdesncf.onrender.com`.
 
 - `GET /api/sante` répond 200.
 - `GET /?lat=43.9116&lon=5.2003` construit la scène de Gordes en 20 à 30 s.
@@ -69,3 +107,11 @@ en 3,3 s ; contour `poly` en 4,6 s.
 - **Quota partagé** : `VUE3D_PROXY` vaut 0, ou le proxy de Render n'est pas
   celui attendu.
 - **Houppiers absents** : la version de Python n'est pas 3.12.
+- **`onrender.com` renvoie 404 après un renommage** : le sous-domaine est
+  attribué à la création du service et ne suit pas le renommage. Vérifier
+  l'adresse affichée sous le nom du service dans le dashboard : c'est elle qui
+  répond, l'autre renvoie 404. Pour une nouvelle adresse, recréer le service
+  ([procédure](#changer-ladresse-du-service)).
+- **Le Blueprint recrée le service** : `render.yaml` porte un nom qu'aucun
+  service ne porte plus. Le nom de `render.yaml` doit être celui du service
+  dans le dashboard.
