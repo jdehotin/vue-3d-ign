@@ -64,8 +64,9 @@ identifie le service par son nom : changer le `name:` de `render.yaml` suffit
 à demander cette création.
 
 1. Renommer le service existant dans le dashboard (*Settings → Name*), avec un
-   nom de repli, par exemple `vue3d-ign-oncdesncf-ancien`. Son adresse ne change
-   pas : `https://vue3d-ign-jdehotin.onrender.com` reste le secours.
+   nom de repli, par exemple `vue3d-ign-jdehotin-ancien`. Son adresse ne change
+   pas : `https://vue3d-ign-jdehotin.onrender.com` reste le secours le temps
+   de la bascule.
 2. Changer le `name:` de `render.yaml` pour le nom voulu, ici
    `vue3d-ign-oncdesncf`, et le pousser.
 3. Render crée le service et son disque. Le Blueprint ne supprime jamais une
@@ -75,6 +76,22 @@ identifie le service par son nom : changer le `name:` de `render.yaml` suffit
 
 Le cache est propre à chaque disque : la première scène du nouveau service
 prend 20 à 30 s, comme après n'importe quel premier déploiement.
+
+### Supprimer un service dont le Blueprint ne s'occupe plus
+
+Une ressource retirée du Blueprint n'est plus recréée à la synchronisation
+suivante : vérifier l'onglet **Resources** du Blueprint, qui ne doit plus
+lister le service à supprimer. Sans cette vérification, la suppression serait
+annulée au prochain *Manual Sync*.
+
+La fiche du service (*Settings* → *Delete Web Service*) demande de recopier
+une commande pour confirmer :
+
+```text
+sudo delete web service <nom-du-service>
+```
+
+Le disque attaché part avec le service.
 
 ### Si le Blueprint ne crée rien
 

@@ -71,11 +71,13 @@ messages de commit et dans les commentaires des modules.
   renommer un service dans le dashboard change son nom, pas son adresse —
   l'ancienne continue de répondre et la nouvelle renvoie 404. Pour obtenir
   une nouvelle adresse, il a fallu recréer le service : l'ancien est devenu
-  `vue3d-ign-jdehotin-ancien` et garde
-  `https://vue3d-ign-jdehotin.onrender.com` en secours, avec son cache ; le
-  nouveau a son propre disque et son cache propre, vide au départ. Le panneau
-  Trimble Connect suit la nouvelle adresse ; son manifeste est inchangé et
-  l'extension n'a pas eu besoin d'être réinstallée.
+  `vue3d-ign-jdehotin-ancien`, a gardé
+  `https://vue3d-ign-jdehotin.onrender.com` en secours le temps de la bascule,
+  puis a été supprimé avec son disque — il n'est plus dans le Blueprint, qui ne
+  recrée donc pas ce que l'on vient d'effacer. Le nouveau service a son propre
+  disque et son cache propre, vide au départ. Le panneau Trimble Connect suit
+  la nouvelle adresse ; son manifeste est inchangé et l'extension n'a pas eu
+  besoin d'être réinstallée.
 - **Le Blueprint ne crée rien tout seul.** Un push qui modifie `render.yaml`
   prépare la modification et la soumet : il faut cliquer *Approve* sur la
   proposition. *Auto Sync* sur *Yes* fait apparaître la proposition, pas
