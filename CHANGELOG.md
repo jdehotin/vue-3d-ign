@@ -353,6 +353,11 @@ messages de commit et dans les commentaires des modules.
 
 ### Modifié
 
+- **La voiture à sa taille réelle** (22 octobre 2026), dans la vue en
+  voiture de derrière : grossie dès le recul par défaut (×1,9), elle faisait
+  3,5 m de large et couvrait 70 % de la route sous elle. Elle ne grossit plus
+  qu'au-delà de 60 m de recul, comme l'icône d'un GPS ; la vue de dessus ne
+  change pas.
 - **Le bouton de la vue en voiture, à côté du drone** (22 octobre 2026) :
   les deux façons de se déplacer côte à côte, sous le bouton du nuage LiDAR,
   plutôt que la voiture sous « Ma position ».

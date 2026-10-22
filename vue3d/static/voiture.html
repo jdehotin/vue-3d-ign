@@ -2198,9 +2198,11 @@ function majVoiture(dt, maintenant) {
 }
 
 // --- Maquette de la voiture --------------------------------------------------------
-// Une berline stylisée, à l'échelle (4,7 × 1,85 m), grossie avec le recul de
-// la caméra comme l'icône d'un GPS : à 70 m, une voiture réelle tiendrait
-// dans 4 % de la largeur de l'écran.
+// Une berline stylisée, à l'échelle (4,7 × 1,85 m) tant que la caméra est
+// proche, puis grossie avec son recul comme l'icône d'un GPS : à 600 m, une
+// voiture réelle ne ferait que quelques pixels. Grossie dès le recul par
+// défaut (recul ÷ 24, ×1,9 à 45 m), elle faisait 3,5 m de large et couvrait
+// 70 % de la route Cézanne sous elle, « très grosse par rapport à la route ».
 const maquette = new THREE.Group();
 const MAT_CAISSE = new THREE.MeshLambertMaterial({ color: 0xf2f4f6 });
 const MAT_VITRES = new THREE.MeshLambertMaterial({ color: 0x1b2430 });
@@ -2279,7 +2281,7 @@ scene.add(halo);
 
 function echelleMaquette() {
     return camVue.mode === '2d' ? Math.min(Math.max(camVue.hauteur / 40, 2), 12)
-                                : Math.min(Math.max(camVue.recul / 24, 1), 7);
+                                : Math.min(Math.max(camVue.recul / 60, 1), 7);
 }
 function poserVoiture() {
     const v = voiture;
