@@ -401,6 +401,11 @@ messages de commit et dans les commentaires des modules.
 
 ### Corrigé
 
+- **La mer blanche de la vue en voiture** (22 octobre 2026) : au large,
+  l'orthophoto de l'IGN n'est pas absente mais d'un blanc pur, entière dès le
+  zoom 15 à 7 km au sud de Cassis. Vue de la route des Crêtes, la mer sortait
+  blanche jusqu'à l'horizon ; elle prend désormais la teinte de la mer des
+  tuiles côtières, là où l'image est blanche au niveau de la mer.
 - **Les longues arêtes est-ouest de l'anneau de relief** (21 octobre 2026,
   Sainte-Victoire, Regagnas) : le WMS de l'IGN, qui fournissait l'anneau
   autour de la scène, y glisse toutes les 8 lignes environ une ligne prise

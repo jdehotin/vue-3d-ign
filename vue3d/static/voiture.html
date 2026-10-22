@@ -305,6 +305,33 @@ function tuileAlti(niveau, ligne, colonne) {
         const reponse = await lireEnCache(ALTI_URL(niveau, ligne, colonne), DELAI_ALTI_MS);
         if (reponse.status === 404) return new Float32Array(256 * 256).fill(NaN);
         const type = reponse.headers.get('content-type') || '';
+// Au large, l'orthophoto de l'IGN n'est pas absente mais blanche : passé le
+// bord de la prise de vue, ses tuiles sont d'un blanc pur, entières dès le
+// zoom 15 à 7 km au sud de Cassis, coupées en deux au zoom 13, quand le zoom
+// 11 y montre la mer bleue. Vue de la route des Crêtes, la mer sortait
+// blanche jusqu'à l'horizon. Un texel blanc pur posé au niveau de la mer (le
+// RGE ALTI n'y a pas d'altitude : 0 m) prend la teinte de la mer des tuiles
+// côtières ; le calcaire blanc des sommets, en altitude, garde la sienne.
+const MER = new THREE.Color(0x103448);
+function courberSol(materiau) {
+    courber(materiau);
+    const avant = materiau.onBeforeCompile;
+    materiau.onBeforeCompile = shader => {
+        avant(shader);
+        shader.uniforms.uMer = { value: MER };
+        shader.vertexShader = shader.vertexShader
+            .replace('#include <common>', '#include <common>\nvarying float vAltSol;')
+            .replace('#include <begin_vertex>', '#include <begin_vertex>\nvAltSol = position.y;');
+        shader.fragmentShader = shader.fragmentShader
+            .replace('#include <common>', '#include <common>\nvarying float vAltSol;\nuniform vec3 uMer;')
+            .replace('#include <map_fragment>', '#include <map_fragment>\n#ifdef USE_MAP\n'
+                + 'if (vAltSol < 1.5 && min(min(sampledDiffuseColor.r, sampledDiffuseColor.g), sampledDiffuseColor.b) > 0.96)'
+                + ' diffuseColor.rgb = diffuse * uMer;\n#endif');
+    };
+    materiau.customProgramCacheKey = () => 'courbe-sol';
+    return materiau;
+}
+
         if (!reponse.ok || !type.startsWith('image/x-bil')) throw new Error(`RGE ALTI : ${reponse.status} ${type}`);
         const v = new Float32Array(await reponse.arrayBuffer());
         if (v.length !== 256 * 256) throw new Error('RGE ALTI tronqué');
@@ -784,7 +811,7 @@ function construireTuile(t, niveau) {
     geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
     geo.setIndex(index);
     geo.computeBoundingSphere();
-    t.mesh = new THREE.Mesh(geo, courber(new THREE.MeshLambertMaterial({ color: COULEUR_SOL })));
+    t.mesh = new THREE.Mesh(geo, courberSol(new THREE.MeshLambertMaterial({ color: COULEUR_SOL })));
     t.mesh.visible = false;
     t.ymin = ymin; t.ymax = ymax;
     ancrer(t.mesh, t.cx, t.cy);
