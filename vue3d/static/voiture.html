@@ -41,6 +41,22 @@
                     align-items:center; justify-content:center; }
         #compteur b { font-size:42px; font-weight:700; line-height:1; font-variant-numeric:tabular-nums; }
         #compteur small { font-size:12px; color:var(--muted); margin-top:2px; }
+        #compteur.exces b { color:#ff5a4e; }
+        /* La limitation de la route, en panneau, à droite du compteur ; dessous,
+           d'où elle vient : OpenStreetMap, ou estimée (la règle générale). */
+        #limite { position:fixed; left:calc(max(14px, env(safe-area-inset-left)) + 120px);
+                  bottom:max(14px, env(safe-area-inset-bottom)); display:flex; flex-direction:column;
+                  align-items:center; gap:4px; }
+        #limite[hidden] { display:none; }
+        #limite .panneau { width:68px; height:68px; box-sizing:border-box; border-radius:50%; background:#fff;
+                           border:7px solid #d0021b; display:flex; align-items:center; justify-content:center;
+                           box-shadow:0 4px 14px rgba(0,0,0,.35); }
+        #limite b { font:800 27px/1 system-ui, sans-serif; color:#111; font-variant-numeric:tabular-nums;
+                    letter-spacing:-.5px; }
+        #limite small { font-size:10px; color:var(--text); background:var(--panel); border:1px solid var(--line);
+                        padding:1px 6px; border-radius:6px; white-space:nowrap; }
+        #limite.estimee .panneau { border-color:#8e959c; border-style:dashed; }
+        #limite.estimee b { color:#5b6168; }
         #etat { position:fixed; left:max(14px, env(safe-area-inset-left)); top:max(12px, env(safe-area-inset-top));
                 font-size:11px; color:var(--muted); padding:7px 10px; line-height:1.45; max-width:230px; }
         #etat b { color:var(--text); font-weight:600; }
@@ -66,6 +82,8 @@
         @media (max-height:520px) {
             #boutons { flex-direction:row; flex-wrap:wrap-reverse; justify-content:flex-end; max-width:190px; }
             #compteur { width:88px; height:88px; } #compteur b { font-size:32px; }
+            #limite { left:calc(max(14px, env(safe-area-inset-left)) + 98px); }
+            #limite .panneau { width:56px; height:56px; border-width:6px; } #limite b { font-size:22px; }
         }
         #annonce { position:fixed; top:calc(max(12px, env(safe-area-inset-top)) + 64px); left:50%;
                    transform:translateX(-50%); padding:8px 14px; font-size:13px; max-width:calc(100vw - 32px);
@@ -93,6 +111,8 @@
         /* Étroit : les crédits entre le compteur et les boutons, sur deux lignes au besoin. */
         @media (max-width:560px) {
             #etat { display:none; }
+            /* Au-dessus du compteur : à sa droite, les crédits. */
+            #limite { left:max(24px, calc(env(safe-area-inset-left) + 10px)); bottom:calc(max(14px, env(safe-area-inset-bottom)) + 118px); }
             #credits { left:130px; right:84px; transform:none; white-space:normal; text-align:center; font-size:9px; }
         }
     </style>
@@ -109,6 +129,7 @@
     </g></svg>
 </button>
 <div id="compteur" class="cartouche" aria-live="off"><b id="vitesse">–</b><small>km/h</small></div>
+<div id="limite" hidden><div class="panneau"><b id="limite-v"></b></div><small id="limite-source"></small></div>
 <div id="boutons">
     <button type="button" id="b-vue" class="bouton" title="Vue de derrière (3D) ou de dessus (2D)">2D</button>
     <button type="button" id="b-fond" class="bouton" title="Fond : photographie aérienne ou plan IGN">Plan</button>
@@ -128,7 +149,7 @@
     <div id="accueil-texte"></div>
     <div class="actions" id="accueil-actions"></div>
 </div></div>
-<div id="credits">© IGN : BD TOPO, BD ORTHO, Plan IGN, RGE ALTI, LiDAR HD, BD Forêt</div>
+<div id="credits">© IGN : BD TOPO, BD ORTHO, Plan IGN, RGE ALTI, LiDAR HD, BD Forêt · limitations © OpenStreetMap (ODbL)</div>
 
 <script type="importmap">
 {
@@ -155,6 +176,9 @@ const nombreParam = (nom, defaut) => {
     return PARAMS.has(nom) && Number.isFinite(v) ? v : defaut;
 };
 const VITESSE_SIMU_KMH = Math.min(Math.max(nombreParam('vitesse', 50), 5), 180);
+// `vitesse=limite` : la voiture simulée roule à la limitation de la route
+// (/api/vitesses), à VITESSE_SIMU_KMH tant qu'elle n'en connaît aucune.
+const SIMU_LIMITE = PARAMS.get('vitesse') === 'limite';
 // La part des carrefours où la voiture simulée quitte la route prévue ;
 // `hasard=0` : elle la suit, pour un essai qui se rejoue à l'identique.
 const HASARD_SIMU = Math.min(Math.max(nombreParam('hasard', 0.33), 0), 1);
@@ -281,30 +305,6 @@ function courber(materiau) {
     return materiau;
 }
 
-// --- Altitudes -----------------------------------------------------------------
-// Les tuiles natives du RGE ALTI (WMTS, pyramide WGS84G, 256 × 256 flottants),
-// lues comme l'horizon de la page, et pour les mêmes raisons (le WMS sort en
-// gradins et limite à 40 requêtes par seconde). Un trou (−99 999 : la mer,
-// l'étranger) vaut 0 m.
-const ALTI_URL = (niveau, ligne, colonne) =>
-    'https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0'
-    + '&LAYER=ELEVATION.ELEVATIONGRIDCOVERAGE.HIGHRES&STYLE=normal&FORMAT=image/x-bil;bits=32'
-    + `&TILEMATRIXSET=WGS84G_6_14&TILEMATRIX=${niveau}&TILEROW=${ligne}&TILECOL=${colonne}`;
-const ALTI_NIVEAU_MIN = 6, ALTI_NIVEAU_MAX = 14;
-// Le niveau des tuiles du sol les plus fines (zoom 18 − 5, comme la page :
-// un pixel de 9,5 m sur 6,7 m à 45°) : bâtiments, route et voiture s'y posent.
-const NIVEAU_PROCHE = 13;
-const ALTI_CACHE = 160;                 // 256 Kio chacune
-const altis = new Map();                // "niveau/ligne/colonne" → { promesse, valeurs }
-function tuileAlti(niveau, ligne, colonne) {
-    const cle = `${niveau}/${ligne}/${colonne}`;
-    let t = altis.get(cle);
-    if (t) return t;
-    t = { valeurs: null };
-    t.promesse = (async () => {
-        const reponse = await lireEnCache(ALTI_URL(niveau, ligne, colonne), DELAI_ALTI_MS);
-        if (reponse.status === 404) return new Float32Array(256 * 256).fill(NaN);
-        const type = reponse.headers.get('content-type') || '';
 // Au large, l'orthophoto de l'IGN n'est pas absente mais blanche : passé le
 // bord de la prise de vue, ses tuiles sont d'un blanc pur, entières dès le
 // zoom 15 à 7 km au sud de Cassis, coupées en deux au zoom 13, quand le zoom
@@ -332,6 +332,30 @@ function courberSol(materiau) {
     return materiau;
 }
 
+// --- Altitudes -----------------------------------------------------------------
+// Les tuiles natives du RGE ALTI (WMTS, pyramide WGS84G, 256 × 256 flottants),
+// lues comme l'horizon de la page, et pour les mêmes raisons (le WMS sort en
+// gradins et limite à 40 requêtes par seconde). Un trou (−99 999 : la mer,
+// l'étranger) vaut 0 m.
+const ALTI_URL = (niveau, ligne, colonne) =>
+    'https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0'
+    + '&LAYER=ELEVATION.ELEVATIONGRIDCOVERAGE.HIGHRES&STYLE=normal&FORMAT=image/x-bil;bits=32'
+    + `&TILEMATRIXSET=WGS84G_6_14&TILEMATRIX=${niveau}&TILEROW=${ligne}&TILECOL=${colonne}`;
+const ALTI_NIVEAU_MIN = 6, ALTI_NIVEAU_MAX = 14;
+// Le niveau des tuiles du sol les plus fines (zoom 18 − 5, comme la page :
+// un pixel de 9,5 m sur 6,7 m à 45°) : bâtiments, route et voiture s'y posent.
+const NIVEAU_PROCHE = 13;
+const ALTI_CACHE = 160;                 // 256 Kio chacune
+const altis = new Map();                // "niveau/ligne/colonne" → { promesse, valeurs }
+function tuileAlti(niveau, ligne, colonne) {
+    const cle = `${niveau}/${ligne}/${colonne}`;
+    let t = altis.get(cle);
+    if (t) return t;
+    t = { valeurs: null };
+    t.promesse = (async () => {
+        const reponse = await lireEnCache(ALTI_URL(niveau, ligne, colonne), DELAI_ALTI_MS);
+        if (reponse.status === 404) return new Float32Array(256 * 256).fill(NaN);
+        const type = reponse.headers.get('content-type') || '';
         if (!reponse.ok || !type.startsWith('image/x-bil')) throw new Error(`RGE ALTI : ${reponse.status} ${type}`);
         const v = new Float32Array(await reponse.arrayBuffer());
         if (v.length !== 256 * 256) throw new Error('RGE ALTI tronqué');
@@ -972,6 +996,7 @@ const CARRE_M = 500;
 // Les versions des carrés (carres.CARRES_VERSION, VEGETATION_VERSION), dans
 // leur adresse : le navigateur garde un carré une semaine.
 const CARRES_VERSION = 2, VEGETATION_VERSION = 2;
+const VITESSES_VERSION = 1;
 const AUTOUR_M = 450;
 // Autour de la voiture quand la route prévue finit en impasse : bâtiments ;
 // les arbres, plus lents à lire, sur VEG_IMPASSE_M.
@@ -995,7 +1020,8 @@ function carre(i, j) {
         c = { i, j, cle, etat: 'neuf', donnees: null, mesh: null, voulu: 0, reessai: 0, priorite: Infinity,
               altiPretes: false, nbBatiments: 0,
               veg: { etat: 'neuf', donnees: null, mesh: null, voulu: 0, reessai: 0, priorite: Infinity,
-                     altiPretes: false } };
+                     altiPretes: false },
+              vit: { etat: 'neuf', reessai: 0 } };
         carres.set(cle, c);
     }
     return c;
@@ -1697,6 +1723,14 @@ function majCarres(maintenant) {
                 if (c.veg.etat === 'neuf' || (c.veg.etat === 'erreur' && maintenant >= c.veg.reessai)) chargerVegetation(c);
             }
         }
+        // Les limitations de vitesse, le long de la même route que les
+        // bâtiments et aussi loin : Overpass met de 30 s à plusieurs minutes
+        // à rendre un bloc neuf de 2 km (vue3d/vitesses.py).
+        for (const { i, j } of voulus) {
+            if (vitEnVol >= VIT_PARALLELE) break;
+            const c = carre(i, j);
+            if (c.vit.etat === 'neuf' || (c.vit.etat === 'erreur' && maintenant >= c.vit.reessai)) chargerVitesses(c);
+        }
         const px = voiture.vue ? voiture.x : voiture.attendu.x, py = voiture.vue ? voiture.y : voiture.attendu.y;
         for (const c of [...carres.values()]) {
             const voulu = cles.has(c.cle);
@@ -2188,6 +2222,7 @@ function majVoiture(dt, maintenant) {
             if (Number.isFinite(z)) alt = Number.isFinite(alt) ? Math.max(alt, z) : z;
         }
         v.arete = e.a;
+        v.sensArete = e.sens;
     } else {
         v.arete = null;
     }
@@ -2195,6 +2230,50 @@ function majVoiture(dt, maintenant) {
     v.altPret = v.altPret || Number.isFinite(alt);
     if (Math.hypot(v.x - ORIGINE.x, v.y - ORIGINE.y) > RECALAGE_M) recaler(v.x, v.y);
     poserVoiture();
+}
+
+// --- Limitations de vitesse -------------------------------------------------------
+// Par tronçon BD TOPO et dans chacun de ses sens (/api/vitesses) : celle
+// d'OpenStreetMap, sinon la règle générale du code de la route, marquée
+// comme estimée. Gardées par identifiant de tronçon, d'où que vienne le carré.
+const limites = new Map();             // cleabs → { plus, moins, osmPlus, osmMoins }
+const VIT_PARALLELE = 2;               // les deux places d'Overpass du serveur
+let vitEnVol = 0;
+
+async function chargerVitesses(c) {
+    const g = c.vit;
+    g.etat = 'charge';
+    vitEnVol++;
+    try {
+        const reponse = await fetch(`api/vitesses?i=${c.i}&j=${c.j}&v=${VITESSES_VERSION}`);
+        if (reponse.status === 422) { g.etat = 'hors'; return; }
+        if (!reponse.ok) {
+            g.etat = 'erreur';
+            g.reessai = performance.now() + (Number(reponse.headers.get('retry-after')) || 30) * 1000;
+            return;
+        }
+        for (const [id, plus, moins, osmPlus, osmMoins] of (await reponse.json()).vitesses) {
+            limites.set(id, { plus, moins, osmPlus, osmMoins });
+        }
+        g.etat = 'pret';
+    } catch (e) {
+        g.etat = 'erreur';
+        g.reessai = performance.now() + 30000;
+    } finally {
+        vitEnVol--;
+    }
+}
+
+/**
+ * La limitation de l'arête `a` dans le sens `sens` : { v (km/h), osm } ;
+ * null si elle dépend de la signalisation locale (bretelle, rond-point),
+ * undefined si son carré n'est pas encore lu.
+ */
+function limiteDe(a, sens) {
+    const l = a && limites.get(a.id);
+    if (!l) return undefined;
+    const v = sens > 0 ? l.plus : l.moins;
+    return v == null ? null : { v, osm: !!(sens > 0 ? l.osmPlus : l.osmMoins) };
 }
 
 // --- Maquette de la voiture --------------------------------------------------------
@@ -2558,6 +2637,28 @@ const NATURES = { 'Type autoroutier': 'Autoroute', 'Bretelle': 'Bretelle', 'Rond
                   'Chemin': 'Chemin', 'Bac ou liaison maritime': 'Bac' };
 
 const elVitesse = document.getElementById('vitesse'), elRue = document.getElementById('rue');
+const elCompteur = document.getElementById('compteur'), elLimite = document.getElementById('limite');
+const elLimiteV = document.getElementById('limite-v'), elLimiteSource = document.getElementById('limite-source');
+let limiteAffichee = null;
+/**
+ * Le panneau de la limitation du tronçon où l'on roule, dans son sens, et
+ * d'où elle vient ; la vitesse en rouge au-delà. Sur un tronçon que règle la
+ * signalisation locale, la dernière lue reste ; sur un tronçon dont le carré
+ * n'est pas encore lu, plus de panneau : celle d'avant serait peut-être fausse.
+ */
+function majLimite(v) {
+    const l = v.vue && v.arete && !v.horsRoute ? limiteDe(v.arete, v.sensArete) : undefined;
+    if (l) limiteAffichee = l;
+    else if (l === undefined) limiteAffichee = null;
+    elLimite.hidden = !limiteAffichee;
+    elCompteur.classList.toggle('exces', !!limiteAffichee && Math.round(v.v * 3.6) > limiteAffichee.v);
+    if (!limiteAffichee) return;
+    elLimiteV.textContent = limiteAffichee.v;
+    elLimite.classList.toggle('estimee', !limiteAffichee.osm);
+    elLimiteSource.textContent = limiteAffichee.osm ? 'OpenStreetMap' : 'estimée';
+    elLimite.title = limiteAffichee.osm ? 'Limitation relevée dans OpenStreetMap'
+        : 'Limitation estimée : la règle générale du code de la route, faute de donnée OpenStreetMap ici';
+}
 const elNom = document.getElementById('rue-nom'), elNumero = document.getElementById('rue-numero');
 const elGps = document.getElementById('etat-gps'), elCarres = document.getElementById('etat-carres');
 const elRond = document.querySelector('#etat .rond');
@@ -2567,6 +2668,7 @@ function majHud(maintenant) {
     dernierHud = maintenant;
     const v = voiture;
     elVitesse.textContent = v.vue ? Math.round(v.v * 3.6) : '–';
+    majLimite(v);
     const a = v.arete;
     if (a && !v.horsRoute) {
         const nom = nomDeVoie(a.nom);
@@ -2589,7 +2691,7 @@ function majHud(maintenant) {
             : resteArrivee != null ? `${VERS.nom ? echapperHtml(VERS.nom) : 'Arrivée'} dans <b>${resteArrivee >= 1000
                 ? (resteArrivee / 1000).toFixed(1).replace('.', ',') + ' km' : Math.round(resteArrivee / 10) * 10 + ' m'}</b>`
             : 'Calcul de l\'itinéraire…')
-        : SIMU ? `Simulation à <b>${VITESSE_SIMU_KMH} km/h</b>`
+        : SIMU ? (SIMU_LIMITE ? 'Simulation <b>aux limitations</b>' : `Simulation à <b>${VITESSE_SIMU_KMH} km/h</b>`)
         : !v.fix ? 'Position attendue…'
         : age > 10 ? `<b>Signal GPS perdu</b> depuis ${Math.round(age)} s`
         : `GPS <b>± ${Math.round(v.precision)} m</b>`;
@@ -2798,8 +2900,15 @@ function gauss() { return Math.sqrt(-2 * Math.log(1 - Math.random())) * Math.cos
 // au tiers de sa vitesse) et s'arrête à l'arrivée ; sa vitesse suit en une
 // seconde.
 const VIRAGE_APPROCHE_M = 35, ARRIVEE_APPROCHE_M = 45;
+/** La vitesse de croisière de la voiture simulée, en m/s : la limitation du tronçon, avec `vitesse=limite`. */
+function vitesseMaxSimu() {
+    if (!SIMU_LIMITE) return VITESSE_SIMU_KMH / 3.6;
+    const l = limiteDe(simu.a, simu.sens);
+    if (l) simu.limite = l.v;
+    return (simu.limite || VITESSE_SIMU_KMH) / 3.6;
+}
 function vitesseVoulueSimu() {
-    const vmax = VITESSE_SIMU_KMH / 3.6;
+    const vmax = vitesseMaxSimu();
     if (!itineraire || simu.arrive) return simu.arrive ? 0 : vmax;
     const a = simu.a, fin = simu.sens > 0 ? a.L - simu.s : simu.s;
     if (simu.k === itineraire.etapes.length - 1) {
@@ -2923,7 +3032,7 @@ function boucle(maintenant) {
 // Pour les essais (outils/essai-voiture.mjs) : l'état, en lecture.
 const echapperHtml = t => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 window.__voiture = { voiture, carres, tuilesSol, aretes, camVue, camera, renderer, durees, dureesArbres, statsCache, simu,
-                     get itineraire() { return itineraire; }, partir: () => { simuPartie = true; },
+                     get itineraire() { return itineraire; }, partir: () => { simuPartie = true; }, limites,
                      manquees, statsPrecharge,
                      get budget() { return budgetConstruction; } };
 

@@ -553,9 +553,15 @@ Chaque premier chargement construit la scène, en quelques secondes.
   plus tard. Le sol est fait des tuiles de l'orthophoto ou du Plan IGN
   (bouton **Plan**) posées sur le RGE ALTI, plus fines près de la caméra et
   là où la voiture sera dans quelques secondes. En rue étroite, les façades entre la caméra et la
-  voiture s'ajourent ; la nuit, le ciel et la photo s'assombrissent. Pour
-  l'essayer sans rouler : `/voiture?simu=1&lat=…&lon=…&vitesse=90`, une
-  conduite simulée ; avec `&vers=lat,lon`, elle va quelque part, par le plus
+  voiture s'ajourent ; la nuit, le ciel et la photo s'assombrissent. À côté
+  du compteur, la limitation de vitesse de la route, dans le sens où l'on
+  roule, et d'où elle vient : relevée dans OpenStreetMap (panneau rouge), ou
+  estimée par la règle générale du code de la route — 50 km/h en
+  agglomération, 80 sur une route, 110 à chaussées séparées, 130 sur
+  autoroute — faute de donnée (panneau gris, « estimée ») ; aucune base
+  nationale des limitations n'est publiée. Au-delà, la vitesse passe au
+  rouge. Pour l'essayer sans rouler : `/voiture?simu=1&lat=…&lon=…&vitesse=90`, une
+  conduite simulée (`vitesse=limite` : aux limitations) ; avec `&vers=lat,lon`, elle va quelque part, par le plus
   court chemin, l'itinéraire tracé en bleu et la distance qui reste affichée.
 - **Sur téléphone, sur l'écran d'une voiture, ou en plein écran** (le bouton
   au-dessus du drone) : la vue prend tout l'écran, et le panneau devient un
@@ -611,6 +617,7 @@ Toutes servies sans clé par la Géoplateforme de l'IGN, sous
 | Géocodage | `geocodage/search`, `geocodage/reverse` | La recherche d'un lieu (Base Adresse Nationale et lieux nommés, lus séparément), et la commune du point affiché ; appelé par le navigateur |
 | BD TOPO, hydrographie | WFS `surface_hydrographique`, `troncon_hydrographique` | Étendues et cours d'eau |
 | OpenStreetMap, `building:part` | API Overpass, © contributeurs OSM, [ODbL](https://www.openstreetmap.org/copyright) | Les monuments en vraie 3D, là où le LiDAR manque |
+| OpenStreetMap, `maxspeed` | API Overpass, par bloc de 2 km, © contributeurs OSM, [ODbL](https://www.openstreetmap.org/copyright) | Les limitations de vitesse de la vue en voiture, rapprochées des tronçons BD TOPO |
 | Parcellaire Express | WFS `CADASTRALPARCELS.PARCELLAIRE_EXPRESS:parcelle` | Les parcelles des ventes DVF, au clic |
 
 Hors du territoire, en mer et à l'étranger, où le RGE ALTI n'a pas
@@ -953,8 +960,8 @@ en tire son favicon et son icône d'écran d'accueil (`vue3d/static/`).
 ## Licence
 
 Code sous licence [MIT](LICENSE). Les données affichées appartiennent à l'IGN et
-sont diffusées sous Licence Ouverte Etalab 2.0 ; les parties de monuments
-viennent d'OpenStreetMap (© contributeurs OSM, ODbL). Le dépôt embarque un
+sont diffusées sous Licence Ouverte Etalab 2.0 ; les parties de monuments et
+les limitations de vitesse viennent d'OpenStreetMap (© contributeurs OSM, ODbL). Le dépôt embarque un
 extrait OpenStreetMap pour les lieux d'exemple ci-dessus, sous ODbL et non sous
 MIT : voir [vue3d/donnees/LICENCE.md](vue3d/donnees/LICENCE.md).
 

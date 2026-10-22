@@ -22,6 +22,8 @@
     GET /api/carre?i=…&j=…         un carré de 500 m de la grille Lambert-93 :
                                    bâtiments et routes BD TOPO, pour la voiture
     GET /api/vegetation?i=…&j=…    les arbres du même carré, découpés sur le MNH
+    GET /api/vitesses?i=…&j=…      les limitations de vitesse de ses tronçons :
+                                   OpenStreetMap, sinon la règle générale
     GET /api/tuile/<couche>/<z>/<x>/<y>  une tuile WMTS de l'IGN (ortho, plan) : du
                                    stock du serveur, sinon redirigée vers l'IGN ;
                                    `?relire=1` après un refus, lue et gardée ici
@@ -71,6 +73,7 @@ from .tuiles import (COUCHES, TUILES_RELECTURES_PAR_HEURE, Stock, TuileAbsente, 
                      TuilesOccupees, fetch_tuile, url_ign, valide)
 from .vehicules import MODE_PAR_DEFAUT, fetch_mer
 from .vehicules import lecteur as lecteur_vehicules
+from .vitesses import VITESSES_VERSION, BlocsOsm, fetch_vitesses
 
 # Noms de couche pour dossier_scene : les fichiers, eux, dépendent du mode et
 # du détecteur.
@@ -148,7 +151,7 @@ def creer_app(dossier_cache=None, construire=construire_scene, lire_monuments=fe
               lire_nuage=fetch_nuage, lire_dpe=fetch_dpe, lire_dvf=fetch_dvf, lire_mer=fetch_mer,
               lire_tuile=fetch_tuile, quota=None, proxy=None, relectures=None,
               lire_bornes=fetch_bornes, lire_carre=fetch_carre, quota_carres=None,
-              lire_vegetation=fetch_vegetation):
+              lire_vegetation=fetch_vegetation, lire_vitesses=None):
     """`construire`, `lire_monuments`, `lire_ouvrages`, `lire_vehicules`,
     `lire_panneaux`, `lire_nuage`, `lire_dpe`, `lire_dvf`, `lire_mer` et
     `lire_bornes` sont injectables
@@ -163,8 +166,10 @@ def creer_app(dossier_cache=None, construire=construire_scene, lire_monuments=fe
     None : de VUE3D_QUOTA et VUE3D_PROXY, 0 en leur absence.
     `relectures` : tuiles relues par heure et par adresse IP, 0 sans limite ;
     None : TUILES_RELECTURES_PAR_HEURE si le service a un quota de scènes.
-    `lire_carre`, `lire_vegetation` : (i, j) -> dict d'un carré de la voiture,
-    bâtiments et routes, ou arbres (vue3d/carres.py) ;
+    `lire_carre`, `lire_vegetation`, `lire_vitesses` : (i, j) -> dict d'un
+    carré de la voiture, bâtiments et routes, arbres (vue3d/carres.py) ou
+    limitations de vitesse (vue3d/vitesses.py ; None : lues à Overpass, par
+    bloc gardé dans le cache) ;
     `quota_carres` : carrés neufs par heure et par adresse IP, 0 sans limite ;
     None : CARRES_PAR_HEURE si le service a un quota de scènes."""
     app = Flask(__name__, static_folder=os.path.join(ICI, "static"), static_url_path="/static")
@@ -197,6 +202,12 @@ def creer_app(dossier_cache=None, construire=construire_scene, lire_monuments=fe
     carres = Carres(cache.dossier, lire=lire_carre)
     vegetations = Carres(cache.dossier, lire=lire_vegetation, couche="vegetation-",
                          version=VEGETATION_VERSION)
+    if lire_vitesses is None:
+        blocs = BlocsOsm(cache.dossier)
+
+        def lire_vitesses(i, j):
+            return fetch_vitesses(i, j, blocs)
+    vitesses = Carres(cache.dossier, lire=lire_vitesses, couche="vitesses-", version=VITESSES_VERSION)
     if quota_carres is None:
         quota_carres = CARRES_PAR_HEURE if quota else 0
     quota_carres = Quota(quota_carres) if quota_carres else None
@@ -609,6 +620,12 @@ def creer_app(dossier_cache=None, construire=construire_scene, lire_monuments=fe
         """Les arbres d'un carré de la voiture, découpés comme ceux de la
         scène : une couche à part, plus lente que les bâtiments."""
         return servir_carre(vegetations, "vegetation")
+
+    @app.get("/api/vitesses")
+    def limitations():
+        """Les limitations de vitesse des tronçons d'un carré de la voiture :
+        une couche à part, lue à Overpass par bloc de 2 km."""
+        return servir_carre(vitesses, "vitesses")
 
     def servir_carre(stock, couche):
         try:

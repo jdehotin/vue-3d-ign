@@ -1,8 +1,8 @@
 // Essai de la vue en voiture (static/voiture.html) dans un vrai navigateur :
 // une conduite simulée (?simu=1), suivie pendant `duree` secondes. Relève
-// toutes les cinq secondes la position, la route prévue, les carrés de
-// bâtiments (lus, construits, prêts devant la voiture), les tuiles du sol et
-// les images par seconde ; échoue à la moindre erreur JavaScript, à un carré
+// toutes les cinq secondes la position, la route prévue, la limitation
+// affichée et sa source, les carrés de bâtiments (lus, construits, prêts
+// devant la voiture), les tuiles du sol et les images par seconde ; échoue à la moindre erreur JavaScript, à un carré
 // refusé par le serveur, ou si les bâtiments ne sont jamais prêts devant.
 //
 //   npm install puppeteer-core
@@ -30,6 +30,9 @@ const carres = { lus: 0, caches: 0, refus: 0 };
 // carré plus tard. Il n'est une erreur que s'il n'a jamais été rattrapé.
 const passagers = new Map();          // URL → rattrapée
 const tuiles = { absentes: 0 };
+// Les limitations (/api/vitesses) viennent d'Overpass, en panne par
+// épisodes : un refus du serveur y est compté, pas tenu pour une erreur.
+const vitesses = { lus: 0, refus: 0 };
 page.on('pageerror', e => erreurs.push('pageerror: ' + e.message));
 page.on('console', m => {
     if (m.type() !== 'error') return;
@@ -44,6 +47,10 @@ page.on('requestfailed', r => {
 });
 page.on('response', r => {
     const u = r.url();
+    if (/\/api\/vitesses\?/.test(u)) {
+        if (r.status() === 200) vitesses.lus++; else if (r.status() !== 304) vitesses.refus++;
+        return;
+    }
     if (/\/api\/(carre|vegetation)\?/.test(u)) {
         if (r.status() === 200) {
             if (/carre/.test(u)) { if (r.fromCache()) carres.caches++; else carres.lus++; }
@@ -88,6 +95,8 @@ for (let t = 5; t <= duree; t += 5) {
             rue: document.getElementById('rue-nom').textContent,
             numero: document.getElementById('rue-numero').hidden ? '' : document.getElementById('rue-numero').textContent,
             pret: document.getElementById('etat-carres').textContent,
+            limite: document.getElementById('limite').hidden ? '' :
+                `${document.getElementById('limite-v').textContent} (${document.getElementById('limite-source').textContent})`,
             images: window.__images, budget: V.budget,
         };
     });
@@ -98,6 +107,7 @@ for (let t = 5; t <= duree; t += 5) {
     releves.push({ ...e, ips, parcouru });
     console.log(`${String(t).padStart(3)} s  ${e.vue ? `${e.v.toFixed(0)} km/h` : 'sans position'}`
         + `  ${e.numero ? e.numero + ' ' : ''}${e.rue || '—'}${e.horsRoute ? ' (hors route)' : ''}`
+        + `${e.limite ? `  · limite ${e.limite}` : ''}`
         + `  à ${Math.round(parcouru)} m du départ`
         + `  · chemin ${e.chemin ? Math.round(e.chemin.longueur) + ' m ' + e.chemin.fin : '—'}`
         + `  · carrés ${e.lus} lus, ${e.construits} construits, ${e.montres} montrés (${e.batiments} bât.)`
@@ -126,6 +136,17 @@ if (durees.length) {
     console.log(`\nConstruction d'un carré : médiane ${tri[tri.length >> 1][0].toFixed(1)} ms, `
         + `pire ${pire[0].toFixed(1)} ms (${pire[1]} bâtiments), sur ${tri.length}`);
 }
+const limites = await page.evaluate(() => {
+    let osm = 0, estimees = 0, inconnues = 0;
+    for (const l of window.__voiture.limites.values()) {
+        for (const [v, o] of [[l.plus, l.osmPlus], [l.moins, l.osmMoins]]) {
+            if (v == null) inconnues++; else if (o) osm++; else estimees++;
+        }
+    }
+    return { troncons: window.__voiture.limites.size, osm, estimees, inconnues };
+});
+console.log(`\nLimitations : ${vitesses.lus} carrés lus, ${vitesses.refus} refusés (Overpass) ; ${limites.troncons} tronçons, `
+    + `sens par sens ${limites.osm} OpenStreetMap, ${limites.estimees} estimées, ${limites.inconnues} inconnues`);
 console.log(`\nCarrés : ${carres.lus} lus au serveur, ${carres.caches} du cache du navigateur, ${carres.refus} refusés ; `
     + `tuiles absentes : ${tuiles.absentes}. Capture : ${sortie}`);
 const rattrapes = [...passagers.values()].filter(Boolean).length;

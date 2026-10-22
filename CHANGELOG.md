@@ -15,6 +15,18 @@ messages de commit et dans les commentaires des modules.
 
 ### Ajouté
 
+- **Les limitations de vitesse dans la vue en voiture** (22 octobre 2026) :
+  un panneau à côté du compteur, pour la route et le sens où l'on roule, et
+  sa source dessous. « OpenStreetMap » quand la limite y est relevée
+  (`maxspeed`, rapproché des tronçons BD TOPO à 12 m près et dans leur
+  axe) ; « estimée », panneau gris, sinon : la règle générale du code de la
+  route, 50 km/h en agglomération, 80 sur une route, 110 à chaussées
+  séparées, 130 sur autoroute. Aucune base nationale n'est publiée, et la
+  BD TOPO n'a qu'une vitesse moyenne estimée. La vitesse passe au rouge
+  au-delà de la limite ; `vitesse=limite` fait rouler la conduite simulée
+  aux limitations. Couche à part (`/api/vitesses`), lue à Overpass par bloc
+  de 2 km gardé pour toujours : 30 s à 4 min par bloc neuf le jour de sa
+  mise en service.
 - **La vue en voiture** (20 octobre 2026), au bouton en forme de voiture sous
   « Ma position », ou `/voiture` : une page à part, qui suit la position
   comme un GPS, pour l'écran d'un téléphone ou d'une voiture. La scène ne
