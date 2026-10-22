@@ -525,7 +525,7 @@ Chaque premier chargement construit la scène, en quelques secondes.
   quitte la scène et survole l'horizon, sans jamais passer sous le sol ni
   dans un toit ; le curseur « vitesse » règle sa vitesse de pointe, jusqu'à
   216 km/h.
-- **En voiture**, au bouton en forme de voiture sous « Ma position » (ou
+- **En voiture**, au bouton en forme de voiture, à côté du drone (ou
   `/voiture`) : une page à part, qui suit la position comme un GPS, sur un
   téléphone ou l'écran d'une voiture. La voiture est calée sur la route où
   l'on roule, vue de derrière (ou de dessus, bouton **2D**), avec sa vitesse

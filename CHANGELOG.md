@@ -353,6 +353,9 @@ messages de commit et dans les commentaires des modules.
 
 ### Modifié
 
+- **Le bouton de la vue en voiture, à côté du drone** (22 octobre 2026) :
+  les deux façons de se déplacer côte à côte, sous le bouton du nuage LiDAR,
+  plutôt que la voiture sous « Ma position ».
 - **Le jeu des incendies est retiré**, un jour après son arrivée : son
   bouton **Feux** disparaît, `?jeu=1` ouvre de nouveau la traque, et le film
   `feux` quitte `outils/demo-video.mjs`. Le cortège garde ses figures, ses
