@@ -44,7 +44,9 @@ services:
     disk:
       # Un disque ne se partage pas entre deux services : le nom est donc
       # propre à ce service. Celui de l'ancien service (`vue3d-ign-jdehotin-
-      # ancien`) s'appelle encore `scenes` et reste attaché à lui.
+      # ancien`) s'appelle encore `scenes` et reste attaché à lui. Ne pas
+      # réutiliser ce nom : Render refuserait de rattacher un disque déjà
+      # attaché à un autre service.
       name: scenes-v2
       mountPath: /var/data
       sizeGB: 5
