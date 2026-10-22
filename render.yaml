@@ -41,6 +41,13 @@ services:
       # ne veut pas qu'un robot y fasse construire des milliers de scènes.
       - key: VUE3D_QUOTA
         value: "60"
+      # Le bassin de processus qui calcule les toitures (LiDAR) nait par
+      # forkserver dans le conteneur. Le plan standard n'a qu'un CPU : deux
+      # processus, chacun chargeant numpy et shapely, épuisent la mémoire
+      # (2 Go) et la construction reste bloquée à l'étape « toitures ».
+      # Un seul processus : la scène se construit, un peu plus lentement.
+      - key: VUE3D_TOITS_PROCESSUS
+        value: "1"
     disk:
       # Un disque ne se partage pas entre deux services : le nom est donc
       # propre à ce service. Celui de l'ancien service (`vue3d-ign-jdehotin-
