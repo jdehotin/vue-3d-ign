@@ -78,26 +78,34 @@ prend 20 à 30 s, comme après n'importe quel premier déploiement.
 
 ### Si le Blueprint ne crée rien
 
-Le Blueprint ne se synchronise que sur un push qui modifie `render.yaml`, et
-seulement si *Auto Sync* est actif. Quand la création n'a pas lieu, vérifier
-dans l'ordre :
+Un push qui modifie `render.yaml` **ne suffit pas** : le Blueprint prépare la
+modification et la soumet à approbation. *Auto Sync* sur *Yes* signifie
+seulement que la proposition apparaît toute seule, pas qu'elle s'applique. La
+création du service demande deux gestes :
 
-1. **Render → Blueprints → le Blueprint → Manual Sync.** C'est le moyen le
-   plus direct de forcer la synchronisation, et la page affiche le message
-   d'erreur s'il y en a un.
-2. **Auto Sync** sur *No* : le remettre sur *Yes*, sinon chaque push doit être
-   suivi d'un *Manual Sync*.
-3. Le **nom** du `name:` de `render.yaml` : s'il ne correspond à aucun service
-   du dashboard, Render en crée un nouveau ; s'il correspond à un service
-   existant, c'est ce service-là qui est reconfiguré — ce qui est voulu, mais
-   laisse l'adresse inchangée.
-4. Le **disque** : un disque ne se partage pas entre deux services. Le nom du
-   disque (`scenes-v2`) doit être différent de celui de l'ancien service, sous
-   peine que Render refuse la synchronisation.
+1. **Render → Blueprints → le Blueprint → Manual Sync.** La page *Syncs*
+   affiche la proposition, par exemple « Create web service
+   `vue3d-ign-oncdesncf` (Standard) », avec son commit de départ.
+2. **Approve** sur cette proposition. Sans lui, rien n'est créé et le service
+   n'apparaît pas dans la liste du dashboard.
+
+En cas de doute, l'onglet **Resources** du Blueprint dit ce qu'il gère
+exactement : « No resources managed by this Blueprint » signifie que la
+synchronisation n'a jamais abouti.
+
+Deux autres points à vérifier ensuite :
+
+- le **nom** du `name:` de `render.yaml` : s'il ne correspond à aucun service
+  du dashboard, Render en crée un nouveau ; s'il correspond à un service
+  existant, c'est ce service-là qui est reconfiguré — ce qui est voulu, mais
+  laisse l'adresse inchangée ;
+- le **disque** : un disque ne se partage pas entre deux services. Le nom du
+  disque (`scenes-v2`) doit être différent de celui de l'ancien service, sous
+  peine que Render refuse la synchronisation.
 
 Une adresse qui répond 404 avec l'en-tête `x-render-routing: no-server` ne
 correspond à aucun service : c'est la signature d'un nom libre, pas d'un
-service en panne.
+service en panne. Un 502, lui, dit que le service existe et démarre.
 
 ## Recette après déploiement
 
@@ -111,6 +119,11 @@ Service en ligne : `https://vue3d-ign-oncdesncf.onrender.com`.
 
 Mesures du 21 octobre 2026 : première scène de Gordes à 500 m en 11 s, relue
 en 3,3 s ; contour `poly` en 4,6 s.
+
+Mesures du 22 octobre 2026, sur le nouveau service
+`vue3d-ign-oncdesncf` : première scène de Gordes à 500 m en 1,9 s, relue en
+1,7 s ; Bordeaux à 500 m en 0,9 s. Le cache du nouveau disque (`scenes-v2`)
+part vide et se remplit comme l'ancien.
 
 ## Ce que ce service ne fait pas
 
