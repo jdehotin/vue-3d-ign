@@ -64,6 +64,25 @@ messages de commit et dans les commentaires des modules.
   « Emprise du projet Trimble Connect (150 m au plus) », et le passage à 500 m
   retire `origine` et `poly` de l'URL.
 
+### Déploiement
+
+- **Le service Render répond sur `https://vue3d-ign-oncdesncf.onrender.com`.**
+  Le sous-domaine `onrender.com` est attribué à la **création** du service :
+  renommer un service dans le dashboard change son nom, pas son adresse —
+  l'ancienne continue de répondre et la nouvelle renvoie 404. Pour obtenir
+  une nouvelle adresse, il a fallu recréer le service : l'ancien est devenu
+  `vue3d-ign-jdehotin-ancien` et garde
+  `https://vue3d-ign-jdehotin.onrender.com` en secours, avec son cache ; le
+  nouveau a son propre disque et son cache propre, vide au départ. Le panneau
+  Trimble Connect suit la nouvelle adresse ; son manifeste est inchangé et
+  l'extension n'a pas eu besoin d'être réinstallée.
+- **Le Blueprint ne crée rien tout seul.** Un push qui modifie `render.yaml`
+  prépare la modification et la soumet : il faut cliquer *Approve* sur la
+  proposition. *Auto Sync* sur *Yes* fait apparaître la proposition, pas
+  l'appliquer. Trois push et une CI verte avaient suffi à le laisser croire en
+  place ; l'onglet *Resources* affichait « No resources managed by this
+  Blueprint ».
+
 ## Scène v15 — 15 octobre 2026
 
 ### Ajouté
