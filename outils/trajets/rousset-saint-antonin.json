@@ -1,0 +1,21 @@
+{
+  "titre": "Rousset → Saint‑Antonin‑sur‑Bayon",
+  "sousTitre": "10,6 km au pied de la Sainte‑Victoire\nla vue en voiture de Vue 3D IGN",
+  "depart": { "lat": 43.48057, "lon": 5.62205, "nom": "Rousset" },
+  "arrivee": { "lat": 43.51865, "lon": 5.58283, "nom": "Saint-Antonin-sur-Bayon" },
+  "heure": "14:00",
+  "troncons": [
+    { "de": 0, "vers": 900, "vitesse": 40, "duree": 14, "arret": 2.5, "titre": true,
+      "legende": "Départ de Rousset. La vue suit la voiture comme un GPS, ici en conduite simulée" },
+    { "de": 6450, "vers": 7200, "vitesse": 60, "duree": 12,
+      "legende": "Chemin des Michels : la Sainte‑Victoire se dresse droit devant" },
+    { "de": 7800, "vers": 8700, "vitesse": 60, "duree": 12,
+      "legende": "Relief, photo aérienne, arbres du LiDAR HD : tout vient des données ouvertes de l’IGN" },
+    { "de": 9000, "vers": 9900, "vitesse": 70, "duree": 12,
+      "legende": "La D17, au pied de la montagne que Cézanne a peinte plus de quatre-vingts fois" },
+    { "de": 10380, "vers": "arrivee", "vitesse": 45, "fin": 6,
+      "panoramique": { "cap": 30, "duree": 5, "tangage": -12, "recul": 75, "tenue": 2 },
+      "legende": "Arrivée à Saint‑Antonin‑sur‑Bayon, 10,6 km après Rousset" }
+  ],
+  "credits": "Trajet simulé sur la BD TOPO · relief RGE ALTI · photographies aériennes · arbres du LiDAR HD"
+}

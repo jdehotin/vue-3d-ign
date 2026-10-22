@@ -1,0 +1,22 @@
+{
+  "titre": "De la mer au sommet",
+  "sousTitre": "Marseille, Cassis, la Sainte‑Victoire, le mont Ventoux\nla vue en voiture de Vue 3D IGN",
+  "heure": "14:00",
+  "troncons": [
+    { "route": { "depart": { "lat": 43.29086, "lon": 5.35652 }, "arrivee": { "lat": 43.25506, "lon": 5.37347, "nom": "Plages du Prado" } },
+      "de": 1250, "vers": 2300, "vitesse": 50, "duree": 13, "arret": 2.5, "titre": true,
+      "camera": { "tangage": 14, "recul": 95 },
+      "legende": "Marseille, la Corniche, au bord de la Méditerranée" },
+    { "route": { "depart": { "lat": 43.21237, "lon": 5.55521 }, "arrivee": { "lat": 43.1992, "lon": 5.5534, "nom": "Cap Canaille" } },
+      "de": -240, "vers": "arrivee", "vitesse": 55,
+      "panoramique": { "cap": 300, "duree": 5, "tangage": 10, "recul": 110, "tenue": 2.5 },
+      "legende": "Cassis, la route des Crêtes, au‑dessus des plus hautes falaises maritimes de France" },
+    { "route": { "depart": { "lat": 43.5217, "lon": 5.5072 }, "arrivee": { "lat": 43.51865, "lon": 5.58283, "nom": "Saint-Antonin-sur-Bayon" } },
+      "de": 3000, "vers": 4100, "vitesse": 60, "duree": 12,
+      "legende": "La route Cézanne, face à la Sainte‑Victoire, qu’il a peinte plus de quatre‑vingts fois" },
+    { "route": { "depart": { "lat": 44.15049, "lon": 5.31951 }, "arrivee": { "lat": 44.17396, "lon": 5.27829, "nom": "Mont Ventoux" } },
+      "de": 5650, "vers": 6350, "vitesse": 50, "duree": 12, "fin": 6,
+      "legende": "Le mont Ventoux, 1 910 m, le géant de Provence" }
+  ],
+  "credits": "Trajets simulés sur la BD TOPO · relief RGE ALTI · photographies aériennes · arbres du LiDAR HD"
+}
