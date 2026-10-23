@@ -11670,7 +11670,8 @@ function surChemin(chemin, x) {
 // formants qui filtrent une quinzaine de voix désaccordées, en trois rangs
 // décalés de quelques centièmes de seconde —, attaquée par sa consonne, un
 // souffle de bruit. Il ne se comprend pas : le texte s'affiche au-dessus du
-// cortège. Le volume suit la foule et son élan.
+// cortège. Le volume suit la foule et son élan. Seul son enregistré : un
+// chant de tribune, « Tous ensemble, ouais ! », qui vient par vagues.
 const FORMANTS = { a: [750, 1250, 2500], e: [480, 1350, 2450], é: [400, 1950, 2600], è: [580, 1750, 2500],
                    i: [290, 2250, 3000], o: [450, 850, 2450], ou: [320, 760, 2300], u: [300, 1750, 2150],
                    an: [650, 1050, 2500], on: [450, 800, 2350], in: [580, 1450, 2500] };
@@ -11765,7 +11766,8 @@ function rythmeSlogan(texte) {
 
 const sonCortege = { ctx: null, coupe: false, maitre: null, sec: null, blanc: null, rose: null, bravos: null,
                      brouhaha: null, prochainTemps: 0, temps: 0, prochainSifflet: 0, prochainMurmure: 0,
-                     prochaineHoule: 0 };
+                     prochaineHoule: 0, tribune: null, tribuneEntree: null, tribuneBas: null, tribuneNiveau: null,
+                     chant: null, prochainChant: 0 };
 // La saturation d'un mégaphone.
 const COURBE_MEGAPHONE = (() => {
     const n = 1024, c = new Float32Array(n);
@@ -11855,9 +11857,101 @@ function brancherSonCortege(ctx, sortie) {
     houle.connect(volume).connect(S.sec);
     src.start();
     S.brouhaha = { src, houle, volume, aigu: bandes[1] };
+    // Le chant de tribune : son filtre et son volume, communs à ses vagues
+    // (lancerChant). Le grave du stade (vent, tribune qui tape du pied) ôté.
+    const haut = ctx.createBiquadFilter();
+    haut.type = 'highpass';
+    haut.frequency.value = 150;
+    S.tribuneBas = ctx.createBiquadFilter();
+    S.tribuneBas.type = 'lowpass';
+    S.tribuneBas.frequency.value = 7000;
+    S.tribuneNiveau = ctx.createGain();
+    S.tribuneNiveau.gain.value = 0;
+    haut.connect(S.tribuneBas).connect(S.tribuneNiveau).connect(S.sec);
+    S.tribuneEntree = haut;
+    S.chant = null;
+    S.prochainChant = ctx.currentTime + CHANT_PREMIER_S;
+    if (!(S.tribune && S.tribune.sampleRate === ctx.sampleRate)) chargerChantTribune(S, ctx);
     S.prochainTemps = ctx.currentTime + 0.1;
     S.temps = 0;
     return S;
+}
+
+// Le chant de tribune : sept tours de « Tous ensemble, ouais ! » (3,31 s
+// chacun, la vidéo d'origine en compte huit mais la foule y change de chant
+// après 22 s), coupés là où elle se ressemble le plus (similarité spectrale
+// 0,48 sur 1,5 s), fondus sur 0,75 s. Chanté sans cesse, il lasserait : il
+// vient par vagues de 12 à 32 s, plus longues et plus proches quand l'élan
+// monte, et un slogan le fait taire. Il bat à 145 temps par minute, les
+// tambours entre 96 et 132 : à contretemps l'un de l'autre, les tambours
+// s'effacent sous lui.
+const CHANT_URL = '/static/son/tous-ensemble.m4a';
+const CHANT_BOUCLE_S = 1027327 / 44100;     // la boucle, au point près : un m4a peut traîner un remplissage
+const CHANT_PREMIER_S = 25;                 // après le départ, avant la première vague
+const CHANT_ELAN_MIN = 0.3;                 // en dessous, la foule n'a plus le cœur à chanter
+const CHANT_MONTEE_S = 2.5, CHANT_DESCENTE_S = 3;
+// Seul, à pleine foule, élan 0,6, caméra proche : −24 dB RMS, entre le
+// brouhaha (−28) et le chœur d'un slogan (−19), mesurés hors ligne de même.
+// À 0,3, −31 dB : noyé sous le brouhaha.
+const CHANT_VOLUME = 0.65;
+let fichierChant = null;                    // la promesse des octets, lus une fois par visite
+
+/** Le chant décodé pour `ctx`, rangé dans S.tribune quand il est prêt ; sans lui, pas de vague. */
+function chargerChantTribune(S, ctx) {
+    const p = fichierChant = fichierChant || fetch(CHANT_URL).then(r => {
+        if (!r.ok) throw new Error(`chant : ${r.status}`);
+        return r.arrayBuffer();
+    });
+    // decodeAudioData détache ses octets : une copie à chaque contexte.
+    p.then(octets => ctx.decodeAudioData(octets.slice(0)))
+     .then(tampon => { if (S.ctx === ctx) S.tribune = tampon; })
+     .catch(() => { if (fichierChant === p) fichierChant = null; });
+}
+
+/** Une vague du chant, à partir de `t` : un endroit de la boucle au hasard, au pas du cortège. */
+function lancerChant(S, t, elan, bpm) {
+    const ctx = S.ctx, duree = 12 + 14 * elan + Math.random() * 6;
+    const src = ctx.createBufferSource(), env = ctx.createGain();
+    src.buffer = S.tribune;
+    src.loop = true;
+    src.loopEnd = CHANT_BOUCLE_S;
+    // La foule presse le chant avec le pas : 3 % plus lent au pas lent, 4 %
+    // plus vite au pas rapide, moins d'un demi-ton ; un peu de hasard en plus,
+    // pour qu'une vague ne soit pas la copie de la précédente.
+    src.playbackRate.value = Math.min(1.05, Math.max(0.96, 1 + (bpm - 108) / 400)) * (0.99 + Math.random() * 0.02);
+    env.gain.setValueAtTime(0.0001, t);
+    env.gain.linearRampToValueAtTime(1, t + CHANT_MONTEE_S);
+    env.gain.setValueAtTime(1, t + duree - CHANT_DESCENTE_S);
+    env.gain.linearRampToValueAtTime(0.0001, t + duree);
+    src.connect(env).connect(S.tribuneEntree);
+    src.start(t, Math.random() * CHANT_BOUCLE_S);
+    src.stop(t + duree + 0.1);
+    S.chant = { src, env, debut: t, baisse: t + duree - CHANT_DESCENTE_S, fin: t + duree };
+    // Un silence de 30 à 60 s à pleine voix, jusqu'à 85 s quand l'élan est
+    // bas : la tribune chante un tiers du temps au plus.
+    S.prochainChant = t + duree + (30 + Math.random() * 30) * (1.5 - 0.5 * elan);
+}
+
+/** La part du chant à `t`, de 0 à 1 : sa montée et sa descente. */
+function presenceChant(S, t) {
+    const v = S.chant;
+    if (!v) return 0;
+    return Math.max(0, Math.min(1, (t - v.debut) / CHANT_MONTEE_S, (v.fin - t) / (v.fin - v.baisse)));
+}
+
+/** La vague en cours éteinte en `duree` s, et la suivante pas avant `pause` s. */
+function taireChant(S, t, duree, pause = 0) {
+    S.prochainChant = Math.max(S.prochainChant, t + pause);
+    const v = S.chant;
+    if (!v || t + duree >= v.fin) return;
+    const p = presenceChant(S, t);
+    Object.assign(v, { baisse: t, fin: t + duree });
+    v.env.gain.cancelScheduledValues(t);
+    v.env.gain.setValueAtTime(Math.max(p, 0.0001), t);
+    v.env.gain.linearRampToValueAtTime(0.0001, t + duree);
+    // Un second stop() remplace le premier ; un ancien Safari le refusait :
+    // le chant y finit alors à son heure, muet.
+    try { v.src.stop(t + duree + 0.1); } catch (e) { /* déjà programmé */ }
 }
 
 /**
@@ -11977,6 +12071,8 @@ function programmeSlogan(texte) {
 
 /** Le programme joué : l'appel, puis le chœur, au volume de la foule (`force`, de 0 à 1,5). */
 function jouerSlogan(S, prog, force, t0 = S.ctx.currentTime) {
+    // La tribune se tait pour le mégaphone, et laisse le slogan retomber.
+    taireChant(S, t0, 1.2, prog.duree + 15);
     chanter(S, prog.syl, t0 + prog.appel.t0, prog.appel.temps, 0.3, true);
     for (const c of prog.choeurs) chanter(S, prog.syl, t0 + c.t0, c.temps, 0.5 * force);
 }
@@ -12101,9 +12197,9 @@ function murmure(S, t, niveau) {
 }
 
 /**
- * À chaque image : la houle du brouhaha, ses murmures, les tambours au pas,
- * les sifflets. `etat` : { foule, elan (0 à 1), bpm (0 : pas de tambours),
- * proche (0 à 1, la caméra près du cortège) }.
+ * À chaque image : la houle du brouhaha, ses murmures, les vagues du chant,
+ * les tambours au pas, les sifflets. `etat` : { foule, elan (0 à 1), bpm
+ * (0 : pas de tambours), proche (0 à 1, la caméra près du cortège) }.
  */
 function majSonCortege(S, etat) {
     const ctx = S.ctx, now = ctx.currentTime;
@@ -12115,7 +12211,20 @@ function majSonCortege(S, etat) {
         b.houle.gain.setTargetAtTime(0.7 + Math.random() * 0.6, now, 0.08);
         b.aigu.frequency.setTargetAtTime(1100 + Math.random() * 500, now, 0.2);
         b.volume.gain.setTargetAtTime(0.35 * niveau * (0.6 + 0.6 * elan), now, 0.4);
+        S.tribuneNiveau.gain.setTargetAtTime(CHANT_VOLUME * niveau * (0.5 + 0.5 * elan), now, 0.4);
+        // De loin, le chant arrive étouffé par les façades.
+        S.tribuneBas.frequency.setTargetAtTime(2200 + 4800 * proche, now, 0.3);
     }
+    // L'horloge revenue en arrière (les coupes d'un film, outils/demo-video.mjs) :
+    // la vague et l'attente d'avant n'ont plus de sens.
+    if (S.chant && now < S.chant.debut - 1) S.chant = null;
+    if (S.prochainChant > now + 600) S.prochainChant = now + CHANT_PREMIER_S;
+    if (S.chant && now > S.chant.fin) S.chant = null;
+    if (S.chant && (elan < CHANT_ELAN_MIN - 0.05 || niveau < 0.05)) taireChant(S, now, 2);
+    else if (!S.chant && S.tribune && now > S.prochainChant && bpm > 0 && elan >= CHANT_ELAN_MIN && niveau > 0.1) {
+        lancerChant(S, now + 0.05, elan, bpm);
+    }
+    const tambours = 1 - 0.9 * presenceChant(S, now);
     if (now > S.prochainMurmure) {
         S.prochainMurmure = now + 1 / (3 + 12 * elan) * (0.5 + Math.random());
         if (niveau > 0.05) murmure(S, now + 0.02, 0.06 * niveau);
@@ -12123,7 +12232,7 @@ function majSonCortege(S, etat) {
     if (bpm > 0) {
         if (S.prochainTemps < now) S.prochainTemps = now + 0.05;
         while (S.prochainTemps < now + 0.2) {
-            const t = S.prochainTemps, b = S.temps % 8, n = niveau * (0.35 + 0.65 * elan);
+            const t = S.prochainTemps, b = S.temps % 8, n = niveau * (0.35 + 0.65 * elan) * tambours;
             if (b === 0 || b === 4 || (elan > 0.65 && b === 6)) grosseCaisse(S, t, 0.5 * n);
             if (b === 2 || b === 6) caisseClaire(S, t, 0.5 * n);
             if (elan > 0.5 && (b === 3 || b === 7)) caisseClaire(S, t, 0.15 * n);
@@ -12156,10 +12265,14 @@ function demarrerSonCortege() {
 function arreterSonCortege() {
     const S = sonCortege;
     if (!S.maitre) return;
-    const maitre = S.maitre, src = S.brouhaha.src;
+    const maitre = S.maitre, src = S.brouhaha.src, chant = S.chant && S.chant.src;
     maitre.gain.setTargetAtTime(0, S.ctx.currentTime, 0.08);
-    setTimeout(() => { try { src.stop(); maitre.disconnect(); } catch (e) { /* déjà arrêté */ } }, 600);
-    S.maitre = S.sec = S.brouhaha = null;
+    setTimeout(() => {
+        for (const f of [() => src.stop(), () => chant && chant.stop(), () => maitre.disconnect()]) {
+            try { f(); } catch (e) { /* déjà arrêté */ }
+        }
+    }, 600);
+    S.maitre = S.sec = S.brouhaha = S.chant = null;
 }
 
 /** M, ou le bouton : le son coupé ou rendu, retenu pour la visite suivante. */
