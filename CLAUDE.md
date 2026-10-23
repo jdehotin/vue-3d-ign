@@ -64,7 +64,7 @@ vue3d/
   static/index.html   la page entière : HTML, CSS et JavaScript (three.js r160)
   static/voiture.html la vue en voiture, page à part : un monde qui défile en Lambert-93, sol en tuiles WMTS sur le RGE ALTI, carrés chargés le long de la route prévue sur le graphe BD TOPO, voiture calée sur la route
   static/favicon.svg, favicon-32.png, apple-touch-icon.png   le logo de la page, tiré de docs/logo/
-  static/son/tous-ensemble.m4a   le chant de tribune du cortège, bouclé (7 tours, 23,3 s) : seul son enregistré
+  static/son/   les chants de foule du cortège, bouclés : tous-ensemble.m4a (7 tours, 23,3 s), macron-demission.m4a (2 tours, 3,2 s) ; seuls sons enregistrés
 docs/logo/      le logo « Tuile » : SVG avec et sans le nom (vectorisé), icône, aperçu GitHub
 ```
 

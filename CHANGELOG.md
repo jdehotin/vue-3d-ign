@@ -15,12 +15,19 @@ messages de commit et dans les commentaires des modules.
 
 ### Ajouté
 
+- **« Macron démission ! » dans le cortège** (23 octobre 2026) : un second
+  chant de foule, tiré d'une vidéo de Luc Auffret place de la République
+  (repris avec son accord), alterne avec « Tous ensemble » d'une vague à
+  l'autre. L'enregistrement n'en a que 4,5 s nettes : une boucle de deux
+  tours (3,2 s, 40 Ko), en vagues plus courtes, de 8 à 15 s, pour ne pas
+  tourner en rond. Même sonie que le premier (−21 LUFS seul ; le brouhaha à
+  −25, le chœur des slogans à −16).
 - **Un chant de tribune dans le cortège** (23 octobre 2026) : « Tous
   ensemble, ouais ! », enregistré dans une tribune, s'élève par vagues de 12
   à 32 s au-dessus du brouhaha, plus longues et plus proches quand l'élan
   monte, un tiers du temps au plus. Les tambours, à contretemps, s'effacent
   sous lui ; un slogan lancé le fait taire, un élan sous 30 aussi ; de loin,
-  il arrive étouffé. Seul son enregistré du jeu : une boucle de 23,3 s (sept
+  il arrive étouffé. Premier son enregistré du jeu : une boucle de 23,3 s (sept
   tours du chant), coupée là où l'enregistrement se ressemble le plus,
   285 Ko lus au premier départ du cortège. Seul, il sonne à −24 dB, entre le
   brouhaha (−28) et le chœur des slogans (−19).
