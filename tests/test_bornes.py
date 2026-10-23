@@ -90,3 +90,78 @@ def test_une_lecture_incomplete_ou_en_echec_leve(monkeypatch):
     with pytest.raises(requests.RequestException, match="data.gouv.fr injoignable"):
         bornes.fetch_bornes(*BBOX)
     assert len(essais) == bornes.ESSAIS
+
+
+# --- Par bloc, pour la vue en voiture ------------------------------------------------------------
+
+def _bloc_de(lon, lat):
+    from vue3d.carres import lambert93
+    x, y = lambert93(lon, lat)
+    return int(x // bornes.BLOC_M), int(y // bornes.BLOC_M)
+
+
+def test_un_bloc_ne_garde_que_ses_stations(tmp_path):
+    bi, bj = _bloc_de(5.6164, 43.4629)                       # Rousset
+    lues = []
+
+    def lire(w, s, e, n):
+        lues.append((w, s, e, n))
+        # Une station au cœur du bloc, une autre dans l'emprise en degrés mais
+        # dans le bloc voisin (les méridiens convergent).
+        return {"lu_le": "2026-10-23", "lignes": [_point("S1", "P1", lon=(w + e) / 2, lat=(s + n) / 2),
+                                                  _point("S2", "P2", lon=w + 1e-4, lat=s + 1e-4)]}
+
+    bloc = bornes.bornes_du_bloc(bi, bj, lire)
+    assert [st["nom"] for st in bloc["stations"]] == ["Station S1"]
+    assert bloc["bloc"] == [bi, bj] and bloc["nombre_points"] == 1 and bloc["lu_le"] == "2026-10-23"
+
+
+def test_un_bloc_est_garde_une_semaine_puis_relu(tmp_path):
+    import datetime
+    jour = [datetime.date(2026, 10, 23)]
+    lectures = []
+
+    def lire(*bbox):
+        lectures.append(bbox)
+        return {"lu_le": jour[0].isoformat(), "lignes": []}
+
+    blocs = bornes.BlocsBornes(str(tmp_path), lire=lire, aujourdhui=lambda: jour[0])
+    bi, bj = _bloc_de(5.54, 43.4751)
+    chemin = blocs.obtenir(bi, bj)
+    assert blocs.obtenir(bi, bj) == chemin and len(lectures) == 1
+    jour[0] += datetime.timedelta(days=bornes.BLOC_JOURS - 1)
+    blocs.obtenir(bi, bj)
+    assert len(lectures) == 1 and blocs.a_jour(bi, bj)
+    jour[0] += datetime.timedelta(days=1)
+    assert not blocs.a_jour(bi, bj)
+    blocs.obtenir(bi, bj)
+    assert len(lectures) == 2
+
+
+def test_une_relecture_en_echec_garde_le_bloc_d_avant(tmp_path):
+    import datetime, gzip, json
+    jour = [datetime.date(2026, 10, 1)]
+    panne = [False]
+
+    def lire(*bbox):
+        if panne[0]:
+            raise requests.RequestException("data.gouv.fr injoignable")
+        return {"lu_le": jour[0].isoformat(), "lignes": []}
+
+    blocs = bornes.BlocsBornes(str(tmp_path), lire=lire, aujourdhui=lambda: jour[0])
+    bi, bj = _bloc_de(5.54, 43.4751)
+    chemin = blocs.obtenir(bi, bj)
+    jour[0] = datetime.date(2026, 10, 23)
+    panne[0] = True
+    assert blocs.obtenir(bi, bj) == chemin
+    with gzip.open(chemin, "rt") as f:
+        assert json.load(f)["lu_le"] == "2026-10-01"
+    # Sans bloc gardé, l'échec remonte, et rien n'est écrit.
+    with pytest.raises(requests.RequestException):
+        blocs.obtenir(bi + 1, bj)
+    assert not (tmp_path / "carres" / "bornes-v1" / str(bi + 1)).exists()
+
+
+def test_un_bloc_hors_de_france_est_refuse(tmp_path):
+    with pytest.raises(bornes.BlocHorsEmprise):
+        bornes.BlocsBornes(str(tmp_path), lire=None).obtenir(-5, 0)

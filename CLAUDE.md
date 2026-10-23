@@ -34,7 +34,7 @@ node outils/film-voiture.mjs "http://localhost:8080/voiture?simu=1&lat=48.8532&l
 
 ```
 vue3d/
-  app.py        Flask : /, /voiture, /api/scene, /api/carre, /api/vegetation, /api/vitesses, /api/ortho, /api/monuments, /api/ouvrages, /api/nuage, /api/piscines, /api/navires, /api/vehicules, /api/panneaux, /api/dpe, /api/dvf, /api/bornes, /api/avancement, /api/sante, /api/tuile, POST /api/reconstruire, POST /api/signalement ; quota de scènes neuves par IP (VUE3D_QUOTA, VUE3D_PROXY derrière un proxy)
+  app.py        Flask : /, /voiture, /api/scene, /api/carre, /api/vegetation, /api/vitesses, /api/ortho, /api/monuments, /api/ouvrages, /api/nuage, /api/piscines, /api/navires, /api/vehicules, /api/panneaux, /api/dpe, /api/dvf, /api/bornes, /api/bornes-bloc, /api/avancement, /api/sante, /api/tuile, POST /api/reconstruire, POST /api/signalement ; quota de scènes neuves par IP (VUE3D_QUOTA, VUE3D_PROXY derrière un proxy)
   scene.py      assemblage d'une scène, cache disque par point arrondi
   couches.py    lecture WFS (bâtiments, végétation, BD Forêt, routes)
   batiments.py  bâtiments découpés sur l'emprise, en retrait du bord
@@ -55,7 +55,7 @@ vue3d/
   panneaux.py   panneaux solaires du registre OpenPVMapper (SQLite R-tree) : couche à part, optionnelle (VUE3D_PANNEAUX)
   dpe.py        DPE de l'ADEME rattachés aux bâtiments (RNB, sinon adresse à 5 m) : couche à part, lue au clic seulement, datée
   dvf.py        ventes DVF (fichiers Etalab) jointes aux parcelles du cadastre IGN : couche à part, lue au clic seulement, datée
-  bornes.py     bornes de recharge (Base nationale des IRVE, API tabulaire de data.gouv.fr) réunies par station : couche à part, lue au clic seulement, datée
+  bornes.py     bornes de recharge (Base nationale des IRVE, API tabulaire de data.gouv.fr) réunies par station : couche à part, lue au clic seulement, datée ; pour la voiture, par bloc de 4 km (cache/carres/bornes-v1/), relu après 7 jours
   carres.py     carrés de 500 m de la vue en voiture, grille Lambert-93 : bâtiments et routes BD TOPO lus en EPSG:2154 (cache/carres/), sans scène ni MNH ; leurs arbres en couche à part (/api/vegetation, houppiers.py sur le MNH à 0,5 m) ; quota à part (CARRES_PAR_HEURE)
   vitesses.py   limitations de vitesse des carrés de la voiture (/api/vitesses) : maxspeed OpenStreetMap (Overpass, par bloc de 2 km gardé dans cache/carres/), rapproché des tronçons BD TOPO sens par sens, sinon règle générale marquée estimée ; couche à part
   geopf.py      GET avec reprise sur la Géoplateforme ; 8 places pour tout le service, lectures groupées abandonnées au premier échec

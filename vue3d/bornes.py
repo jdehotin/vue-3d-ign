@@ -21,10 +21,17 @@ autant de points que l'API en annonce, lèvent, et rien n'est écrit.
 """
 
 import datetime
+import gzip
+import json
 import logging
+import os
+import tempfile
+import threading
 import time
 
 import requests
+
+from .carres import CARRE_M, CARRES_I, CARRES_J, lambert93, wgs84
 
 journal = logging.getLogger(__name__)
 
@@ -176,3 +183,123 @@ def bornes_pour_emprise(west, south, east, north, brut):
                  len(liste), nombre, len(brut.get("lignes", [])))
     return {"version": BORNES_VERSION, "lu_le": brut.get("lu_le"), "nombre_points": nombre,
             "stations": liste}
+
+
+# --- Pour la vue en voiture : par bloc de la grille Lambert-93 -----------------------------------
+# La voiture n'a pas de scène : elle lit les bornes par bloc de BLOC_M de
+# côté, autour d'elle et le long de la route prévue. Mesuré le 2026-10-23 à
+# l'API tabulaire : un bloc de 4 km compte 11 à 22 points de charge à
+# Rousset, à la Barque (Fuveau) ou sur l'A7 à Montélimar, lus en 0,5 s ; 1 915
+# points (191 stations) autour de l'Opéra, en 8,3 s et dix pages, 6,6 Ko
+# gzippés. Un bloc de 2 km n'y coûte pas moins (10,7 s pour 936 points, le
+# temps de l'API varie plus que la taille) et en demande quatre fois plus.
+BLOC_M = 4000
+BLOC_CARRES = BLOC_M // CARRE_M
+BLOC_VERSION = 1
+# La base est consolidée chaque jour ; une station ouverte la veille n'a pas
+# à paraître le jour même. Au-delà, le bloc est relu, et gardé tel quel si la
+# relecture échoue : il porte sa date de lecture.
+BLOC_JOURS = 7
+# Blocs neufs par heure et par adresse IP, quand le service a un quota : à
+# 130 km/h, la voiture en traverse un toutes les deux minutes, avec ses
+# voisins à 3 km de part et d'autre, une centaine par heure au plus.
+BLOCS_PAR_HEURE = 200
+
+
+class BlocHorsEmprise(ValueError):
+    """Le bloc n'a aucun carré en France métropolitaine."""
+
+
+def verifier_bloc(bi, bj):
+    """
+    Raises:
+        BlocHorsEmprise si aucun carré du bloc (bi, bj) n'est servi.
+    """
+    i0, j0 = bi * BLOC_CARRES, bj * BLOC_CARRES
+    if not (i0 + BLOC_CARRES > CARRES_I[0] and i0 < CARRES_I[1]
+            and j0 + BLOC_CARRES > CARRES_J[0] and j0 < CARRES_J[1]):
+        raise BlocHorsEmprise(f"Le bloc {bi}, {bj} est hors de France métropolitaine, seule servie.")
+
+
+def bornes_du_bloc(bi, bj, lire=fetch_bornes):
+    """Les stations dont la position tombe dans le bloc (bi, bj) de BLOC_M,
+    Lambert-93 : l'emprise lue en degrés le déborde (les méridiens
+    convergent), une station n'appartient qu'à un bloc.
+
+    Raises:
+        requests.RequestException si la base n'a pas pu être lue en entier.
+    """
+    x0, y0 = bi * BLOC_M, bj * BLOC_M
+    coins = [wgs84(x, y) for x in (x0, x0 + BLOC_M) for y in (y0, y0 + BLOC_M)]
+    w, s = min(c[0] for c in coins), min(c[1] for c in coins)
+    e, n = max(c[0] for c in coins), max(c[1] for c in coins)
+    brut = lire(w, s, e, n)
+    couche = bornes_pour_emprise(w, s, e, n, brut)
+    dedans = []
+    for station in couche["stations"]:
+        x, y = lambert93(station["lon"], station["lat"])
+        if x0 <= x < x0 + BLOC_M and y0 <= y < y0 + BLOC_M:
+            dedans.append(station)
+    return {"version": BLOC_VERSION, "bloc": [bi, bj], "taille": BLOC_M, "lu_le": couche["lu_le"],
+            "nombre_points": sum(st["points"] for st in dedans), "stations": dedans}
+
+
+class BlocsBornes:
+    """Les blocs de bornes lus, sur disque : `dossier`/carres/bornes-v<n>/<bi>/<bj>.json.gz,
+    écrits d'un coup, relus après BLOC_JOURS. `lire` : (ouest, sud, est,
+    nord) -> réponse brute (fetch_bornes), injectable pour les tests ;
+    `aujourdhui` : la date du jour, de même."""
+
+    def __init__(self, dossier, lire=fetch_bornes, aujourdhui=datetime.date.today):
+        self.dossier = os.path.join(dossier, "carres", f"bornes-v{BLOC_VERSION}")
+        self.lire = lire
+        self.aujourdhui = aujourdhui
+        self._verrous = {}
+        self._verrou = threading.Lock()
+
+    def chemin(self, bi, bj):
+        return os.path.join(self.dossier, str(bi), f"{bj}.json.gz")
+
+    def _lu_le(self, chemin):
+        """La date de lecture du bloc gardé ; None s'il n'y en a pas."""
+        if not os.path.exists(chemin):
+            return None
+        with gzip.open(chemin, "rt", encoding="utf-8") as f:
+            return datetime.date.fromisoformat(json.load(f)["lu_le"])
+
+    def a_jour(self, bi, bj):
+        """Vrai si le bloc est gardé et de moins de BLOC_JOURS : le servir ne lit rien."""
+        lu_le = self._lu_le(self.chemin(bi, bj))
+        return lu_le is not None and (self.aujourdhui() - lu_le).days < BLOC_JOURS
+
+    def obtenir(self, bi, bj):
+        """Le chemin du bloc, lu ou relu au besoin ; deux demandes du même
+        bloc n'en font qu'une lecture.
+
+        Raises:
+            BlocHorsEmprise.
+            requests.RequestException si la base n'a pas répondu et qu'aucun
+            bloc n'est gardé : rien n'est écrit.
+        """
+        verifier_bloc(bi, bj)
+        chemin = self.chemin(bi, bj)
+        with self._verrou:
+            verrou = self._verrous.setdefault((bi, bj), threading.Lock())
+        with verrou:
+            if self.a_jour(bi, bj):
+                return chemin
+            try:
+                bloc = bornes_du_bloc(bi, bj, self.lire)
+            except requests.RequestException as exc:
+                if os.path.exists(chemin):
+                    journal.warning("Bornes du bloc %d, %d non relues (%s) : celles du %s restent",
+                                    bi, bj, exc, self._lu_le(chemin))
+                    return chemin
+                raise
+            octets = gzip.compress(json.dumps(bloc, ensure_ascii=False, separators=(",", ":")).encode())
+            os.makedirs(os.path.dirname(chemin), exist_ok=True)
+            fd, tmp = tempfile.mkstemp(dir=os.path.dirname(chemin))
+            with os.fdopen(fd, "wb") as f:
+                f.write(octets)
+            os.replace(tmp, chemin)
+        return chemin

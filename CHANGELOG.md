@@ -15,6 +15,18 @@ messages de commit et dans les commentaires des modules.
 
 ### Ajouté
 
+- **Les bornes de recharge dans la vue en voiture** (23 octobre 2026), au
+  bouton « Bornes » : celles de la Base nationale des IRVE, à 3 km autour de
+  la voiture et le long de la route prévue, en pastilles teintes de leur
+  puissance comme sur la page de la scène, dessinées par-dessus les
+  bâtiments, comme les repères d'un GPS. Un toucher ouvre la fiche de la
+  station : distance, opérateur, points de charge, puissance, prises, accès.
+  Chacune a sa portée selon sa puissance (600 m jusqu'à 22 kW, 2 km jusqu'à
+  149, 4 km au-delà) et une pastille qui en recouvre une plus puissante
+  s'efface : à l'Étoile, six pastilles au lieu d'un ruban de plusieurs
+  centaines. Lues au serveur par bloc de 4 km (`/api/bornes-bloc`, 0,5 s à
+  la campagne, 8 à 35 s au cœur de Paris la première fois), gardées une
+  semaine ; `bornes=0` les retire.
 - **Signaler un défaut de la vue en voiture** (23 octobre 2026) : un bouton ⚠
   au-dessus du compteur, comme celui de Coyote. Un appui envoie au serveur
   une capture de l'écran, la position et l'état du sol (tuiles sous la

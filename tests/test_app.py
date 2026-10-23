@@ -596,3 +596,34 @@ def test_le_quota_glisse_sur_une_heure():
     t[0] = 8000
     quota.attente("b", 1)
     assert "a" not in quota._scenes
+
+
+
+def test_les_bornes_d_un_bloc_pour_la_voiture(tmp_path):
+    import requests
+    from vue3d import bornes
+    from vue3d.carres import lambert93
+    x, y = lambert93(5.6164, 43.4629)
+    bi, bj = int(x // bornes.BLOC_M), int(y // bornes.BLOC_M)
+    lectures = []
+
+    def lire_bornes(w, s, e, n):
+        # Au nord de 44° : la base des IRVE ne répond pas.
+        if s > 44:
+            raise requests.RequestException("data.gouv.fr injoignable")
+        lectures.append((w, s, e, n))
+        return {"lu_le": "2026-10-23", "lignes": [{
+            "id_station_itinerance": "S1", "id_pdc_itinerance": "P1", "nom_station": "Station",
+            "consolidated_longitude": (w + e) / 2, "consolidated_latitude": (s + n) / 2,
+            "puissance_nominale": 150}]}
+
+    client = module_app.creer_app(str(tmp_path), lire_bornes=lire_bornes).test_client()
+    r = client.get(f"/api/bornes-bloc?i={bi}&j={bj}")
+    assert r.status_code == 200 and r.headers["Cache-Control"] == "public, max-age=86400"
+    assert [s["puissance_max"] for s in json.loads(gzip.decompress(r.data))["stations"]] == [150]
+    assert client.get(f"/api/bornes-bloc?i={bi}&j={bj}").status_code == 200 and len(lectures) == 1
+    assert client.get("/api/bornes-bloc?i=-5&j=0").status_code == 422
+    assert client.get("/api/bornes-bloc?i=x").status_code == 400
+    nord = int(lambert93(5.6, 44.5)[1] // bornes.BLOC_M)
+    r = client.get(f"/api/bornes-bloc?i={bi}&j={nord}")
+    assert r.status_code == 503 and r.headers["Retry-After"] == "30"

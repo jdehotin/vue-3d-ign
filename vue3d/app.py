@@ -24,6 +24,8 @@
     GET /api/vegetation?i=…&j=…    les arbres du même carré, découpés sur le MNH
     GET /api/vitesses?i=…&j=…      les limitations de vitesse de ses tronçons :
                                    OpenStreetMap, sinon la règle générale
+    GET /api/bornes-bloc?i=…&j=…   les bornes de recharge d'un bloc de 4 km,
+                                   pour la voiture : relues chaque semaine
     GET /api/tuile/<couche>/<z>/<x>/<y>  une tuile WMTS de l'IGN (ortho, plan) : du
                                    stock du serveur, sinon redirigée vers l'IGN ;
                                    `?relire=1` après un refus, lue et gardée ici
@@ -52,7 +54,7 @@ import requests
 from flask import Flask, jsonify, redirect, request, send_file, send_from_directory
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from .bornes import fetch_bornes
+from .bornes import BLOCS_PAR_HEURE, BlocHorsEmprise, BlocsBornes, fetch_bornes, verifier_bloc
 from .carres import (CARRES_PAR_HEURE, VEGETATION_VERSION, CarreHorsEmprise, CarreIndisponible, Carres,
                      fetch_carre, fetch_vegetation)
 from .dpe import fetch_dpe
@@ -216,6 +218,8 @@ def creer_app(dossier_cache=None, construire=construire_scene, lire_monuments=fe
     if quota_carres is None:
         quota_carres = CARRES_PAR_HEURE if quota else 0
     quota_carres = Quota(quota_carres) if quota_carres else None
+    blocs_bornes = BlocsBornes(cache.dossier, lire=lire_bornes)
+    quota_blocs = Quota(BLOCS_PAR_HEURE) if quota else None
     signalements = Signalements(os.path.join(cache.dossier, "signalements"))
     quota_signalements = Quota(SIGNALEMENTS_PAR_HEURE) if quota else None
 
@@ -662,6 +666,37 @@ def creer_app(dossier_cache=None, construire=construire_scene, lire_monuments=fe
         # gardé une semaine, sans revalidation, ce qui épargne une requête par
         # carré à chaque passage.
         reponse.headers["Cache-Control"] = "public, max-age=604800"
+        return reponse
+
+    @app.get("/api/bornes-bloc")
+    def bornes_bloc():
+        """Les bornes de recharge d'un bloc de 4 km de la grille Lambert-93,
+        pour la vue en voiture, qui n'a pas de scène (vue3d/bornes.py)."""
+        try:
+            bi, bj = int(request.args["i"]), int(request.args["j"])
+        except (KeyError, ValueError):
+            return erreur(400, "Paramètres i et j attendus : le bloc, en pas de 4 km Lambert-93.")
+        try:
+            verifier_bloc(bi, bj)
+            if quota_blocs and not blocs_bornes.a_jour(bi, bj):
+                attente = quota_blocs.attente(request.remote_addr, (bi, bj))
+                if attente:
+                    app.logger.warning("Quota de %d blocs de bornes par heure atteint pour %s",
+                                       quota_blocs.par_heure, request.remote_addr)
+                    reponse, code = erreur(429, "Trop de blocs de bornes neufs pour ce visiteur.")
+                    reponse.headers["Retry-After"] = str(attente)
+                    return reponse, code
+            chemin = blocs_bornes.obtenir(bi, bj)
+        except BlocHorsEmprise as exc:
+            return erreur(422, str(exc))
+        except requests.RequestException as exc:
+            app.logger.warning("Bornes du bloc %d, %d illisibles : %s", bi, bj, exc)
+            reponse, code = erreur(503, f"La base des bornes de recharge n'a pas répondu ({exc}).")
+            reponse.headers["Retry-After"] = "30"
+            return reponse, code
+        reponse = servir_gzip(os.path.dirname(chemin), os.path.basename(chemin))
+        # Relu chaque semaine sous la même adresse : un jour au navigateur.
+        reponse.headers["Cache-Control"] = "public, max-age=86400"
         return reponse
 
     @app.post("/api/signalement")
