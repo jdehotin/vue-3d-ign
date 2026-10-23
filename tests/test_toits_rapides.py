@@ -395,7 +395,11 @@ def test_les_processus_du_bassin_meurent_avec_le_service(tmp_path, moment):
         pids = [int(p) for p in service.stdout.readline().split()]
         assert len(pids) == 2
     finally:
+    try:
         service.send_signal(signal.SIGKILL)
+    except AttributeError:
+        # Windows: SIGKILL n'existe pas, on utilise terminate()
+        service.terminate()
         service.wait()
     def du_bassin(p):
         # Le numéro d'un processus fini peut resservir : on vérifie que
@@ -417,7 +421,12 @@ def test_les_processus_du_bassin_meurent_avec_le_service(tmp_path, moment):
         time.sleep(0.2)
         vivants = [p for p in vivants if du_bassin(p)]
     for p in vivants:
-        os.kill(p, signal.SIGKILL)
+        try:
+            os.kill(p, signal.SIGKILL)
+        except AttributeError:
+            # Windows: SIGKILL n'existe pas, on utilise terminate()
+            import os as os_mod
+            os_mod.kill(p, 15) # SIGTERM équivalent sous Windows
     assert not vivants, "processus du bassin orphelins"
 
 
