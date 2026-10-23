@@ -431,6 +431,19 @@ messages de commit et dans les commentaires des modules.
 
 ### Corrigé
 
+- **Le sol flou sous la voiture, d'Aix à Rousset** (23 octobre 2026), trouvé
+  par les signalements d'une Tesla : une tuile d'altitude du RGE ALTI coupée
+  par le réseau en plein corps entrait au cache du navigateur, puis en était
+  relue et refusée à chaque essai, sans jamais repartir au réseau ni compter
+  parmi les tuiles en attente. Sur toute son emprise (57 × 78 km, jusqu'à
+  5,625° E), plus aucune tuile du zoom 13 ne se construisait : le sol
+  retombait au zoom 12, une photo de 10 km agrandie en aplat sous la voiture,
+  dès qu'une tuile plus fine manquait. Une tuile d'altitude n'est plus gardée
+  qu'entière (256 × 256 flottants), une copie abîmée est effacée et relue ;
+  après deux échecs de ses altitudes, une tuile du sol se pose sur le niveau
+  de sa mère ; un 404 d'altitude (7/32/132, de Digne au Verdon, pris pour la
+  mer) est redemandé deux fois avant de valoir absence. Le bandeau dit aussi
+  « Sol flou », avec ce qui bloque la tuile plus fine.
 - **La mer blanche de la vue en voiture** (22 octobre 2026) : au large,
   l'orthophoto de l'IGN n'est pas absente mais d'un blanc pur, entière dès le
   zoom 15 à 7 km au sud de Cassis. Vue de la route des Crêtes, la mer sortait

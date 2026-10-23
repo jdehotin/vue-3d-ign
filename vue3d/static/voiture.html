@@ -361,15 +361,27 @@ const ALTI_NIVEAU_MIN = 6, ALTI_NIVEAU_MAX = 14;
 // un pixel de 9,5 m sur 6,7 m à 45°) : bâtiments, route et voiture s'y posent.
 const NIVEAU_PROCHE = 13;
 const ALTI_CACHE = 160;                 // 256 Kio chacune
+// Hors de la pyramide (la mer au large, l'étranger), l'IGN répond 404 ; mais
+// il en rend aussi pour une tuile qui existe : 7/32/132, de Digne au Verdon,
+// en 404 dans une Tesla le 23 octobre 2026, en 200 trois fois de suite
+// redemandée le même jour. Prise pour la mer, tout ce pan du relief restait à
+// 0 m pour la vie de la page. Trois réponses pour une absence, à 1,5 s
+// d'écart, comme le serveur pour une photo (vue3d/tuiles.py).
+const ALTI_ESSAIS_404 = 3, ALTI_PAUSE_404_MS = 1500;
 const altis = new Map();                // "niveau/ligne/colonne" → { promesse, valeurs }
+const erreursAlti = new Map();          // "niveau/ligne/colonne" → la dernière erreur, pour les signalements
 function tuileAlti(niveau, ligne, colonne) {
     const cle = `${niveau}/${ligne}/${colonne}`;
     let t = altis.get(cle);
     if (t) return t;
     t = { valeurs: null };
     t.promesse = (async () => {
-        const reponse = await lireEnCache(ALTI_URL(niveau, ligne, colonne), DELAI_ALTI_MS);
-        // Notée pour les signalements : sur la terre ferme, un 404 serait un refus.
+        const url = ALTI_URL(niveau, ligne, colonne);
+        let reponse = await lireEnCache(url, DELAI_ALTI_MS);
+        for (let essai = 1; reponse.status === 404 && essai < ALTI_ESSAIS_404; essai++) {
+            await new Promise(r => setTimeout(r, ALTI_PAUSE_404_MS));
+            reponse = await lireEnCache(url, DELAI_ALTI_MS);
+        }
         if (reponse.status === 404) { t.absente = true; return new Float32Array(256 * 256).fill(NaN); }
         const type = reponse.headers.get('content-type') || '';
         if (!reponse.ok || !type.startsWith('image/x-bil')) throw new Error(`RGE ALTI : ${reponse.status} ${type}`);
@@ -377,8 +389,14 @@ function tuileAlti(niveau, ligne, colonne) {
         if (v.length !== 256 * 256) throw new Error('RGE ALTI tronqué');
         for (let i = 0; i < v.length; i++) if (v[i] < -100) v[i] = NaN;
         return v;
-    })().then(v => { t.valeurs = v; return v; },
-              e => { if (altis.get(cle) === t) altis.delete(cle); throw e; });
+    })().then(v => { t.valeurs = v; erreursAlti.delete(cle); return v; },
+              e => {
+                  if (altis.get(cle) === t) altis.delete(cle);
+                  erreursAlti.delete(cle);
+                  erreursAlti.set(cle, String(e?.message || e).slice(0, 160));
+                  if (erreursAlti.size > 20) erreursAlti.delete(erreursAlti.keys().next().value);
+                  throw e;
+              });
     t.promesse.catch(() => {});
     altis.set(cle, t);
     if (altis.size > ALTI_CACHE) {
@@ -504,7 +522,7 @@ class TuileAbsente extends Error {}
 // 90 jours : une nouvelle prise de vue de l'IGN arrive dans la voiture.
 const CACHE_PREFIXE = 'vue3d-voiture-tuiles-';
 const CACHE_TUILES_MAX = 15000, CACHE_PURGE_TOUTES = 400;
-const statsCache = { lues: 0, gardees: 0, reseau: 0 };
+const statsCache = { lues: 0, gardees: 0, reseau: 0, abimees: 0 };
 let ecrituresCache = 0;
 const ouvertureCache = (async () => {
     try {
@@ -526,23 +544,41 @@ function garderEnCache(cache, url, reponse) {
     }).catch(() => {});
 }
 
+// Une tuile d'altitude est gardée entière ou pas du tout : 256 × 256
+// flottants. Coupée par le réseau en plein corps, une réponse sortait 200,
+// entrait au cache, et en était relue à chaque essai, refusée à chaque fois
+// sans jamais repartir au réseau ni compter parmi les tuiles en attente. Dans
+// une Tesla, le 23 octobre 2026, la tuile 8/66/263 (d'Aix et Gardanne
+// jusqu'à Rousset) n'a ainsi plus laissé construire une seule tuile du zoom
+// 13 : le sol retombait au zoom 12, une photo de 10 km agrandie sous la
+// voiture, dès qu'une tuile plus fine manquait — en roulant, presque
+// toujours. Une copie abîmée gardée avant cette vérification est effacée.
+const ALTI_OCTETS = 256 * 256 * 4;
+async function entiere(url, r) {
+    if (!url.includes('LAYER=ELEVATION.')) return true;
+    if (!(r.headers.get('content-type') || '').startsWith('image/x-bil')) return false;
+    try { return (await r.clone().arrayBuffer()).byteLength === ALTI_OCTETS; } catch (e) { return false; }
+}
+
 /** La réponse de `url`, du cache de la voiture, sinon du réseau (gardée si elle est bonne). */
 async function lireEnCache(url, delai, noter = true) {
     const cache = await ouvertureCache;
     if (cache) {
         try {
             const r = await cache.match(url);
-            if (r) { statsCache.lues++; return r; }
+            if (r && await entiere(url, r)) { statsCache.lues++; return r; }
+            if (r) { statsCache.abimees++; await cache.delete(url); }
         } catch (e) { /* cache illisible : le réseau */ }
     }
     let r;
     try { r = await lireAvecDelai(url, delai); }
     catch (e) { if (noter) noterManquee(url); throw e; }
     statsCache.reseau++;
-    if (r.ok) {
+    if (r.ok && await entiere(url, r)) {
         oublierManquee(url);
         if (cache) garderEnCache(cache, url, r.clone());
-    } else if (noter && (r.status >= 500 || r.status === 429)) {
+    } else if (noter && (r.ok || r.status >= 500 || r.status === 429)) {
+        // Incomplète, comme une panne : redemandée plus tard.
         noterManquee(url);
     }
     return r;
@@ -862,31 +898,45 @@ function construireTuile(t, niveau) {
     t.mesh.visible = false;
     t.ymin = ymin; t.ymax = ymax;
     t.altiManquantes = manquantes;
+    t.niveau = niveau;
     ancrer(t.mesh, t.cx, t.cy);
     habillerTuile(t);
     groupeSol.add(t.mesh);
 }
 
+// Une tuile sans altitudes ne se construit pas, et ses descendantes ne la
+// remplacent qu'au complet : sa mère reste affichée dès qu'une seule manque.
+// Après deux échecs de ses altitudes, elle se pose sur le niveau du RGE ALTI
+// de sa mère, déjà lu : un relief un peu plus lisse, plutôt qu'une tuile de
+// zoom 12 (10 km) sous la voiture tant que la sienne ne vient pas.
+const ECHECS_ALTI_AVANT_REPLI = 2;
+const niveauSol = t => Math.min(Math.max(t.z - 5 - ((t.echecsAlti || 0) >= ECHECS_ALTI_AVANT_REPLI ? 1 : 0),
+                                         ALTI_NIVEAU_MIN), ALTI_NIVEAU_MAX);
+
 async function chargerTuileSol(t) {
     t.enCours = true;
     solEnVol++;
     const gen = generationFond;
-    const niveau = Math.min(Math.max(t.z - 5, ALTI_NIVEAU_MIN), ALTI_NIVEAU_MAX);
+    const niveau = niveauSol(t);
     try {
         const marge = (t.e - t.o) / SOL_MAILLES * 1.5;
-        const [, image] = await Promise.all([
+        const [alti, image] = await Promise.allSettled([
             t.mesh ? null : preparerAltitudes(t.o - marge, t.s - marge, t.e + marge, t.n + marge, niveau),
             t.fondGen === gen ? t.image : imageSol(t, gen)]);
-        if (gen === generationFond) { t.image = image; t.fondGen = gen; }
+        if (image.status === 'fulfilled' && gen === generationFond) { t.image = image.value; t.fondGen = gen; }
+        if (alti.status === 'rejected') { t.echecsAlti = (t.echecsAlti || 0) + 1; throw alti.reason; }
+        if (image.status === 'rejected') throw image.reason;
         if (!tuilesSol.has(t.cle)) return;
         if (!t.mesh) construireTuile(t, niveau);
         else habillerTuile(t);
         t.echecs = 0;
+        t.erreur = null;
     } catch (e) {
         // Altitudes ou image en panne : redemandée de plus en plus tard, de
         // 4 à 20 s, pas plus : le réseau revenu, le sol doit suivre ; d'ici
         // là, sa mère la couvre.
         t.echecs = (t.echecs || 0) + 1;
+        t.erreur = String(e?.message || e).slice(0, 160);
         t.reessai = performance.now() + Math.min(4000 * 2 ** (t.echecs - 1), 20000);
     } finally {
         t.enCours = false;
@@ -3047,10 +3097,30 @@ function blancheur(img) {
     return img.__blancheur;
 }
 
+/**
+ * Le zoom que la tuile sous (x, y) devrait avoir, vue de la caméra : la plus
+ * fine qui ne se découpe plus (couvrirSol), à SOL_FINESSE près.
+ */
+function zoomAttendu(x, y, alt) {
+    const d = Math.hypot(camera.position.x + ORIGINE.x - x, ORIGINE.y - camera.position.z - y, camera.position.y - alt);
+    const lat = depuisLambert93(x, y)[1];
+    const z = Math.floor(Math.log2(SOL_FINESSE * 40075017 * Math.cos(lat * RAD) / Math.max(d, 1)));
+    return Math.min(Math.max(z, SOL_ZOOM_MIN), SOL_ZOOM_MAX);
+}
+
 /** Ce qui manque au sol montré en (x, y) ; '' s'il est entier. `sous` : sous la voiture, dont l'altitude compte. */
 function defautSol(x, y, sous) {
     const t = tuileMontreeSous(x, y);
     if (!t) return 'absent';
+    // Trois zooms de moins que la caméra n'en demande : la photo d'une tuile
+    // de 10 km agrandie sous la voiture, un aplat. Dite avec ce qui bloque la
+    // tuile plus fine, quand elle a échoué.
+    const attendu = Number.isFinite(voiture.alt) ? zoomAttendu(x, y, voiture.alt) : t.z;
+    if (t.z <= attendu - 3) {
+        const [lon, lat] = depuisLambert93(x, y), [fx, fy] = versTuile(lon, lat, t.z + 1);
+        const fille = tuilesSol.get(`${t.z + 1}/${fx}/${fy}`);
+        return `flou (zoom ${t.z} au lieu de ${attendu})${fille?.erreur ? ' : ' + fille.erreur : ''}`;
+    }
     if (t.altiManquantes) return `sans relief (zoom ${t.z})`;
     if (!t.mesh.material.map) return `sans photo (zoom ${t.z})`;
     // Blanche au niveau de la mer, la teinte de la mer la couvre (courberSol).
@@ -3102,7 +3172,8 @@ function decrireTuile(t, maintenant) {
              blancheur: t.habit?.image ? arrondi(blancheur(t.habit.image), 100) : null,
              sansImage: t.sansImage === generationFond, fondGen: t.fondGen, enCours: t.enCours,
              echecs: t.echecs || 0, reessai_s: t.reessai > maintenant ? arrondi((t.reessai - maintenant) / 1000) : 0,
-             altiManquantes: t.altiManquantes ?? null, ymin: arrondi(t.ymin, 10), ymax: arrondi(t.ymax, 10),
+             altiManquantes: t.altiManquantes ?? null, niveau: t.niveau ?? null, echecsAlti: t.echecsAlti || 0,
+             erreur: t.erreur || null, ymin: arrondi(t.ymin, 10), ymax: arrondi(t.ymax, 10),
              vue_s: arrondi((maintenant - t.vue) / 1000) };
 }
 
@@ -3161,7 +3232,8 @@ function etatDiagnostic() {
         if (Math.hypot(dx, dy) < 400) sol.autour.push(decrireTuile(t, maintenant));
     }
     etat.altitudes = { tuiles: altis.size, cache: ALTI_CACHE,
-                       absentes: [...altis].filter(([, a]) => a.absente).map(([k]) => k).slice(0, 20), sousVoiture: [] };
+                       absentes: [...altis].filter(([, a]) => a.absente).map(([k]) => k).slice(0, 20),
+                       erreurs: Object.fromEntries(erreursAlti), sousVoiture: [] };
     for (let n = ALTI_NIVEAU_MIN; n <= ALTI_NIVEAU_MAX; n++) {
         const q = pasAlti(n) * 256, cle = `${n}/${Math.floor((90 - lat) / q)}/${Math.floor((lon + 180) / q)}`;
         const a = altis.get(cle);
