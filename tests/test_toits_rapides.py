@@ -396,11 +396,11 @@ def test_les_processus_du_bassin_meurent_avec_le_service(tmp_path, moment):
         pids = [int(p) for p in service.stdout.readline().split()]
         assert len(pids) == 2
     finally:
-    try:
-        service.send_signal(signal.SIGKILL)
-    except AttributeError:
-        # Windows: SIGKILL n'existe pas, on utilise terminate()
-        service.terminate()
+        try:
+            service.send_signal(signal.SIGKILL)
+        except AttributeError:
+            # Windows: SIGKILL n'existe pas, on utilise terminate()
+            service.terminate()
         service.wait()
     def du_bassin(p):
         # Le numéro d'un processus fini peut resservir : on vérifie que
