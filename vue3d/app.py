@@ -114,6 +114,26 @@ def _donnees(reponse):
     return corps.get("data", corps) if isinstance(corps, dict) else corps
 
 
+def obtenir_emprise_projet(session, entetes, projet):
+    """Récupère l'emprise du projet Trimble Connect et son système de projection.
+    
+    Raises:
+        DepotRefuse: si le projet est introuvable ou l'emprise non définie.
+    """
+    origine, fiche = origine_projet(session, entetes, projet)
+    # Note : L'endpoint exact pour la BBOX dépend de la version de l'API TC.
+    # On suppose ici un appel à /projects/{id}/bbox ou l'extraction depuis la fiche.
+    api = f"{origine}/tc/api/2.0"
+    reponse = session.get(f"{api}/projects/{projet}/bbox", headers=entetes, timeout=20)
+    if reponse.status_code != 200:
+        raise DepotRefuse("L'emprise du projet n'est pas définie ou inaccessible dans Trimble Connect.", 404)
+    
+    donnees = _donnees(reponse)
+    # On attend un format { "minLat": ..., "maxLat": ..., "minLon": ..., "maxLon": ... }
+    return donnees
+
+
+
 def origine_projet(session, entetes, projet):
     """L'origine régionale du projet et sa fiche.
 
@@ -287,22 +307,68 @@ def creer_app(dossier_cache=None, construire=construire_scene, lire_monuments=fe
     def point():
         """(lat, lon, zone) de la requête ; zone : côté en mètres, ou Polygone.
 
+        `use_connect=1` remplace le point et la zone par l'emprise du projet
+        Trimble Connect (`obtenir_emprise_projet`), lue une seule fois par
+        requête malgré les dix routes que la page appelle.
+
         Raises:
             ValueError si lat, lon, zone ou poly manquent ou sont illisibles,
                 avec le détail, que la page affiche.
             HorsEmprise si le point, ou un sommet du contour, n'est pas servi.
         """
+        connect = emprise_connect()
         try:
-            lat, lon = float(request.args["lat"]), float(request.args["lon"])
+            lat, lon = (connect["lat"], connect["lon"]) if connect else \
+                (float(request.args["lat"]), float(request.args["lon"]))
         except (KeyError, ValueError):
             raise ValueError(MESSAGE_POINT)
         try:
+            if connect:
+                return lat, lon, connect["poly"]
             return lat, lon, zone_normalisee(request.args.get("zone"),
                                              polygone=request.args.get("poly"))
         except HorsEmprise:
             raise
         except ValueError as exc:
             raise ValueError(f"{MESSAGE_POINT} — {exc}")
+
+    def emprise_connect():
+        """(lat, lon, poly) lus sur Trimble Connect, ou None sans `use_connect`.
+
+        Le centre de l'emprise du projet sert de point, son contour de zone :
+        la page n'a alors pas de coordonnées à deviner. Connect répond une
+        fois par requête (mémoïsé sur la requête), pas une fois par route.
+        """
+        if request.args.get("use_connect") != "1":
+            return None
+        if hasattr(request, "_emprise_connect"):
+            return request._emprise_connect
+        jeton = (request.headers.get("Authorization") or "").strip()
+        projet = request.args.get("projet", "").strip()
+        if len(jeton) < 20 or not projet:
+            raise ValueError("use_connect=1 attend le jeton Trimble Connect "
+                             "(en-tête Authorization) et le projet (projet=…).")
+        if not jeton.lower().startswith("bearer "):
+            jeton = f"Bearer {jeton}"
+        try:
+            bbox = obtenir_emprise_projet(requests.Session(),
+                                          {"Authorization": jeton,
+                                           "Accept": "application/json"}, projet)
+            cles = ("minLat", "maxLat", "minLon", "maxLon")
+            if any(cle not in bbox for cle in cles):
+                raise DepotRefuse("L'emprise du projet n'est pas définie dans "
+                                  "Trimble Connect : à définir dans les paramètres "
+                                  "du projet avant de synchroniser la scène.", 404)
+            lat = (bbox["minLat"] + bbox["maxLat"]) / 2
+            lon = (bbox["minLon"] + bbox["maxLon"]) / 2
+            # Même écriture que ?poly= de la page, six décimales, même ordre.
+            contour = ";".join(f"{vlat:.6f},{vlon:.6f}" for vlat, vlon in (
+                (bbox["minLat"], bbox["minLon"]), (bbox["minLat"], bbox["maxLon"]),
+                (bbox["maxLat"], bbox["maxLon"]), (bbox["maxLat"], bbox["minLon"])))
+            request._emprise_connect = {"lat": lat, "lon": lon, "poly": contour}
+        except DepotRefuse as exc:
+            raise ValueError(str(exc)) from exc
+        return request._emprise_connect
 
     def erreur(code, message):
         return jsonify({"erreur": message}), code
@@ -471,6 +537,31 @@ def creer_app(dossier_cache=None, construire=construire_scene, lire_monuments=fe
     @app.get("/")
     def page():
         return send_from_directory(app.static_folder, "index.html")
+
+    @app.get("/api/connect/emprise")
+    def connect_emprise():
+        """Récupère l'emprise du projet Trimble Connect.
+        
+        Le jeton est dans l'en-tête Authorization.
+        """
+        jeton = (request.headers.get("Authorization") or "").strip()
+        if len(jeton) < 20:
+            return erreur(401, "Jeton Trimble Connect manquant.")
+        if not jeton.lower().startswith("bearer "):
+            jeton = f"Bearer {jeton}"
+        projet = request.args.get("projet", "").strip()
+        if not projet:
+            return erreur(400, "Projet Trimble Connect manquant.")
+        try:
+            session = requests.Session()
+            entetes = {"Authorization": jeton, "Accept": "application/json"}
+            emprise = obtenir_emprise_projet(session, entetes, projet)
+            return jsonify(emprise)
+        except DepotRefuse as exc:
+            return erreur(exc.code, str(exc))
+        except Exception as exc:
+            app.logger.error("Erreur lors de la récupération de l'emprise : %s", exc)
+            return erreur(500, "Erreur interne lors de la récupération de l'emprise.")
 
     @app.get("/api/scene")
     def scene():

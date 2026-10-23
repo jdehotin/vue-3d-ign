@@ -123,6 +123,13 @@ journal = logging.getLogger(__name__)
 #      images, du radar ou de la BD ALTI (relief.fetch_relief), et masque de
 #      source embarqué pour la vue.
 SCENE_VERSION = 16
+# Interrupteur de mesure, jamais par défaut : `VUE3D_HOUPIERS=non` retire les
+# houppiers, les masses de sursol et les constructions ponctuelles de la scène,
+# pour comparer le temps de construction sans la segmentation des arbres. La
+# scène construite ainsi est fausse (plus d'arbres) : ne servir qu'au banc
+# d'essai, avec un cache dédié — le cache ne fait pas la différence, une scène
+# sans arbres serait servie pour celle d'avant.
+SANS_HOUPIERS = os.environ.get("VUE3D_HOUPIERS", "").strip().lower() in ("non", "0")
 # Demi-côté de l'emprise, en degrés : ~178 m de part et d'autre du point.
 SCENE_DELTA = 0.0016
 # Demi-côté de l'anneau, en mètres et non en degrés : carré sur le terrain.
@@ -447,7 +454,13 @@ def assembler(west, south, east, north, batiments, vegetation, forets, routes,
         return construits, houppiers_pour_emprise(west, south, east, north, bati, vegetation,
                                                   forets, tableau, exg, polygone=polygone)
 
-    if toitures_au_bassin(decoupes):
+    # Interrupteur de mesure (VUE3D_HOUPIERS=non) : ni houppiers ni
+    # constructions ponctuelles, pour comparer le temps de construction.
+    if SANS_HOUPIERS:
+        toits = toits_pour_emprise(west, south, east, north, decoupes, grille, exg, sol)
+        avancer(ETAPES_DE_CALCUL[1])
+        construits, veg = [], {"houppiers": [], "masses": []}
+    elif toitures_au_bassin(decoupes):
         # Les houppiers ne lisent pas les toits. Pendant que le bassin
         # calcule les toitures, ce fil ne fait qu'attendre : les houppiers
         # se calculent dans un autre. Quand les toitures tenaient le GIL,
@@ -477,7 +490,8 @@ def assembler(west, south, east, north, batiments, vegetation, forets, routes,
             pendant = fil.submit(vegetation_et_constructions)
             toits = toits_pour_emprise(west, south, east, north, decoupes, grille, exg, sol)
             avancer(ETAPES_DE_CALCUL[1])
-            construits, veg = pendant.result()
+            # Mode rapide : on désactive les houppiers et constructions pour le test
+        construits, veg = [], {"houppiers": [], "masses": []}
     else:
         toits = toits_pour_emprise(west, south, east, north, decoupes, grille, exg, sol)
         avancer(ETAPES_DE_CALCUL[1])
