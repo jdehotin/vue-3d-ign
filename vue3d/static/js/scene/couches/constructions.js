@@ -2,11 +2,12 @@
 
 import * as THREE from 'three';
 import { toCreasedNormals } from 'three/addons/utils/BufferGeometryUtils.js';
+import { HAUTEUR_PAR_ETAGE } from '../../commun/regles.js';
 import { ARTEFACT } from '../socle/chargement.js';
 import { toLocal } from '../socle/projection.js';
 import { terrain, relief, ySol, ENFONCEMENT, baseBatiment } from '../terrain/etat.js';
 import { scene } from '../socle/rendu.js';
-import { MAT_INCONNU, HAUTEUR_PAR_ETAGE } from '../batiments/etat.js';
+import { MAT_INCONNU } from '../batiments/etat.js';
 import { ANGLE_PLI_TOIT, anneauVersShape } from '../batiments/toits.js';
 import { ajouterCiblesSurvol, majCiblesSurvol } from '../interface/survol.js';
 import { poserSurLeRelief } from '../terrain/relief.js';
@@ -32,7 +33,7 @@ const SOURCES_HAUTEUR = { bdtopo: 'BD TOPO', lidar_hd: 'mesurée au LiDAR',
 export const enMetres = v => v.toFixed(1).replace('.', ',') + ' m';
 
 export const MAT_TOUR = new THREE.MeshStandardMaterial({ color: 0xc9c4bb, roughness: 0.95,
-                                                 side: THREE.DoubleSide });
+                                                        side: THREE.DoubleSide });
 
 /** Bâtiments que remplace une tour de refroidissement (vue3d/constructions.py). */
 export function toursRemplacees() {

@@ -14,18 +14,12 @@ export const MAT_TOIT_SURFACE = new THREE.MeshStandardMaterial({ color: 0x6f7883
 // Hauteur inconnue (bâtiment sous les arbres) : volume pâle et translucide,
 // pour dire « on sait qu'il y a un bâtiment, pas sa hauteur ».
 export const MAT_INCONNU = new THREE.MeshStandardMaterial({ color: 0xb8c0c8, roughness: 0.9, flatShading: true,
-                                                     transparent: true, opacity: 0.55 });
+                                                            transparent: true, opacity: 0.55 });
 // Dessus plat : juste au-dessus de la face haute des murs, qu'il recouvre, et
 // tiré vers la caméra pour ne pas scintiller avec elle au loin.
 export const DESSUS_DECALAGE = 0.05;
 export const DECALAGE_DESSUS = { polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 };
 export const MAT_DESSUS = new THREE.MeshStandardMaterial({ color: 0x6f7883, roughness: 0.9, ...DECALAGE_DESSUS });
-// Repli quand ni le LiDAR ni la BD TOPO ne sont crédibles : 3 m par étage
-// BD TOPO connu, un étage sinon. Un ordre de grandeur, affiché comme tel.
-export const HAUTEUR_PAR_ETAGE = 3;
-// Dénivelé maximal d'un toit, en fraction de sa largeur : environ 50°, la règle
-// que le serveur applique au LiDAR (TOITS_PENTE_MAX dans vue3d/toits.py).
-export const PENTE_TOIT_MAX = 0.6;
 
 export const groupeBatiments = new THREE.Group();
 scene.add(groupeBatiments);

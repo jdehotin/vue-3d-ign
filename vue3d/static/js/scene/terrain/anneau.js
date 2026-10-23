@@ -1,6 +1,7 @@
 // L'anneau de relief autour de l'emprise.
 
 import * as THREE from 'three';
+import { FONDS } from '../../commun/tuiles.js';
 import { ZOOM_EN_MOINS } from '../socle/point.js';
 import { ARTEFACT } from '../socle/chargement.js';
 import { toLocal, toLonLat } from '../socle/projection.js';
@@ -9,7 +10,7 @@ import {
 } from './etat.js';
 import { scene } from '../socle/rendu.js';
 import { normalesIndexees, sphereEnglobante } from '../geometrie/normales.js';
-import { FONDS, quandLeFondChange, composerTuiles, fondActif } from './fond.js';
+import { quandLeFondChange, composerTuiles, fondActif } from './fond.js';
 import { MAT_TERRAIN, poserSurLeRelief, decoderRelief } from './relief.js';
 
 // Autour de l'emprise, un relief grossier (maille de 16 m, sur 2 km de côté)

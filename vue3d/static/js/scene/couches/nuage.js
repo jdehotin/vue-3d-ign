@@ -1,14 +1,13 @@
 // Le bâti du nuage de points LiDAR HD : une couche à part.
 
 import * as THREE from 'three';
+import { HAUTEUR_PAR_ETAGE } from '../../commun/regles.js';
 import { ACCUEIL } from '../socle/point.js';
 import { URL_NUAGE } from '../socle/reseau.js';
 import { toLocal } from '../socle/projection.js';
 import { terrain, relief, reliefRegle, ySol } from '../terrain/etat.js';
 import { scene } from '../socle/rendu.js';
-import {
-    HAUTEUR_PAR_ETAGE, groupeBatiments, meshes, redessinerBatiments,
-} from '../batiments/etat.js';
+import { groupeBatiments, meshes, redessinerBatiments } from '../batiments/etat.js';
 import { anneauVersShape, polygonesDe } from '../batiments/toits.js';
 import { reconstruireVegetation } from '../vegetation/etat.js';
 import {

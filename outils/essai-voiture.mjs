@@ -116,7 +116,7 @@ for (let t = 5; t <= duree; t += 5) {
         + `  · ${ips.toFixed(0)} i/s`);
 }
 await page.screenshot({ path: sortie });
-// Durée de construction d'un carré (un par image au plus, voiture.html) :
+// Durée de construction d'un carré (un par image au plus, carres/selection.js) :
 // la médiane et le pire, avec les bâtiments du carré.
 const arbres = await page.evaluate(() => {
     let lus = 0, montres = 0, n = 0;

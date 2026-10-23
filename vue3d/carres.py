@@ -123,8 +123,8 @@ DEBORD_DISTANCE_M = 2.0
 PONT_MARGE_M = 3.0
 # Largeur d'un pont sans largeur de chaussée : celle d'une route à deux voies.
 LARGEUR_PONT_M = 5.5
-# Ports des arbres, ceux de la page (PORTS de index.html), dans l'ordre des
-# codes transmis.
+# Ports des arbres, ceux de la page (PORTS, static/js/scene/vegetation/formes.js),
+# dans l'ordre des codes transmis.
 PORTS = ("feuillu", "chene_vert", "pin", "conifere", "peuplier", "arbuste")
 
 

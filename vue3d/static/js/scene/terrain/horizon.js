@@ -1,6 +1,7 @@
 // L'horizon jusqu'à 60 km, et le ciel.
 
 import * as THREE from 'three';
+import { FONDS, ALTI_URL, ALTI_NIVEAU_MIN, ALTI_NIVEAU_MAX } from '../../commun/tuiles.js';
 import { ECHELLE_ZONE } from '../socle/point.js';
 import { chargerImage } from '../socle/reseau.js';
 import { ARTEFACT } from '../socle/chargement.js';
@@ -12,7 +13,7 @@ import {
     scene, FOND_SCENE, brumeScene, brumeHorizon, ciel, camera, renderer, sol,
 } from '../socle/rendu.js';
 import { citerSource, majCredits } from '../interface/credits.js';
-import { FONDS, relireTuile, versTuile, versLonLat, quandLeFondChange, fondActif } from './fond.js';
+import { relireTuile, versTuile, versLonLat, quandLeFondChange, fondActif } from './fond.js';
 import { TERRAIN_ZOOM, TERRAIN_URL, MAT_TERRAIN, versPixel, poserSurLeRelief } from './relief.js';
 import { poserFondAnneau } from './anneau.js';
 
@@ -119,12 +120,7 @@ function tuileHorizon(z, x, y) {
 // d'altitudes pèse 210 Ko compressée ; l'ouverture de Gordes en lisait 99
 // (21 Mo) à z − 3, 32 (6,7 Mo) à z − 4, 11 (2,3 Mo) à z − 5 avec la finesse
 // retenue, sans relief perdu à l'œil en vue rasante à 60 m.
-const ALTI_NIVEAU_MIN = 6, ALTI_NIVEAU_MAX = 14;
 const ALTI_CACHE = 64;                  // 256 Kio chacune
-const ALTI_URL = (niveau, ligne, colonne) =>
-    'https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0'
-    + '&LAYER=ELEVATION.ELEVATIONGRIDCOVERAGE.HIGHRES&STYLE=normal&FORMAT=image/x-bil;bits=32'
-    + `&TILEMATRIXSET=WGS84G_6_14&TILEMATRIX=${niveau}&TILEROW=${ligne}&TILECOL=${colonne}`;
 const tuilesAltitude = new Map();         // "niveau/ligne/colonne" → promesse de Float32Array
 
 /** Une tuile native de 256 × 256 altitudes, lue une fois pour toutes ses voisines. */

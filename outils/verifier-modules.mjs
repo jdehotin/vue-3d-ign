@@ -6,7 +6,8 @@
 // la page de la scène posait alors le relief avant les bâtiments, ou
 // l'inverse, selon l'ordre où leurs attentes de la scène s'inscrivaient.
 // Seuls y échappent les modules sans effet au chargement (SANS_EFFET) :
-// fonctions et constantes, qu'il est indifférent d'évaluer plus tôt.
+// fonctions et constantes, qu'il est indifférent d'évaluer plus tôt ; ceux
+// de js/commun/, partagés par les pages, n'ont que cela.
 //
 //   node outils/verifier-modules.mjs            # scene et voiture
 //   node outils/verifier-modules.mjs scene
@@ -61,20 +62,22 @@ function verifier(page) {
     return v;
   };
   const reel = [...postfixe.filter(f => !dependDUneAttente(f)), ...postfixe.filter(dependDUneAttente)]
-    .map(nom).filter(n => n !== 'main');
+    .filter(f => f.startsWith(racine + path.sep)).map(nom).filter(n => n !== 'main');
   const libres = new Set(SANS_EFFET[page] || []);
   const sansLibres = l => l.filter(n => !libres.has(n));
   const a = sansLibres(voulu), b = sansLibres(reel);
   const ecarts = [];
   a.forEach((n, k) => { if (b[k] !== n) ecarts.push(`${k + 1}. attendu ${n}, évalué ${b[k]}`); });
-  const absents = [...modules.keys()].map(nom).filter(n => n !== 'main' && !voulu.includes(n));
+  const absents = [...modules.keys()].filter(f => f.startsWith(racine + path.sep)).map(nom)
+    .filter(n => n !== 'main' && !voulu.includes(n));
   for (const n of absents) ecarts.push(`${n} n'est pas importé par main.js`);
-  console.log(`${page} : ${modules.size - 1} modules, ${ecarts.length ? ecarts.length + ' écart(s)' : 'dans l\'ordre de main.js'}`);
+  const propres = [...modules.keys()].filter(f => f.startsWith(racine + path.sep)).length - 1;
+  console.log(`${page} : ${propres} modules, ${ecarts.length ? ecarts.length + ' écart(s)' : 'dans l\'ordre de main.js'}`);
   for (const e of ecarts.slice(0, 20)) console.log('  ' + e);
   return ecarts.length === 0;
 }
 
 const pages = process.argv.slice(2).length ? process.argv.slice(2)
-  : fs.readdirSync(JS).filter(d => fs.existsSync(path.join(JS, d, 'main.js')));
+  : fs.readdirSync(JS).filter(d => fs.existsSync(path.join(JS, d, 'main.js'))).sort();
 const ok = pages.map(verifier).every(Boolean);
 process.exit(ok ? 0 : 1);

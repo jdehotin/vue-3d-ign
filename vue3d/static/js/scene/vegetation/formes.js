@@ -1,6 +1,7 @@
 // La forme des houppiers et des troncs, d'après leur profil mesuré.
 
 import * as THREE from 'three';
+import { HAUTEUR_MIN_TRONC, alea } from '../../commun/regles.js';
 import { normalesIndexees } from '../geometrie/normales.js';
 
 // Le serveur (app/api_dir/houppiers.py) segmente le MNH LiDAR HD à 0,5 m en
@@ -29,12 +30,6 @@ const PORTS = {
     arbuste:    { nom: 'arbuste',    base: new THREE.Color(0x6a8e44), cime: new THREE.Color(0xa2c46e), tronc: 0 },
     masse:      { nom: 'masse',      base: new THREE.Color(0x5f6256), cime: new THREE.Color(0x8a8c7c), tronc: 0 },
 };
-
-/** Aléa déterministe à partir d'une position : le décor ne doit pas frétiller. */
-function alea(x, y) {
-    const v = Math.sin(x * 127.1 + y * 311.7) * 43758.5453;
-    return v - Math.floor(v);
-}
 
 /** Port (palette, part de fût nu) d'après l'essence BD Forêt v2, puis la nature BD TOPO. */
 export function portDe(el) {
@@ -96,8 +91,6 @@ const COS_HOUPPIER = ANGLES_HOUPPIER.map(Math.cos), SIN_HOUPPIER = ANGLES_HOUPPI
 const BOSSES_HOUPPIER = new Float64Array(SEGMENTS_HOUPPIER);
 // Part linéaire du segment mesuré effectivement occupée par le houppier.
 const EMPRISE_HOUPPIER = 0.8;
-// En deçà, c'est un buisson ou une haie : un tronc n'aurait pas de sens.
-const HAUTEUR_MIN_TRONC = 3;
 
 /** Seuls les ports à fût nu ont un tronc, et au-dessus de 3 m. Partagé par la vue et l'export IFC. */
 export function aUnTronc(el) {

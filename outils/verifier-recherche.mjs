@@ -33,7 +33,7 @@ import { fileURLToPath } from 'url';
 import { sourceDesModules } from './source-page.mjs';
 
 const lire = chemin => fs.readFileSync(fileURLToPath(new URL(chemin, import.meta.url)), 'utf8');
-const src = sourceDesModules('scene');
+const src = sourceDesModules('commun', 'scene');
 const EXEMPLES = JSON.parse(lire('./geocodage-exemples.json'));
 function extraire(nom) {
   const i = src.indexOf(`function ${nom}(`);

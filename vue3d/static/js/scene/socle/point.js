@@ -11,7 +11,7 @@
 export const DEPART = await window.DEPART;
 const PARAMS = new URLSearchParams(location.search);
 export const POINT_DEFAUT = { lat: 48.8583, lon: 2.2942, nom: 'Tour Eiffel',
-                       vue: { lat: 48.85837, lon: 2.29448, hauteur: 120, distance: 620, azimut: 150, elevation: 18 } };
+                              vue: { lat: 48.85837, lon: 2.29448, hauteur: 120, distance: 620, azimut: 150, elevation: 18 } };
 const lireCoord = n => { const v = Number(String(PARAMS.get(n) || '').replace(',', '.')); return Number.isFinite(v) && PARAMS.get(n) !== null ? v : null; };
 export const ACCUEIL = lireCoord('lat') === null || lireCoord('lon') === null;
 export const LAT0 = ACCUEIL ? POINT_DEFAUT.lat : lireCoord('lat');

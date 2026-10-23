@@ -1,6 +1,7 @@
 // Le fond cartographique, orthophoto ou Plan IGN, sur le terrain et les toits.
 
 import * as THREE from 'three';
+import { FONDS } from '../../commun/tuiles.js';
 import { ZOOM_EN_MOINS } from '../socle/point.js';
 import { URL_VUE3D_ORTHO, chargerImage } from '../socle/reseau.js';
 import { ARTEFACT, requete, chargementArtefact } from '../socle/chargement.js';
@@ -24,14 +25,6 @@ import { citerSource, majCredits } from '../interface/credits.js';
 // scène. Le plan OpenStreetMap qu'on proposait avant dépendait de serveurs
 // dont les conditions d'usage découragent un rechargement à chaque visite.
 const TUILE_ZOOM = 18;
-
-// Couches et zooms que le serveur accepte : tuiles.COUCHES et TUILES_ZOOM
-// (9 à 18, de HORIZON_ZOOM_MIN à TUILE_ZOOM).
-export const FONDS = {
-    ortho: (z, x, y) => `api/tuile/ortho/${z}/${x}/${y}`,
-    // PLANIGNV2 : PNG seulement, publié jusqu'au zoom 19 comme l'orthophoto.
-    plan: (z, x, y) => `api/tuile/plan/${z}/${x}/${y}`,
-};
 
 // Relectures demandées au serveur à la fois, pour toute la page : autant
 // qu'il en mène pour tous ses visiteurs (TUILES_RELECTURES_SIMULTANEES).

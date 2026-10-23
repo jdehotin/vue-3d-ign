@@ -2,11 +2,12 @@
 // chiffres du panneau.
 
 import * as THREE from 'three';
+import { HAUTEUR_PAR_ETAGE, PENTE_TOIT_MAX } from '../../commun/regles.js';
 import { toLocal } from '../socle/projection.js';
 import {
     MAT_CIBLE, MAT_CONTOUR_CIBLE, MAT_VOISIN, MAT_TOIT_VOISIN, MAT_TOIT_SURFACE, MAT_INCONNU,
-    HAUTEUR_PAR_ETAGE, PENTE_TOIT_MAX, groupeBatiments, meshes, meshesToits, TOITS,
-    TOITS_SOURCE, TOITS_GRILLE, toitsEnPente, toitsMesures, CIBLE, poserRedessinDesBatiments,
+    groupeBatiments, meshes, meshesToits, TOITS, TOITS_SOURCE, TOITS_GRILLE, toitsEnPente,
+    toitsMesures, CIBLE, poserRedessinDesBatiments,
 } from './etat.js';
 import { rectangleSelonAxe, rectangleMin } from '../geometrie/polygones.js';
 import {

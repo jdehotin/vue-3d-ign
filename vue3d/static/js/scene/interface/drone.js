@@ -46,7 +46,7 @@ const TOUCHES_DRONE = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'
                                'KeyW', 'KeyA', 'KeyS', 'KeyD', 'Space', 'ShiftLeft', 'ShiftRight']);
 export let droneActif = false;
 export const drone = { position: new THREE.Vector3(), vitesse: new THREE.Vector3(), cap: 0, lacet: 0,
-                tangage: 0, roulis: 0, recul: DRONE_RECUL.depart, sol: null };
+                       tangage: 0, roulis: 0, recul: DRONE_RECUL.depart, sol: null };
 export const touchesDrone = new Set();
 const btnDrone = document.getElementById('t-drone');
 const hudDrone = document.getElementById('hud-drone');

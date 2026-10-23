@@ -39,7 +39,7 @@ from .scene import EMPRISE_SERVIE
 journal = logging.getLogger(__name__)
 
 # Couches servies : (nom WMTS, type, extension, signature du fichier). Les
-# mêmes que FONDS dans index.html.
+# mêmes que FONDS dans les pages (static/js/commun/tuiles.js).
 COUCHES = {
     "ortho": ("ORTHOIMAGERY.ORTHOPHOTOS", "image/jpeg", "jpg", b"\xff\xd8"),
     "plan": ("GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2", "image/png", "png", b"\x89PNG"),
@@ -47,8 +47,8 @@ COUCHES = {
 URL_WMTS = ("https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0"
             "&LAYER={couche}&STYLE=normal&FORMAT={type}"
             "&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}")
-# Zooms que la page demande : HORIZON_ZOOM_MIN (9) à TUILE_ZOOM (18) dans
-# index.html. Au-delà, une demande ne vient pas de la page.
+# Zooms que la page demande : HORIZON_ZOOM_MIN (9, terrain/horizon.js) à
+# TUILE_ZOOM (18, terrain/fond.js). Au-delà, une demande ne vient pas de la page.
 TUILES_ZOOM = (9, 18)
 # Marge autour de l'emprise servie (scene.EMPRISE_SERVIE), en degrés :
 # l'horizon s'étend à HORIZON_RAYON = 60 km du point, 0,54° en latitude et

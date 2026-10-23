@@ -187,7 +187,7 @@ ANNEAU_TAILLE = 128
 # 2026-10-21 : 20 à 40 lignes aberrantes sur 128 dans les scènes vallonnées
 # du cache, presque aucune colonne. Les tuiles natives n'ont ni ligne
 # répétée ni ligne déplacée, du niveau 9 au niveau 14 ; l'horizon de la vue
-# les lit déjà, pour la même raison (static/index.html, « Horizon »).
+# les lit déjà, pour la même raison (static/js/scene/terrain/horizon.js).
 ALTI_WMTS = ("https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0"
              f"&LAYER={RELIEF_LAYER}&STYLE=normal&FORMAT=image/x-bil;bits=32"
              "&TILEMATRIXSET=WGS84G_6_14&TILEMATRIX={niveau}&TILEROW={ligne}&TILECOL={colonne}")

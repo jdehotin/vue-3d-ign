@@ -839,11 +839,11 @@ def _pyramide(rect, g, f, X, Y):
 def hauteur_resumee(profil, polygone_m, X, Y):
     """Hauteur du toit résumé en (X, Y), tel que la vue le dessine.
 
-    Même règle que construire() dans index.html pour un profil LiDAR fiable :
-    un toit par corps (deux pans sur son axe, pyramide sans axe) au-dessus de
-    murs à la plus basse de leurs gouttières ; sinon deux pans sur le
-    rectangle orienté selon l'axe mesuré, ou d'aire minimale ; toit plat sous
-    0,5 m de dénivelé. À tenir en accord avec la vue.
+    Même règle que construire() de la page (batiments/construction.js) pour
+    un profil LiDAR fiable : un toit par corps (deux pans sur son axe,
+    pyramide sans axe) au-dessus de murs à la plus basse de leurs gouttières ;
+    sinon deux pans sur le rectangle orienté selon l'axe mesuré, ou d'aire
+    minimale ; toit plat sous 0,5 m de dénivelé. À tenir en accord avec la vue.
     """
     corps = profil.get("corps") or []
     if len(corps) >= 2:
@@ -1088,9 +1088,9 @@ def _toit_du_batiment(f, valeurs, hauteurs, exg, sol, verdure, xs, ys, lon0, lat
         if fenetre is not None:
             ecart = ecart_au_resume(profil, poly_seul, fenetre)
             profil["ecart_resume"] = round(ecart, 2)
-            # Le résumé tel que la vue le dessine (construire() dans
-            # index.html, hauteur_resumee) : en pente au-delà de 0,5 m de
-            # dénivelé, ou dès qu'il a plusieurs corps.
+            # Le résumé tel que la vue le dessine (construire() de
+            # batiments/construction.js, hauteur_resumee) : en pente au-delà
+            # de 0,5 m de dénivelé, ou dès qu'il a plusieurs corps.
             en_pente = (len(profil.get("corps") or []) >= 2
                         or profil["faitage"] - profil["gouttiere"] > 0.5)
             if ecart > SURFACE_ECART_RESUME_M or en_pente:

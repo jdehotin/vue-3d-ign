@@ -43,7 +43,7 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { sourceDesModules } from './source-page.mjs';
 
-const src = sourceDesModules('scene');
+const src = sourceDesModules('commun', 'scene');
 function extraire(nom) {
   const i = src.indexOf(`function ${nom}(`);
   if (i < 0) throw new Error('introuvable dans la page : ' + nom);

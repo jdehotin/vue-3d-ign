@@ -49,7 +49,6 @@ export const TERRAIN_URL = (z, x, y) =>
 export const MAT_TERRAIN = new THREE.MeshStandardMaterial({ color: 0x39424c, roughness: 1 });
 quandLeFondEstPose(() => appliquerTextureTerrain());
 
-
 // Pixel global à 256 px par tuile ; versTuile() en est le quotient entier.
 export const versPixel = (lon, lat, z) => {
     const n = 2 ** z * 256;

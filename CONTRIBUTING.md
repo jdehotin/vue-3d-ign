@@ -172,7 +172,16 @@ avant tout le reste : le tiroir, et la demande de la scène), sa feuille de styl
 | `interface/` | Recherche, survol, fiche, crédits, cadrage, boutons, décalage, drone, gestes, soleil, tiroir, boucle de rendu… |
 | `geometrie/` | Normales et polygones, sans DOM ni état |
 
-Trois règles tiennent l'ensemble :
+La vue en voiture (`static/voiture.html`, `css/voiture.css`, `js/voiture/`)
+suit le même découpage, avec ses dossiers : `socle/` (paramètres, Lambert-93,
+origine du monde, rendu, et l'état partagé — la voiture, la caméra, la route
+prévue), `sol/` (tuiles, cache, altitudes, sol), `carres/` (grille, bâtiments,
+routes, arbres, sélection), `route/` (graphe, voiture, limitations,
+simulation), `couches/` (bornes) et `interface/`. Ce que les deux pages
+partagent est dans `js/commun/` : les adresses des tuiles, les règles des
+bâtiments et des arbres.
+
+Trois règles tiennent l'ensemble, dans les deux pages :
 
 - **`main.js` importe chaque module dans l'ordre de leurs effets** — écouteurs,
   `scene.add`, attentes de la scène —, et aucun module n'en importe un à

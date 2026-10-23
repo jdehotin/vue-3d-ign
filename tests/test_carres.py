@@ -192,7 +192,8 @@ def test_la_page_de_la_voiture_est_servie(service):
     r = service(lambda i, j: {}).get("/voiture")
     assert r.status_code == 200
     assert r.headers["Cache-Control"] == "no-cache"
-    assert b"api/carre" in r.data
+    assert b'src="static/js/voiture/main.js"' in r.data
+    assert service(lambda i, j: {}).get("/static/js/voiture/main.js").status_code == 200
 
 
 def test_lambert_93_au_centieme_du_wfs():
@@ -217,7 +218,8 @@ def test_lambert_93_au_centieme_du_wfs():
     (None, None, None, "feuillu"),
 ])
 def test_le_port_suit_les_regles_de_la_page(essence, nature, profil, attendu):
-    """Les règles de portDe et portMesure (static/index.html), dans le même ordre."""
+    """Les règles de portDe et portMesure (static/js/scene/vegetation/formes.js),
+    dans le même ordre."""
     assert carres.port({"essence": essence, "nature": nature, "profil": profil}) == attendu
 
 
@@ -322,7 +324,8 @@ def test_un_troncon_fictif_le_dit():
 
 def test_la_page_demande_la_version_du_serveur():
     """Le navigateur garde un carré une semaine : son adresse porte la version."""
-    page = open(os.path.join(os.path.dirname(carres.__file__), "static", "voiture.html"), encoding="utf-8").read()
+    grille = os.path.join(os.path.dirname(carres.__file__), "static", "js", "voiture", "carres", "grille.js")
+    page = open(grille, encoding="utf-8").read()
     assert f"const CARRES_VERSION = {carres.CARRES_VERSION}, VEGETATION_VERSION = {carres.VEGETATION_VERSION};" in page
 
 

@@ -9,7 +9,7 @@ import { fileURLToPath } from 'url';
 
 const JS = fileURLToPath(new URL('../vue3d/static/js/', import.meta.url));
 
-/** Le texte des modules des dossiers donnés (« scene », « commun »…), dans l'ordre des chemins. */
+/** Le texte des modules des dossiers donnés (« commun », « scene »…), dans l'ordre des chemins. */
 export function sourceDesModules(...dossiers) {
   const fichiers = [];
   const parcourir = d => {

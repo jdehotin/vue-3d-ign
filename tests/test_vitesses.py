@@ -174,6 +174,7 @@ def test_les_vitesses_ont_leur_route_et_leur_dossier(tmp_path):
 
 def test_la_page_demande_la_version_des_vitesses():
     """Le navigateur garde un carré une semaine : son adresse porte la version."""
-    page = open(os.path.join(os.path.dirname(vitesses.__file__), "static", "voiture.html"), encoding="utf-8").read()
-    assert f"const VITESSES_VERSION = {vitesses.VITESSES_VERSION};" in page
-    assert "OpenStreetMap (ODbL)" in page
+    statique = os.path.join(os.path.dirname(vitesses.__file__), "static")
+    grille = open(os.path.join(statique, "js", "voiture", "carres", "grille.js"), encoding="utf-8").read()
+    assert f"const VITESSES_VERSION = {vitesses.VITESSES_VERSION};" in grille
+    assert "OpenStreetMap (ODbL)" in open(os.path.join(statique, "voiture.html"), encoding="utf-8").read()

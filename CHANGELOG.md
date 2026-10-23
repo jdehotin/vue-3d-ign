@@ -407,6 +407,16 @@ messages de commit et dans les commentaires des modules.
 
 ### Modifié
 
+- **Le code des pages et du serveur, rangé** (24 octobre 2026) : la page de
+  la scène et la vue en voiture ne sont plus deux fichiers de 10 700 et 3 800
+  lignes, mais leur HTML, une feuille de style chacune (`static/css/`) et des
+  modules ES (`static/js/scene/`, `static/js/voiture/`, et ce qu'elles
+  partagent dans `static/js/commun/`), toujours sans build. Les routes du
+  serveur sont rangées par page, en blueprints Flask (`vue3d/routes/`).
+  Rien ne change à l'écran : à Gordes et sur les Champs-Élysées, à horloge
+  figée, les deux vues rendent la même image au pixel près.
+  `outils/verifier-modules.mjs` garde l'ordre où les modules s'évaluent, qui
+  est celui de leurs effets. Rien dans la scène ni dans le cache.
 - **Les jeux sont retirés** (23 octobre 2026) : la traque et le cortège
   quittent la page, avec leurs boutons **Traque** et **Cortège**, leurs
   chants enregistrés (`static/son/`) et leurs films dans

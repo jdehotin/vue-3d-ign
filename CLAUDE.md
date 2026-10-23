@@ -35,7 +35,8 @@ node outils/film-voiture.mjs "http://localhost:8080/voiture?simu=1&lat=48.8532&l
 
 ```
 vue3d/
-  app.py        Flask : /, /voiture, /api/scene, /api/carre, /api/vegetation, /api/vitesses, /api/ortho, /api/monuments, /api/ouvrages, /api/nuage, /api/piscines, /api/navires, /api/vehicules, /api/panneaux, /api/dpe, /api/dvf, /api/bornes, /api/bornes-bloc, /api/avancement, /api/sante, /api/tuile, POST /api/reconstruire, POST /api/signalement ; quota de scènes neuves par IP (VUE3D_QUOTA, VUE3D_PROXY derrière un proxy)
+  app.py        l'application Flask et l'état du service (cache, stocks, quotas) ; quota de scènes neuves par IP (VUE3D_QUOTA, VUE3D_PROXY derrière un proxy)
+  routes/       les routes, un blueprint par page : scene.py (/, /api/scene, /api/ortho, /api/monuments, /api/ouvrages, /api/nuage, /api/piscines, /api/navires, /api/vehicules, /api/panneaux, /api/dpe, /api/dvf, /api/bornes, /api/avancement, POST /api/reconstruire), voiture.py (/voiture, /api/carre, /api/vegetation, /api/vitesses, /api/bornes-bloc, POST /api/signalement), service.py (/api/tuile, /api/sante)
   scene.py      assemblage d'une scène, cache disque par point arrondi
   couches.py    lecture WFS (bâtiments, végétation, BD Forêt, routes)
   batiments.py  bâtiments découpés sur l'emprise, en retrait du bord
@@ -66,6 +67,8 @@ vue3d/
   static/css/scene.css   sa feuille de style
   static/js/scene/    ses modules ES (three.js r160), chargés par main.js dans l'ordre de leurs effets : socle/, terrain/, batiments/, couches/ (une couche par module), vegetation/, export/, interface/, geometrie/
   static/voiture.html la vue en voiture, page à part : un monde qui défile en Lambert-93, sol en tuiles WMTS sur le RGE ALTI, carrés chargés le long de la route prévue sur le graphe BD TOPO, voiture calée sur la route
+  static/css/voiture.css, static/js/voiture/   sa feuille de style et ses modules : socle/ (paramètres, Lambert-93, monde, rendu, état partagé), sol/, carres/, route/ (graphe, voiture, limitations, simulation), couches/ (bornes), interface/
+  static/js/commun/   ce que les deux pages partagent : tuiles (fonds, RGE ALTI), règles des bâtiments et des arbres
   static/favicon.svg, favicon-32.png, apple-touch-icon.png   le logo de la page, tiré de docs/logo/
 docs/logo/      le logo « Tuile » : SVG avec et sans le nom (vectorisé), icône, aperçu GitHub
 ```

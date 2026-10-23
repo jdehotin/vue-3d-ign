@@ -35,7 +35,8 @@ def _stock(tmp_path, lire=lambda couche, z, x, y: JPEG):
 
 
 def test_l_url_de_l_ign_est_celle_de_la_page():
-    """FONDS dans index.html lisait exactement cette URL avant de passer par le serveur."""
+    """FONDS de la page (static/js/commun/tuiles.js) lisait exactement cette URL
+    avant de passer par le serveur."""
     assert tuiles.url_ign("ortho", 16, 33729, 23899) == (
         "https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0"
         "&LAYER=ORTHOIMAGERY.ORTHOPHOTOS&STYLE=normal&FORMAT=image/jpeg"
