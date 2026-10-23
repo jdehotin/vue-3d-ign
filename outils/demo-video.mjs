@@ -39,6 +39,7 @@
 // mouvement sont ceux de la page, à la vitesse exacte de la vidéo, quelle
 // que soit celle de la machine.
 import puppeteer from 'puppeteer-core';
+import { estModulePrincipal, repondreAvecCrochet } from './crochet-page.mjs';
 import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -1201,8 +1202,23 @@ const HTML_DEMO = '<div id="demo-carte"><h1></h1><p></p></div><div id="demo-lege
     + '<div id="demo-onde"></div><div id="demo-curseur"><svg viewBox="0 0 24 24" width="100%" height="100%">'
     + '<path d="M3 2l15 11.5-6.6.9 3.9 7.4-2.9 1.5-3.9-7.5L3 20.3z" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/></svg></div>'
     ;
+// Les objets de la scène, lus par le script : importés à la suite du module
+// principal de la page (outils/crochet-page.mjs).
+const CROCHET_DEMO = `import * as THREE from 'three';
+import { LON0, LAT0 } from './socle/point.js';
+import { M_PAR_DEGRE_LON, M_PAR_DEGRE_LAT } from './socle/projection.js';
+import { ySol } from './terrain/etat.js';
+import { scene, camera, renderer, controls } from './socle/rendu.js';
+import { MAT_CIBLE, MAT_CONTOUR_CIBLE, MAT_VOISIN, groupeBatiments } from './batiments/etat.js';
+import { vegChargee } from './vegetation/couche.js';
+import { drone, touchesDrone } from './interface/drone.js';
+import { DATE_SIMULEE, majSoleil } from './interface/soleil.js';
+window.__demo = { THREE, camera, controls, renderer, scene, ySol, majSoleil, DATE_SIMULEE,
+    LON0, LAT0, M_PAR_DEGRE_LON, M_PAR_DEGRE_LAT, vegChargee: () => vegChargee,
+    MAT_CIBLE, MAT_CONTOUR_CIBLE, MAT_VOISIN, drone, touchesDrone, groupeBatiments };`;
 await page.setRequestInterception(true);
 page.on('request', async r => {
+    if (estModulePrincipal(r)) return repondreAvecCrochet(r, CROCHET_DEMO);
     if (r.resourceType() !== 'document') return r.continue();
     const rep = await fetch(r.url());
     let html = await rep.text();
@@ -1212,12 +1228,11 @@ page.on('request', async r => {
                    .replace('<div id="vue"></div>', '<div id="vue"></div>' + HTML_DEMO);
         return r.respond({ status: rep.status, contentType: 'text/html; charset=utf-8', body: html });
     }
-    const ancre = 'requestAnimationFrame(boucle);\n</script>';
-    if (!html.includes(ancre)) { console.error('page inattendue : la boucle de rendu est introuvable'); process.exit(1); }
-    html = html.replace(ancre, `window.__demo = { THREE, camera, controls, renderer, scene, ySol, majSoleil, DATE_SIMULEE,
-            LON0, LAT0, M_PAR_DEGRE_LON, M_PAR_DEGRE_LAT, vegChargee: () => vegChargee,
-            MAT_CIBLE, MAT_CONTOUR_CIBLE, MAT_VOISIN, drone, touchesDrone, groupeBatiments };\n${ancre}`)
-               .replace('</style>', STYLE_DEMO + '</style>')
+    // Le style des légendes après celui de la page, qui est dans sa feuille.
+    if (!html.includes('</head>') || !html.includes('<div id="tip"></div>')) {
+        console.error('page inattendue : </head> ou #tip introuvable'); process.exit(1);
+    }
+    html = html.replace('</head>', `<style>${STYLE_DEMO}</style>\n</head>`)
                .replace('<div id="tip"></div>', '<div id="tip"></div>' + HTML_DEMO);
     r.respond({ status: rep.status, contentType: 'text/html; charset=utf-8', body: html });
 });

@@ -1,7 +1,8 @@
 // Vérifie la recherche d'un lieu de la page en exécutant son vrai code : les
-// fonctions sont extraites de vue3d/static/index.html et appelées sous Node,
-// sur des réponses réelles du géocodage de la Géoplateforme enregistrées dans
-// outils/geocodage-exemples.json — des lieux publics seulement.
+// fonctions sont extraites des modules de la page (vue3d/static/js/scene/) et
+// appelées sous Node, sur des réponses réelles du géocodage de la
+// Géoplateforme enregistrées dans outils/geocodage-exemples.json — des lieux
+// publics seulement.
 //
 //   node outils/verifier-recherche.mjs
 //
@@ -29,9 +30,10 @@
 // Sort en erreur si un contrôle est manqué, après les avoir tous faits.
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import { sourceDesModules } from './source-page.mjs';
 
 const lire = chemin => fs.readFileSync(fileURLToPath(new URL(chemin, import.meta.url)), 'utf8');
-const src = lire('../vue3d/static/index.html');
+const src = sourceDesModules('scene');
 const EXEMPLES = JSON.parse(lire('./geocodage-exemples.json'));
 function extraire(nom) {
   const i = src.indexOf(`function ${nom}(`);

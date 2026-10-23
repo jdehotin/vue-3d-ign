@@ -1,6 +1,6 @@
 // Vérifie la géométrie de la page en exécutant son vrai code : les fonctions
-// sont extraites de vue3d/static/index.html et appelées sous Node, avec le
-// three.js de la page. La relecture ne suffit pas — c'est ainsi qu'ont été
+// sont extraites des modules de la page (vue3d/static/js/scene/) et appelées
+// sous Node, avec le three.js de la page. La relecture ne suffit pas — c'est ainsi qu'ont été
 // trouvées des facettes retournées, puis un pignon sur deux manquant au toit
 // découpé (un côté du contour posé sur le bord de sa boîte, jeté dehors par
 // l'arrondi).
@@ -41,9 +41,9 @@ import * as THREE from 'three';
 import { toCreasedNormals } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import { sourceDesModules } from './source-page.mjs';
 
-const page = fileURLToPath(new URL('../vue3d/static/index.html', import.meta.url));
-const src = fs.readFileSync(page, 'utf8');
+const src = sourceDesModules('scene');
 function extraire(nom) {
   const i = src.indexOf(`function ${nom}(`);
   if (i < 0) throw new Error('introuvable dans la page : ' + nom);

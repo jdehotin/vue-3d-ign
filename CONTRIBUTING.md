@@ -64,7 +64,7 @@ En conteneur : `docker compose up -d --build`, sur le port 8080 (ou
 
 ```mermaid
 flowchart LR
-    P["Page<br/>static/index.html<br/>three.js"] -->|"GET /api/scene"| A["app.py<br/>Flask"]
+    P["Page<br/>static/index.html<br/>js/scene/ · three.js"] -->|"GET /api/scene"| A["app.py<br/>Flask"]
     P -.->|"GET /api/avancement<br/>toutes les 0,5 s"| A
     P -.->|"GET /api/monuments<br/>GET /api/ouvrages<br/>GET /api/nuage<br/>après la scène"| A
     A --> C{"Cache<br/>scene.py"}
@@ -127,7 +127,8 @@ anneau de relief grossier s'étend au-delà, sur 2 km de côté.
 
 | Module | Rôle | À savoir |
 |---|---|---|
-| `app.py` | Routes Flask | `creer_app(dossier_cache, construire)` : la construction est injectable, c'est ainsi que les tests évitent le réseau |
+| `app.py` | Application Flask | `creer_app(dossier_cache, construire)` construit l'état du service et enregistre les blueprints ; la construction est injectable, c'est ainsi que les tests évitent le réseau |
+| `routes/` | Routes, par page | `scene.py` (la page de la scène et les couches d'un point), `voiture.py` (la vue en voiture), `service.py` (tuiles et santé, partagées) : chacun rend son blueprint d'une fabrique qui reçoit cache, stocks et quotas |
 | `scene.py` | Construction et cache | `SCENE_VERSION` (format), `ETAPES_SCENE` (suivi), `SceneIncomplete`, `Cache` et son verrou par point ; les couches à part y passent par le même chemin (`_prelire`, `_obtenir_couche`) |
 | `geopf.py` | GET avec reprise | 3 essais espacés de 3 s, sur **tout** échec, refus 4xx compris ; `place()` borne à 8 les requêtes simultanées du processus, `en_parallele` lance des lectures ensemble |
 | `batiments.py` | Bâtiments découpés sur l'emprise | Le WFS les rend entiers ; coupés à 1,25 m du bord pour que la grille MNH les encadre, ils portent `coupe` |
@@ -146,7 +147,7 @@ anneau de relief grossier s'étend au-delà, sur 2 km de côté.
 | `nuage.py` | Bâti du nuage de points LiDAR HD, ouvrages ajourés | Couche à part, versionnée par `NUAGE_VERSION` ; dalles COPC lues par plages à travers `geopf` (laspy ne fait aucune requête), une à une : en 40 à la fois, la Géoplateforme répond 429 ; Lambert-93 écrit ici, vérifié contre pyproj au millimètre ; ajouré = sol vu sous une structure à travers l'emprise (une cour à ciel ouvert ne compte pas), ou emprise qui chevauche un ajouré |
 | `vehicules.py` | Véhicules et piscines lus sur l'orthophoto | Couche à part et **optionnelle** (`VUE3D_VEHICULES`) : un réseau ONNX à boîtes orientées sur l'orthophoto à 0,2 m, une passe par objet, chacun à son échelle ; fichier de cache au nom du détecteur ; sans la variable, ni onnxruntime ni réseau ne sont chargés |
 | `panneaux.py` | Panneaux solaires du registre OpenPVMapper | Couche à part et **optionnelle** (`VUE3D_PANNEAUX`) : une base SQLite à index R-tree préparée à la construction de l'image ; projection EPSG:3035 → WGS84 écrite ici, vérifiée contre pyproj à 0,7 mm |
-| `static/index.html` | La page entière | HTML, CSS et JavaScript dans un seul fichier, three.js r160 |
+| `static/` | Les pages | HTML, feuilles de style (`css/`) et modules ES (`js/`), sans build ; three.js r160 |
 
 Chaque module commence par une docstring qui dit **pourquoi** il est fait
 ainsi, mesures à l'appui. C'est la meilleure porte d'entrée : lisez-la avant le
@@ -154,28 +155,42 @@ code.
 
 ## La page
 
-`vue3d/static/index.html` est un fichier statique d'environ 4 450 lignes, sans
-framework ni build. three.js r160 est chargé depuis jsDelivr par un
-`importmap`. Le fichier est découpé en sections repérées par des commentaires
-`// --- Titre ---` ; les principales, dans l'ordre :
+La page de la scène tient en trois parts, sans framework ni build :
+`vue3d/static/index.html` (le HTML, et deux scripts en ligne qui doivent partir
+avant tout le reste : le tiroir, et la demande de la scène), sa feuille de style
+`static/css/scene.css`, et ses modules ES dans `static/js/scene/`, que charge
+`main.js`. three.js r160 vient de jsDelivr, par un `importmap`.
 
-| Section | Contenu |
+| Dossier | Modules |
 |---|---|
-| Point visé, Projection locale | Lecture de l'URL ; `toLocal(lon, lat)`, projection équirectangulaire centrée sur le point, en mètres |
-| Scène, Géométrie des bâtiments | Scène three.js et matériaux ; murs, toits résumés, corps de toit |
-| Surface mesurée du toit | `geometriesSurface` et `geometriesPans`, les deux formes mesurées |
-| Bâtiment visé, Chargement des bâtiments | La fiche du bâtiment ; l'arrivée de la scène |
-| Relief, Anneau de relief | Maillage du terrain, fond cartographique drapé |
-| Eau de surface, Routes, Lignes à haute tension | Les couches posées sur le relief |
-| Réservoirs et constructions ponctuelles | Citernes extrudées, torchères, cheminées, antennes et mâts |
-| Ouvrages | La couche `/api/ouvrages` : rubans et aplats drapés, murs et tabliers en volumes fermés (`prismeLeLong`, `dalle`) |
-| Nuage LiDAR HD | La couche `/api/nuage` : ouvrages ajourés en points à la place de leur volume, le reste du bâti au bouton |
-| Végétation | Rendu des houppiers mesurés |
-| Ma position | Géolocalisation et recentrage |
-| Interactions, Boutons, Soleil et ombres portées | Survol, clics, bascules, course du soleil |
+| `socle/` | Le point visé, les adresses du service, la scène demandée au serveur, la projection locale, la scène three.js |
+| `terrain/` | L'état du relief, que tout lit ; le fond cartographique, le relief, l'anneau, l'horizon, leurs commandes |
+| `batiments/` | Leur état (matériaux, maillages, toitures reçues, choix d'affichage) ; les toits ; leur arrivée ; leur construction ; le bâtiment visé ; les parties OSM |
+| `couches/` | Une couche par module : eau, routes, lignes, constructions, ouvrages, nuage et écarts des toits, détections, panneaux, foncier (DPE et DVF), bornes |
+| `vegetation/` | Son état, ses textures, la forme des houppiers, la couche elle-même |
+| `export/` | IFC, CityGML, leur modèle commun, leurs boutons |
+| `interface/` | Recherche, survol, fiche, crédits, cadrage, boutons, décalage, drone, gestes, soleil, tiroir, boucle de rendu… |
+| `geometrie/` | Normales et polygones, sans DOM ni état |
 
-Quelques fonctions reviennent partout ; cherchez `function nom(` pour les
-trouver :
+Trois règles tiennent l'ensemble :
+
+- **`main.js` importe chaque module dans l'ordre de leurs effets** — écouteurs,
+  `scene.add`, attentes de la scène —, et aucun module n'en importe un à
+  effets placé plus loin : ES l'évaluerait avant lui. `outils/verifier-modules.mjs`
+  le vérifie. Ce qui suit l'arrivée des bâtiments (construction, cadrage,
+  chargement des couches) est écrit dans `main.js`.
+- **Un état n'a qu'un module.** Les autres le lisent, jamais ne le
+  réaffectent : ils appellent ses fonctions (`reglerRelief`, `poserCible`,
+  `poserToits`, `basculerToitsEnPente`…).
+- **Les couches s'inscrivent, les carrefours ne les connaissent pas.** Le relief
+  les construit et les replace (`poserSurLeRelief`), le survol prend leurs
+  cibles (`ajouterCiblesSurvol`), les crédits leur source (`citerSource`), le
+  fond ce qui s'en habille (`quandLeFondEstPose`, `quandLeFondChange`,
+  `apresLaPhotoDesToits`). Une couche nouvelle est un module de plus dans
+  `couches/`, importé par `main.js` à sa place, sans toucher aux autres.
+
+Quelques fonctions reviennent partout ; cherchez `function nom(` dans
+`static/js/` pour les trouver :
 
 - `construire(features, toitsEnPente)` reconstruit tous les bâtiments. Les
   bascules l'appellent aussi, par exemple « Toits en pente » ou « Toits mesurés ».
@@ -342,8 +357,8 @@ sont les deux références habituelles.
 Trois autres habitudes complètent celle-ci :
 
 - **La géométrie se vérifie en exécutant le code, pas en le relisant.** Extraire
-  les fonctions de `index.html` et les exécuter sous Node avec un THREE minimal
-  a trouvé des facettes retournées que la relecture avait ratées.
+  les fonctions des modules de la page et les exécuter sous Node avec un THREE
+  minimal a trouvé des facettes retournées que la relecture avait ratées.
 - **La page se vérifie dans un navigateur**, avec `outils/essai-navigateur.mjs` :
   les tests Python ne voient aucun chemin du rendu.
 - **Données publiques uniquement dans le dépôt.** Exemples, tests et captures
@@ -368,7 +383,8 @@ Trois autres habitudes complètent celle-ci :
 3. Traitez la donnée dans une fonction pure, testable sans réseau, appelée par
    `assembler()` ou par `construire()`.
 4. Ajoutez la clé à la scène et incrémentez `SCENE_VERSION`.
-5. Dessinez-la dans `index.html`, puis vérifiez la page dans un navigateur.
+5. Dessinez-la dans un module de `static/js/scene/couches/`, qui s'inscrit
+   auprès du relief et du survol, puis vérifiez la page dans un navigateur.
 6. Créditez la source : tableau des sources du README, et crédits de la page si
    sa licence l'exige.
 
@@ -442,11 +458,11 @@ sans nouvel exemple, l'outil rafraîchit l'extrait et sa date.
 
 ### Modifier la page
 
-Pas de build : rechargez la page. Pour une fonction géométrique, extrayez-la et
-exécutez-la sous Node avant de regarder le rendu : `outils/verifier-geometrie.mjs`
-le fait pour le toit découpé et les ouvrages, ajoutez-y la vôtre. Finissez toujours par
-`outils/essai-navigateur.mjs`, qui échoue à la moindre erreur JavaScript ou
-requête en échec.
+Pas de build : rechargez la page, les modules sont servis tels quels. Pour une
+fonction géométrique, extrayez-la et exécutez-la sous Node avant de regarder le
+rendu : `outils/verifier-geometrie.mjs` le fait pour le toit découpé et les
+ouvrages, ajoutez-y la vôtre. Finissez toujours par `outils/essai-navigateur.mjs`,
+qui échoue à la moindre erreur JavaScript ou requête en échec.
 
 ## Tests
 
@@ -498,7 +514,8 @@ façons :
   avec son groupe quand une lecture échoue.
 
 Ce que les tests Python ne voient pas, c'est le rendu : pour tout changement
-dans `index.html`, lancez l'essai navigateur.
+dans les pages, lancez l'essai navigateur, et `outils/verifier-modules.mjs`
+si les imports ont changé.
 
 ## Outils de mesure
 
@@ -510,6 +527,7 @@ direct. Ils écrivent leurs sorties dans `cache/mesures/`, ignoré par git.
 | `essai-navigateur.mjs` | Charge un lieu dans Chrome, clique le bâtiment visé, change de saison, télécharge les exports IFC et CityGML à côté de la capture, cherche « place du chateau gordes » et s'y rend, relève toute erreur |
 | `verifier-recherche.mjs` | Pas une mesure : exécute sous Node la lecture des coordonnées tapées et des réponses du géocodage (`lireCoordonnees`, `suggestionsDe`), sur des réponses réelles enregistrées dans `geocodage-exemples.json` ; sans réseau ni dépendance |
 | `verifier-geometrie.mjs` | Pas une mesure : exécute sous Node les fonctions géométriques de la page (toit découpé, murs, tabliers, véhicules, houppiers simples) et vérifie orientation, fermeture et volumes ; compare à l'octet les normales et sphères de la page à celles de three.js, et ses houppiers à ceux d'origine (`ajouterHouppierOrigine`, à mettre à jour si leur forme change exprès) ; contrôle la barre d'attente contre `ETAPES_SCENE` et `ETAPES_DE_CALCUL` ; demande `npm install three@0.160.0` |
+| `verifier-modules.mjs` | Pas une mesure : calcule l'ordre où le navigateur évalue les modules de chaque page (imports en profondeur, attente de haut niveau comprise) et le compare à celui de son `main.js` ; les modules sans effet au chargement y échappent (`SANS_EFFET`) ; sans dépendance |
 | `verifier-export.mjs` | Pas une mesure : exécute sous Node les exports IFC et CityGML de la page — Lambert-93 au millimètre de pyproj, GlobalId, chaînes STEP, maillages fermés et tournés vers l'extérieur (tronc, houppier à lisière, même en cuvette), relief, polygones plans (cours, sols retrouvés, triangles plats), parties de bâtiment, cohérence de deux petits fichiers qu'il écrit en argument ; demande `npm install three@0.160.0` |
 | `valider_citygml.py` | Pas une mesure : valide la géométrie d'un fichier CityGML exporté, sans dépendance — les contrôles de val3dity (anneaux, planéité à 1 cm, cours, orientation, surfaces fermées) et le sens des toits, des sols et du relief ; le schéma se valide avec `citygml-tools validate` |
 | `valider_ifc.py` | Pas une mesure : valide un fichier IFC exporté avec ifcopenshell (schéma, règles EXPRESS, géométrie de chaque élément, géoréférencement) ; demande `pip install ifcopenshell pytest`, hors `requirements.txt` |

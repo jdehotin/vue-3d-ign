@@ -18,6 +18,7 @@ VUE3D_PANNEAUX=oui docker compose up -d --build        # avec les panneaux solai
 ./run_macOS_CoreML.sh                            # sans Docker, les deux détecteurs sur CoreML (Mac)
 ./run_container.sh                               # l'image sous container d'Apple (macOS 26) au lieu de Docker ; pas de CoreML
 node outils/verifier-geometrie.mjs               # géométrie de la page, exécutée sous Node
+node outils/verifier-modules.mjs                 # ordre d'évaluation des modules des pages
 node outils/verifier-recherche.mjs               # recherche d'un lieu, exécutée sous Node
 node outils/verifier-export.mjs essai.ifc essai.gml   # exports IFC et CityGML, exécutés sous Node
 node outils/mesure-ecarts-toits.mjs "http://localhost:8080/?lat=43.9116&lon=5.2003"   # toits contre le nuage LiDAR (puppeteer-core)
@@ -61,14 +62,16 @@ vue3d/
   geopf.py      GET avec reprise sur la Géoplateforme ; 8 places pour tout le service, lectures groupées abandonnées au premier échec
   signalements.py  le bouton ⚠ de la vue en voiture : capture de l'écran et état du sol gardés dans cache/signalements/ (<id>.json, <id>.jpg), bornés en taille, en nombre et par adresse
   tuiles.py     tuiles WMTS de la page (ortho, plan) : stock servi, sinon redirection vers l'IGN ; une tuile refusée au navigateur est relue ici et gardée 90 jours (cache/tuiles/)
-  static/index.html   la page entière : HTML, CSS et JavaScript (three.js r160)
+  static/index.html   la page de la scène : son HTML, et deux scripts en ligne qui partent avant tout (tiroir, demande de la scène)
+  static/css/scene.css   sa feuille de style
+  static/js/scene/    ses modules ES (three.js r160), chargés par main.js dans l'ordre de leurs effets : socle/, terrain/, batiments/, couches/ (une couche par module), vegetation/, export/, interface/, geometrie/
   static/voiture.html la vue en voiture, page à part : un monde qui défile en Lambert-93, sol en tuiles WMTS sur le RGE ALTI, carrés chargés le long de la route prévue sur le graphe BD TOPO, voiture calée sur la route
   static/favicon.svg, favicon-32.png, apple-touch-icon.png   le logo de la page, tiré de docs/logo/
 docs/logo/      le logo « Tuile » : SVG avec et sans le nom (vectorisé), icône, aperçu GitHub
 ```
 
-Pas de base de données, pas de clé d'API, pas de build front : la page est un
-fichier statique qui lit le point dans son URL.
+Pas de base de données, pas de clé d'API, pas de build front : les pages sont
+des fichiers statiques, modules ES compris, et lisent le point dans leur URL.
 
 Les couches des véhicules et des panneaux sont les seules dépendances
 optionnelles : sans `VUE3D_VEHICULES`, ni onnxruntime ni réseau ne sont
@@ -117,6 +120,14 @@ l'étage `export` du Dockerfile.
   Géoplateforme passe par `geopf.place()`, toute lecture lancée en parallèle
   par `geopf.en_parallele` ou `Groupe.soumettre` : au premier échec, les
   lectures qui attendent leur place ne partent plus. Un fil nu y échappe.
+- **Les modules d'une page s'évaluent dans l'ordre de leurs effets.** `main.js`
+  les importe dans cet ordre, et aucun n'importe un module à effets placé plus
+  loin : ES l'évaluerait avant lui, et les attentes de la scène changeraient
+  d'ordre (le relief posé avant les bâtiments, ou l'inverse). Un module venu
+  avant s'inscrit chez le suivant (`poserSurLeRelief`, `ajouterCiblesSurvol`,
+  `citerSource`, `quandLeFondChange`…) ou passe par un rappel
+  (`redessinerBatiments`) ; `outils/verifier-modules.mjs` le vérifie. Un état
+  n'est réaffecté que par son module : les autres appellent ses fonctions.
 - **La géométrie d'un houppier ne doit jamais se retourner** : rayon croissant
   avec la couronne, hauteur décroissante du sommet au bord, dessous qui remonte
   vers le tronc, lobage partagé par tous les anneaux. Un défaut ici passe
@@ -128,8 +139,9 @@ l'étage `export` du Dockerfile.
   porte en commentaire la mesure qui l'a fixée. Un nouveau seuil se justifie de
   la même façon, sur des données réelles.
 - **La géométrie se vérifie en exécutant le vrai code**, pas en le relisant :
-  extraire les fonctions de `index.html` et les exécuter sous Node avec un
-  THREE minimal a trouvé des facettes retournées que la lecture avait ratées.
+  extraire les fonctions des modules de la page (`outils/source-page.mjs`) et
+  les exécuter sous Node avec un THREE minimal a trouvé des facettes
+  retournées que la lecture avait ratées.
 - **La page se vérifie dans un navigateur** avec `outils/essai-navigateur.mjs` :
   les tests Python ne voient aucun chemin du rendu. Le script échoue à la
   moindre erreur JavaScript ou requête en échec.

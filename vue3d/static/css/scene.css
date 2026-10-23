@@ -1,0 +1,268 @@
+/* La page de la scène (index.html) : panneau, vue et ses boutons, fiche,
+   infobulle, drone, prise en main. Les règles du tiroir et du petit écran
+   suivent html.tiroir, posée dans <head> avant le premier rendu. */
+
+:root { --accent:#e07b00; --panel:#1f2328; --panel-soft:#2b3138;
+        --text:#e8eaed; --muted:#9aa0a6; --line:#3a4149; }
+* { box-sizing: border-box; }
+html, body { margin:0; height:100%; overflow:hidden;
+             font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+#app { display:flex; height:100%; }
+#panel { width:300px; flex:0 0 300px; background:var(--panel); color:var(--text);
+         display:flex; flex-direction:column; overflow-y:auto; }
+#panel header { padding:14px 16px; border-bottom:1px solid var(--line); }
+#panel header h1 { margin:0 0 4px; font-size:14px; font-weight:600;
+                   display:flex; align-items:center; gap:8px; }
+#panel header h1 .logo { width:28px; height:22px; flex:none; }
+#panel header .sub { font-size:11px; color:var(--muted); word-break:break-all; }
+#panel header a { color:var(--accent); font-size:11px; text-decoration:none; display:block; margin-top:4px; }
+#panel header a:hover { text-decoration:underline; }
+#panel header .reconstruire { background:none; border:0; padding:0; margin:0 0 2px;
+                              color:var(--accent); font-size:11px; cursor:pointer; }
+#panel header .reconstruire:hover { text-decoration:underline; }
+#panel header .reconstruire:disabled { color:var(--muted); cursor:wait; text-decoration:none; }
+.section { padding:12px 16px; border-bottom:1px solid var(--line); }
+.section h2 { margin:0 0 8px; font-size:10px; letter-spacing:.08em;
+              text-transform:uppercase; color:var(--muted); font-weight:600; }
+.toggles { display:flex; flex-wrap:wrap; gap:6px; }
+.toggle { border:1px solid var(--line); background:var(--panel-soft); color:var(--text);
+          padding:5px 10px; border-radius:5px; font-size:11px; cursor:pointer; }
+.toggle:hover { border-color:var(--muted); }
+.toggle.on { background:var(--accent); border-color:var(--accent); color:#fff; }
+.row { display:flex; align-items:center; gap:8px; margin-top:10px; }
+.row label { font-size:10px; color:var(--muted); white-space:nowrap; }
+.row input[type=range] { flex:1; accent-color:var(--accent); height:3px; }
+.row b { font-size:11px; color:var(--text); min-width:26px; text-align:right; }
+.stat { display:flex; justify-content:space-between; font-size:11px;
+        color:var(--muted); padding:2px 0; }
+.stat b { color:var(--text); font-weight:600; }
+.note { font-size:10px; color:var(--muted); line-height:1.45; margin-top:8px; }
+/* Couleurs des points comparés aux toits (COULEURS_ECART) : la paire
+   divergente bleu-rouge, un gris pâle au milieu. */
+.legende i { display:inline-block; width:8px; height:8px; border-radius:50%;
+             margin:0 3px 0 7px; vertical-align:-1px; }
+.legende .sous { background:#2a78d6; } .legende .egal { background:#f0efec; }
+.legende .sur { background:#e34948; }
+/* DPE et ventes : une barre des étiquettes (ou des classes de prix),
+   chaque part à la taille de son compte ; une pastille par étiquette. */
+.barre { display:flex; height:16px; border-radius:3px; overflow:hidden; margin:6px 0 4px; }
+.barre span { display:flex; align-items:center; justify-content:center; min-width:0;
+              font-size:10px; font-weight:700; color:#111; overflow:hidden; }
+.pastille { display:inline-block; min-width:15px; padding:0 3px; border-radius:3px; text-align:center;
+            font-weight:700; color:#111; font-size:10px; line-height:15px; }
+.liste-foncier { font-size:11px; margin-top:6px; }
+.liste-foncier div { padding:3px 0; border-top:1px solid rgba(255,255,255,.07); }
+.sous-titre { font-size:11px; font-weight:600; margin:10px 0 2px; color:var(--text); }
+.lien-ext { display:inline-block; margin-top:8px; font-size:11px; color:var(--accent);
+            text-decoration:none; border:1px solid var(--line); border-radius:5px;
+            padding:4px 8px; }
+.lien-ext:hover { border-color:var(--accent); }
+button.lien-ext { background:none; font-family:inherit; cursor:pointer; margin-right:4px; }
+button.lien-ext:disabled { color:var(--muted); cursor:wait; }
+/* min-width et le canvas hors du flux : sinon la vue gardait la
+   largeur de son canvas et débordait de l'écran, boussole et crédits
+   coupés (iPhone en paysage, 600 px de vue pour 544 de place). */
+#scene { flex:1; position:relative; min-width:0; overflow:hidden; }
+#scene canvas { display:block; position:absolute; left:0; top:0; }
+/* En haut : le bas de la vue est aux crédits, qu'il chevauchait. */
+#haut-gauche { position:absolute; left:12px; top:12px; z-index:2; max-width:calc(100% - 110px);
+               display:flex; flex-direction:column; align-items:flex-start; gap:6px;
+               pointer-events:none; }
+#hint, .etat-couche { background:rgba(31,35,40,.88); color:#e8eaed; font-size:11px;
+                      padding:6px 10px; border-radius:5px; }
+/* Sur la vue, pas dans le panneau : la couche OSM peut mettre plus de
+   100 s à venir, et c'est la scène qu'on regarde en l'attendant. Un
+   indicateur par couche chargée après la scène. */
+.etat-couche { display:flex; align-items:center; gap:8px; }
+.etat-couche[hidden] { display:none; }
+#hud-drone { font-variant-numeric:tabular-nums; }
+/* Le seul à se cliquer : #haut-gauche laisse passer la souris. */
+.conseil { pointer-events:auto; flex-wrap:wrap; }
+.conseil button { background:none; border:0; padding:0; font:inherit; cursor:pointer; }
+.conseil .agir { color:var(--accent); font-weight:600; }
+.conseil .agir:hover { text-decoration:underline; }
+.conseil .agir[hidden] { display:none; }
+.conseil .fermer { color:var(--muted); font-size:14px; line-height:1; }
+.etat-couche .roue { display:none; flex:none; box-sizing:border-box; width:12px; height:12px;
+                     border-radius:50%; border:2px solid rgba(255,255,255,.25);
+                     border-top-color:var(--accent); animation:tourner .8s linear infinite; }
+.etat-couche.en-cours .roue { display:block; }
+@keyframes tourner { to { transform:rotate(360deg); } }
+/* Ralentie plutôt qu'arrêtée : immobile, la roue ne dirait plus « en cours ». */
+@media (prefers-reduced-motion: reduce) { .etat-couche .roue { animation-duration:3s; } }
+#boussole { position:absolute; top:14px; right:14px; z-index:3; width:64px; height:64px;
+            border-radius:50%; background:rgba(31,35,40,.85); border:1px solid var(--line);
+            pointer-events:none; }
+#boussole .rose { position:absolute; inset:0; }
+#boussole span { position:absolute; font-size:10px; font-weight:700; color:var(--muted);
+                 left:50%; top:50%; transform:translate(-50%,-50%); }
+#boussole .n { margin-top:-22px; color:var(--accent); }
+#boussole .s { margin-top:22px; }
+#boussole .e { margin-left:22px; }
+#boussole .o { margin-left:-22px; }
+/* Aiguille : pointe vers le nord, moitié pleine côté nord. */
+#boussole .aiguille { position:absolute; left:50%; top:50%; width:0; height:0;
+                      transform:translate(-50%,-100%);
+                      border-left:5px solid transparent; border-right:5px solid transparent;
+                      border-bottom:20px solid var(--accent); }
+/* Décalage de la scène : une flèche par point cardinal, au bord de la
+   vue là où ce point cardinal se trouve à l'écran. La pointe tourne
+   avec la vue ; la lettre reste droite. */
+#decalage[hidden] { display:none; }
+#decalage button { position:absolute; left:0; top:0; z-index:2; width:30px; height:30px;
+                   margin:-15px 0 0 -15px; padding:0; border-radius:50%;
+                   background:rgba(31,35,40,.85); border:1px solid var(--line);
+                   color:var(--muted); font:inherit; font-size:10px; font-weight:700;
+                   cursor:pointer; }
+#decalage button.n { color:var(--accent); }
+#decalage button:hover { border-color:var(--accent); color:var(--text); }
+#decalage button:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+#decalage .pointe { position:absolute; inset:0; pointer-events:none; }
+#decalage .pointe::before { content:''; position:absolute; left:50%; top:-8px;
+                            transform:translateX(-50%);
+                            border-left:5px solid transparent; border-right:5px solid transparent;
+                            border-bottom:7px solid var(--accent); }
+.form-point { display:flex; align-items:flex-start; gap:4px; margin:8px 0 6px; }
+.form-point .recherche { flex:1; min-width:0; }
+.form-point input { box-sizing:border-box; width:100%; background:#161a1e; color:#e8eaed;
+                    border:1px solid #3a4148; border-radius:4px; padding:4px 6px; font-size:12px; }
+#nom-point { font-size:12px; color:var(--text); margin-bottom:1px; }
+/* Dans le flux, et non par-dessus : le panneau défile, une liste
+   posée en absolu y serait coupée. */
+#suggestions { list-style:none; margin:4px 0 0; padding:0; max-height:260px; overflow-y:auto;
+               background:#161a1e; border:1px solid #3a4148; border-radius:4px; }
+#suggestions li { padding:5px 7px; font-size:12px; color:#e8eaed; cursor:pointer;
+                  border-top:1px solid var(--line); }
+#suggestions li:first-child { border-top:0; }
+#suggestions li:hover, #suggestions li[aria-selected="true"] { background:var(--panel-soft); }
+#suggestions li small { display:block; font-size:10px; color:var(--muted); }
+#suggestions li.message { color:var(--muted); cursor:default; background:none; }
+.form-point button { background:#2f6fb0; color:#fff; border:0; border-radius:4px;
+                     padding:4px 10px; font-size:12px; cursor:pointer; }
+.zone { display:flex; align-items:center; gap:6px; margin:0 0 6px; font-size:11px; color:var(--muted); }
+.zone select { flex:1; background:#161a1e; color:#e8eaed; border:1px solid #3a4148;
+               border-radius:4px; padding:3px 4px; font-size:12px; }
+#attente { position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+           z-index:4; pointer-events:none; color:#e8eaed; font-size:13px; text-align:center;
+           line-height:1.6; text-shadow:0 1px 3px #000; }
+#attente[hidden] { display:none; }
+#attente .avancement { width:240px; height:3px; margin:8px auto 0; border-radius:2px;
+                       background:rgba(255,255,255,.18); overflow:hidden; }
+#attente .avancement i { display:block; height:100%; background:var(--accent);
+                         transition:width .4s ease-out; }
+@media (prefers-reduced-motion: reduce) { #attente .avancement i { transition:none; } }
+.saison-cran, #saison-aujourdhui { color:var(--accent); text-decoration:none; }
+/* Crédits obligatoires : Licence Ouverte (IGN) et, en repli, Terrain Tiles. */
+#credits { position:absolute; right:12px; bottom:12px; z-index:2; max-width:55%;
+           background:rgba(31,35,40,.78); color:var(--muted); font-size:10px;
+           line-height:1.4; padding:4px 8px; border-radius:5px; text-align:right; }
+#credits a { color:var(--text); text-decoration:none; }
+#credits a:hover { text-decoration:underline; }
+#tip { position:absolute; z-index:3; background:rgba(31,35,40,.95); color:#e8eaed;
+       font-size:11px; padding:6px 9px; border-radius:5px; pointer-events:none;
+       display:none; max-width:230px; line-height:1.4; }
+/* Épinglée par un clic : elle ne suit plus la souris et ses liens se cliquent. */
+#tip.epingle { pointer-events:auto; }
+/* Commandes de la vue, en colonne sous la boussole : la navigation,
+   et un seul réglage de l'affichage, le nuage LiDAR, aussi au panneau.
+   Centrées sous elle (64 px, à 14 px du bord). */
+.bouton-vue { width:40px; height:40px; padding:0; border-radius:50%; display:flex;
+              align-items:center; justify-content:center; cursor:pointer;
+              background:rgba(31,35,40,.85); border:1px solid var(--line); color:var(--text); }
+.bouton-vue:hover { border-color:var(--accent); }
+.bouton-vue:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+.bouton-vue.on { background:var(--accent); border-color:var(--accent); color:#fff; }
+.bouton-vue[hidden] { display:none; }
+a.bouton-vue { text-decoration:none; }
+.bouton-vue:disabled { cursor:wait; opacity:.6; }
+.bouton-vue svg { width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.8;
+                  stroke-linecap:round; stroke-linejoin:round; }
+.bouton-vue.texte { font:600 10px/1 system-ui, sans-serif; letter-spacing:.02em; }
+/* En vol, le pad du drone occupe le bas sur 182 px. Sur un téléphone
+   en paysage (390 px de haut), la colonne, quand elle avait sept
+   boutons, sortait de l'écran ou passait sous la flèche ▶ : elle
+   s'arrête au-dessus des crédits, ou du pad, et se poursuit à sa
+   gauche (wrap-reverse : la première à droite). */
+#nav-vue { position:absolute; top:88px; right:26px; z-index:3; display:flex;
+           flex-direction:column; flex-wrap:wrap-reverse; align-content:flex-start; gap:8px;
+           max-height:calc(100% - 88px - 56px); }
+#scene:has(#pad-drone:not([hidden])) #nav-vue { max-height:calc(100% - 88px - 190px); }
+.pastille-borne { display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:6px; }
+/* Prise en main : ouverte à la première visite, puis par « ? ». */
+#tuto { width:min(520px, calc(100vw - 24px)); max-height:min(86vh, 760px); padding:0;
+        border:1px solid var(--line); border-radius:12px; background:var(--panel); color:var(--text);
+        box-shadow:0 12px 40px rgba(0,0,0,.55); }
+#tuto::backdrop { background:rgba(0,0,0,.45); }
+#tuto form { display:flex; flex-direction:column; max-height:inherit; }
+/* Seule la liste défile : le reste garde sa hauteur (la bascule
+   s'écrasait sur un iPhone). */
+#tuto form > * { flex:none; }
+#tuto form > .tuto-etapes { flex:1 1 auto; min-height:0; }
+#tuto header { display:flex; align-items:center; justify-content:space-between; padding:16px 18px 4px; }
+#tuto h2 { margin:0; font-size:18px; }
+#tuto .fermer { width:36px; height:36px; margin:-6px -8px 0 0; border:0; background:none; color:var(--muted);
+                font-size:26px; line-height:1; cursor:pointer; }
+#tuto .tuto-intro { margin:4px 18px 12px; color:var(--muted); font-size:13px; line-height:1.45; }
+.tuto-mode { display:flex; margin:0 18px 6px; border:1px solid var(--line); border-radius:8px; overflow:hidden;
+             align-self:flex-start; }
+.tuto-mode button { padding:6px 14px; border:0; background:none; color:var(--muted); font:inherit;
+                    font-size:13px; cursor:pointer; }
+.tuto-mode button[aria-checked="true"] { background:var(--accent); color:#fff; }
+.tuto-etapes { list-style:none; margin:0; padding:4px 18px 8px; overflow-y:auto; }
+.tuto-etapes li { display:grid; grid-template-columns:28px 1fr; gap:12px; padding:9px 0;
+                  border-bottom:1px solid var(--line); font-size:13.5px; line-height:1.45; }
+.tuto-etapes li:last-child { border-bottom:0; }
+.tuto-etapes svg { width:24px; height:24px; margin-top:1px; fill:none; stroke:var(--accent); stroke-width:1.8;
+                   stroke-linecap:round; stroke-linejoin:round; }
+.tuto-etapes b { display:block; font-size:14px; }
+.tuto-etapes span { color:var(--muted); }
+#tuto footer { display:flex; align-items:center; justify-content:space-between; gap:12px;
+               padding:12px 18px 16px; border-top:1px solid var(--line); font-size:12px; color:var(--muted); }
+#tuto .tuto-ok { flex:none; padding:9px 18px; border:0; border-radius:8px; background:var(--accent); color:#fff;
+                 font:inherit; font-size:14px; font-weight:600; cursor:pointer; }
+#tuto .tuto-ok:focus-visible, .tuto-mode button:focus-visible { outline:2px solid var(--text); outline-offset:2px; }
+#btn-plein-ecran .sortir, html.plein-ecran #btn-plein-ecran .entrer { display:none; }
+html.plein-ecran #btn-plein-ecran .sortir { display:inline; }
+/* Le drone au doigt : deux croix de touches, au-dessus des crédits. */
+#pad-drone { position:absolute; left:0; right:0; bottom:72px; z-index:3; display:flex;
+             justify-content:space-between; padding:0 16px; pointer-events:none; }
+#pad-drone[hidden] { display:none; }
+.pad { display:grid; grid-template-columns:repeat(3, 52px); grid-template-rows:repeat(2, 52px);
+       gap:6px; }
+.pad button { pointer-events:auto; touch-action:none; user-select:none; -webkit-user-select:none;
+              -webkit-touch-callout:none; padding:0; border-radius:12px; font-size:20px;
+              background:rgba(31,35,40,.8); border:1px solid var(--line); color:var(--text); }
+.pad button.appui { background:var(--accent); border-color:var(--accent); color:#fff; }
+#tip .voir-fiche { margin-top:6px; padding:6px 10px; border-radius:5px; border:0; cursor:pointer;
+                   background:var(--accent); color:#fff; font:inherit; font-weight:600; }
+/* Le tiroir : la vue prend tout l'écran, le panneau glisse par-dessus
+   depuis la gauche, ouvert par ☰, refermé par ×, Échap ou un toucher à
+   côté. Caché, il sort aussi de l'ordre de tabulation (visibility). */
+#btn-tiroir { position:absolute; left:12px; top:12px; z-index:3; display:none; }
+#btn-fermer-tiroir { display:none; float:right; margin:-6px -6px 0 8px; width:36px; height:36px;
+                     padding:0; border:0; background:none; color:var(--muted); font-size:26px;
+                     line-height:1; cursor:pointer; }
+#voile { display:none; position:fixed; inset:0; z-index:19; background:rgba(0,0,0,.35); }
+html.tiroir #btn-tiroir { display:flex; }
+html.tiroir #btn-fermer-tiroir { display:block; }
+html.tiroir #haut-gauche { left:62px; max-width:calc(100% - 152px); }
+html.tiroir #panel { position:fixed; left:0; top:0; bottom:0; z-index:20; width:min(340px, 88vw);
+                     transform:translateX(-100%); visibility:hidden;
+                     transition:transform .25s ease-out, visibility 0s linear .25s;
+                     box-shadow:2px 0 16px rgba(0,0,0,.5); }
+html.tiroir.tiroir-ouvert #panel { transform:none; visibility:visible;
+                                   transition:transform .25s ease-out; }
+html.tiroir.tiroir-ouvert #voile { display:block; }
+html.tiroir #credits { left:12px; max-width:none; }
+@media (prefers-reduced-motion: reduce) { html.tiroir #panel { transition:none; } }
+/* Au doigt : des cibles d'au moins 36 px ; 16 px dans les champs, sous
+   lesquels Safari iOS zoome sur celui qui prend le focus. */
+@media (pointer: coarse) {
+    .toggle { padding:9px 12px; font-size:13px; }
+    .row { margin-top:14px; }
+    .row label { font-size:12px; }
+    .form-point input, .zone select { font-size:16px; padding:7px 8px; }
+    .form-point button { padding:9px 14px; font-size:15px; }
+    #suggestions li { padding:10px 8px; font-size:14px; }
+    #panel header .reconstruire, #panel header a { font-size:13px; padding:4px 0; }
+}

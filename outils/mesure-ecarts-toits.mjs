@@ -1,5 +1,6 @@
 // Mesure des écarts entre les toits dessinés et les points du nuage LiDAR HD
-// (verifierToits, dans vue3d/static/index.html), sur la vraie page servie.
+// (verifierToits, vue3d/static/js/scene/couches/ecarts-toits.js), sur la vraie
+// page servie.
 //
 // Pour chaque lieu : quand arrivent la couche du carré proche puis celle de la
 // zone entière, ce que coûte la vérification, puis la distribution des écarts —
@@ -13,6 +14,7 @@
 //
 // CHROME désigne l'exécutable de Chrome ou Chromium ; par défaut celui de macOS.
 import puppeteer from 'puppeteer-core';
+import { estModulePrincipal, repondreAvecCrochet } from './crochet-page.mjs';
 
 const urls = process.argv.slice(2);
 if (!urls.length) { console.error('usage : node outils/mesure-ecarts-toits.mjs URL [URL …]'); process.exit(2); }
@@ -23,8 +25,9 @@ const navigateur = await puppeteer.launch({
 });
 
 // La page est servie telle quelle, à un ajout près : de quoi lire le bilan.
-const ANCRE = 'requestAnimationFrame(boucle);\n</script>';
-const CROCHET = `window.__ecarts = {
+const CROCHET = `import { bilanEcarts, ecartsParToit, distanceAuContour } from './couches/ecarts-toits.js';
+import { toitsEnPente } from './batiments/etat.js';
+window.__ecarts = {
     bilan: () => bilanEcarts,
     resume(seuil) {
         const b = bilanEcarts;
@@ -52,8 +55,7 @@ const CROCHET = `window.__ecarts = {
         }
         return { verifies: b.verifies, enEcart: b.enEcart, phase: b.phase, ms: b.ms, tous, parForme, bords };
     },
-};
-${ANCRE}`;
+};`;
 
 const q = (tab, p) => { const t = Float64Array.from(tab).sort(); return t.length ? t[Math.min(t.length - 1, Math.floor(p * t.length))] : NaN; };
 const f2 = x => (x >= 0 ? '+' : '') + x.toFixed(2);
@@ -81,13 +83,7 @@ for (const url of urls) {
   await page.setViewport({ width: 1400, height: 850 });
   page.on('pageerror', e => console.error('pageerror: ' + e.message));
   await page.setRequestInterception(true);
-  page.on('request', async r => {
-    if (r.resourceType() !== 'document') return r.continue();
-    const rep = await fetch(r.url());
-    const html = await rep.text();
-    if (!html.includes(ANCRE)) { console.error('page inattendue : la boucle de rendu est introuvable'); process.exit(1); }
-    r.respond({ status: rep.status, contentType: 'text/html; charset=utf-8', body: html.replace(ANCRE, CROCHET) });
-  });
+  page.on('request', r => estModulePrincipal(r) ? repondreAvecCrochet(r, CROCHET) : r.continue());
   console.log(`\n## ${url}`);
   const debut = Date.now();
   await page.goto(url, { waitUntil: 'domcontentloaded' });

@@ -1,6 +1,6 @@
 // Vérifie les exports IFC et CityGML de la page en exécutant son vrai code :
-// les fonctions sont extraites de vue3d/static/index.html et appelées sous
-// Node, comme dans outils/verifier-geometrie.mjs.
+// les fonctions sont extraites des modules de la page (vue3d/static/js/scene/)
+// et appelées sous Node, comme dans outils/verifier-geometrie.mjs.
 //
 //   npm install three@0.160.0          # ignoré par git, comme puppeteer-core
 //   node outils/verifier-export.mjs [essai.ifc [essai.gml]]
@@ -35,9 +35,9 @@
 import * as THREE from 'three';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import { sourceDesModules } from './source-page.mjs';
 
-const page = fileURLToPath(new URL('../vue3d/static/index.html', import.meta.url));
-const src = fs.readFileSync(page, 'utf8');
+const src = sourceDesModules('scene');
 function extraire(nom) {
   const i = src.indexOf(`function ${nom}(`);
   if (i < 0) throw new Error('introuvable dans la page : ' + nom);
