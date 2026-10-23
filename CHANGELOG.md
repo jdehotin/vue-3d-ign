@@ -407,6 +407,12 @@ messages de commit et dans les commentaires des modules.
 
 ### Modifié
 
+- **Les jeux sont retirés** (23 octobre 2026) : la traque et le cortège
+  quittent la page, avec leurs boutons **Traque** et **Cortège**, leurs
+  chants enregistrés (`static/son/`) et leurs films dans
+  `outils/demo-video.mjs`. `?jeu=` ne lance plus rien. La vue 3D garde le
+  drone, et la vue en voiture ne change pas. La page perd 4 440 lignes, le
+  tiers de son code. Rien dans la scène ni dans le cache.
 - **La voiture à sa taille réelle** (22 octobre 2026), dans la vue en
   voiture de derrière : grossie dès le recul par défaut (×1,9), elle faisait
   3,5 m de large et couvrait 70 % de la route sous elle. Elle ne grossit plus
