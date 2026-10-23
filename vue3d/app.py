@@ -22,6 +22,10 @@
                                    stock du serveur, sinon redirigée vers l'IGN ;
                                    `?relire=1` après un refus, lue et gardée ici
     GET /api/sante                 contrôle de vie, pour Docker
+    POST /api/connect/fichier?projet=…&nom=…   dépose le fichier exporté (IFC ou
+                                   CityGML, corps de la requête) à la racine du
+                                   projet Trimble Connect ; le jeton d'accès est
+                                   dans l'en-tête Authorization
 
 Chaque route d'API accepte `zone=` (150 à 2 000 m, arrondie à 50 m) : sans
 elle, l'emprise par défaut d'environ 356 m. `poly=` la remplace : un contour
@@ -83,6 +87,87 @@ logging.basicConfig(level=os.environ.get("VUE3D_LOG", "INFO"),
                     format="%(asctime)s %(levelname)s %(name)s : %(message)s")
 
 ICI = os.path.dirname(os.path.abspath(__file__))
+
+# Trimble Connect : le fichier exporté se dépose dans le projet par ici.
+# L'API de Connect n'autorise pas l'en-tête Authorization depuis une autre
+# origine : l'envoi part du serveur, jamais du navigateur. Ces trois origines
+# sont les serveurs régionaux de Connect ; le projet n'en connaît qu'une.
+ORIGINES_CONNECT = ("https://app21.connect.trimble.com",     # Europe
+                    "https://app.connect.trimble.com",       # Amérique du Nord
+                    "https://app31.connect.trimble.com")     # Asie
+TAILLE_MAX_DEPOT = 64 * 1024 * 1024
+EXTENSIONS_DEPOT = (".ifc", ".gml")
+
+
+class DepotRefuse(Exception):
+    """Un dépôt dans le projet a été refusé ; le message est pour l'utilisateur."""
+
+    def __init__(self, message, code=502):
+        super().__init__(message)
+        self.code = code
+
+
+def _donnees(reponse):
+    """Le corps utile d'une réponse de Connect : elle enveloppe parfois le sien
+    dans `data`."""
+    corps = reponse.json()
+    return corps.get("data", corps) if isinstance(corps, dict) else corps
+
+
+def origine_projet(session, entetes, projet):
+    """L'origine régionale du projet et sa fiche.
+
+    Un projet vit dans une seule région : la première origine qui le connaît
+    est la sienne.
+
+    Raises:
+        DepotRefuse: aucune origine ne connaît ce projet pour ce jeton.
+    """
+    for origine in ORIGINES_CONNECT:
+        reponse = session.get(f"{origine}/tc/api/2.0/projects/{projet}",
+                              headers=entetes, timeout=20)
+        if reponse.status_code == 200:
+            return origine, _donnees(reponse)
+        if reponse.status_code not in (401, 403, 404):
+            reponse.raise_for_status()
+    raise DepotRefuse("Projet Trimble Connect introuvable pour ce jeton.", 404)
+
+
+def deposer_dans_projet(jeton, projet, nom, donnees, session=None):
+    """Dépose `donnees` à la racine du projet, et rend la fiche du fichier.
+
+    Trois temps, ceux de l'API Core : `files/fs/initiate` ouvre le dépôt et
+    rend une URL d'écriture, cette URL reçoit les octets, `files/fs/commit`
+    crée la version.
+
+    Raises:
+        DepotRefuse: Connect a refusé l'un des trois temps.
+    """
+    session = session or requests.Session()
+    entetes = {"Authorization": jeton, "Accept": "application/json"}
+    origine, fiche = origine_projet(session, entetes, projet)
+    api = f"{origine}/tc/api/2.0"
+    racine = fiche.get("rootId") or projet
+
+    amorce = session.post(f"{api}/files/fs/initiate",
+                          headers={**entetes, "Content-Type": "application/json"},
+                          json={"parentId": racine, "parentType": "FOLDER", "name": nom},
+                          timeout=30)
+    if amorce.status_code not in (200, 201):
+        raise DepotRefuse(f"Trimble Connect a refusé d'ouvrir le dépôt ({amorce.status_code}).")
+    ouverture = _donnees(amorce)
+
+    envoi = session.put(ouverture["uploadURL"], data=donnees, timeout=180)
+    if envoi.status_code not in (200, 201, 204):
+        raise DepotRefuse(f"Trimble Connect a refusé le fichier ({envoi.status_code}).")
+
+    commit = session.post(f"{api}/files/fs/commit",
+                          headers={**entetes, "Content-Type": "application/json"},
+                          json={"uploadId": ouverture["uploadId"]}, timeout=60)
+    if commit.status_code not in (200, 201):
+        raise DepotRefuse(f"Trimble Connect n'a pas enregistré le fichier ({commit.status_code}).")
+    fichier = _donnees(commit) if commit.content else {}
+    return {"ok": True, "projet": projet, "nom": nom, "fichier": fichier}
 
 
 def entier_env(nom):
@@ -564,6 +649,46 @@ def creer_app(dossier_cache=None, construire=construire_scene, lire_monuments=fe
         reponse = jsonify({"etat": "a_reconstruire"})
         reponse.headers["Cache-Control"] = "no-store"
         return reponse, 202
+
+    @app.post("/api/connect/fichier")
+    def connect_fichier():
+        """Le fichier exporté, déposé à la racine du projet Trimble Connect.
+
+        Le panneau de l'extension confie son jeton d'accès à la page, qui le
+        passe ici : l'envoi part du serveur, l'API de Connect n'ouvrant pas
+        ses en-têtes CORS à l'origine de la page. Le jeton ne sert qu'à ce
+        dépôt et n'est ni gardé ni journalisé.
+        """
+        jeton = (request.headers.get("Authorization") or "").strip()
+        if len(jeton) < 20:
+            return erreur(401, "Jeton Trimble Connect manquant.")
+        if not jeton.lower().startswith("bearer "):
+            jeton = f"Bearer {jeton}"
+        projet = request.args.get("projet", "").strip()
+        if not projet or len(projet) > 64 or not all(
+                c.isalnum() or c in "-_" for c in projet):
+            return erreur(400, "Projet Trimble Connect manquant ou invalide.")
+        nom = os.path.basename(request.args.get("nom", "").strip())
+        if os.path.splitext(nom)[1].lower() not in EXTENSIONS_DEPOT:
+            return erreur(400, "Seuls les fichiers .ifc et .gml se déposent dans le projet.")
+        if request.content_length and request.content_length > TAILLE_MAX_DEPOT:
+            return erreur(413, "Fichier trop gros pour le dépôt (64 Mo au plus).")
+        donnees = request.get_data(cache=False)
+        if not donnees:
+            return erreur(400, "Fichier vide.")
+        if len(donnees) > TAILLE_MAX_DEPOT:
+            return erreur(413, "Fichier trop gros pour le dépôt (64 Mo au plus).")
+        try:
+            depose = deposer_dans_projet(jeton, projet, nom, donnees)
+        except DepotRefuse as exc:
+            app.logger.warning("Dépôt Connect refusé (%s) : %s", projet, exc)
+            return erreur(exc.code, str(exc))
+        except (requests.RequestException, KeyError, ValueError) as exc:
+            app.logger.warning("Dépôt Connect impossible (%s) : %s", projet, exc)
+            return erreur(503, "Trimble Connect n'a pas répondu.")
+        reponse = jsonify(depose)
+        reponse.headers["Cache-Control"] = "no-store"
+        return reponse
 
     @app.get("/api/avancement")
     def avancement():

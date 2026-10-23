@@ -624,3 +624,95 @@ def test_le_quota_glisse_sur_une_heure():
     t[0] = 8000
     quota.attente("b", 1)
     assert "a" not in quota._scenes
+
+# --- Dépôt dans un projet Trimble Connect (vue3d/app.py) ---------------------
+
+class _Reponse:
+    """Une réponse de Connect, sans réseau."""
+
+    def __init__(self, code, corps=None):
+        self.status_code = code
+        self.content = b"{}" if corps is not None else b""
+        self._corps = corps if corps is not None else {}
+
+    def json(self):
+        return self._corps
+
+    def raise_for_status(self):
+        raise AssertionError("aucune erreur réseau attendue ici")
+
+
+class _Session:
+    """Les trois temps du dépôt Connect : initiate, écriture, commit."""
+
+    def __init__(self, origine="https://app21.connect.trimble.com"):
+        self.origine = origine
+        self.appels = []
+        self.ecrit = None
+        self.amorces = []
+
+    def get(self, url, headers=None, timeout=None):
+        self.appels.append(("GET", url))
+        if url.startswith(self.origine + "/tc/api/2.0/projects/"):
+            return _Reponse(200, {"id": "projet", "rootId": "racine"})
+        return _Reponse(404)
+
+    def post(self, url, headers=None, json=None, timeout=None):
+        self.appels.append(("POST", url, json))
+        if url.endswith("/files/fs/initiate"):
+            self.amorces.append(json)
+            return _Reponse(200, {"uploadURL": "https://depot.example/1", "uploadId": "u1"})
+        if url.endswith("/files/fs/commit"):
+            return _Reponse(200, {"data": {"id": "f1", "name": "vue3d.ifc"}})
+        return _Reponse(404)
+
+    def put(self, url, data=None, timeout=None):
+        self.appels.append(("PUT", url))
+        self.ecrit = data
+        return _Reponse(200)
+
+
+def test_le_depot_connect_suit_les_trois_temps_de_l_api():
+    session = _Session()
+    depose = module_app.deposer_dans_projet("Bearer jeton", "vK4pJn9BUh4", "vue3d.ifc",
+                                            b"ISO-10303-21;", session=session)
+    assert depose["ok"] and depose["fichier"]["id"] == "f1"
+    # Le projet d'Europe est le premier essayé : une seule origine le connaît.
+    assert session.appels[0] == ("GET", "https://app21.connect.trimble.com/tc/api/2.0/projects/vK4pJn9BUh4")
+    assert session.amorces == [{"parentId": "racine", "parentType": "FOLDER", "name": "vue3d.ifc"}]
+    assert session.ecrit == b"ISO-10303-21;"
+    assert session.appels[-1][1].endswith("/files/fs/commit")
+
+
+def test_le_depot_connect_refuse_un_projet_inconnu():
+    class Aucun(_Session):
+        def get(self, url, headers=None, timeout=None):
+            return _Reponse(404)
+
+    with pytest.raises(module_app.DepotRefuse) as refus:
+        module_app.deposer_dans_projet("Bearer jeton", "inconnu", "vue3d.ifc", b"x",
+                                       session=Aucun())
+    assert refus.value.code == 404
+
+
+def test_le_depot_exige_le_jeton_et_un_format_connu(client):
+    assert client.post("/api/connect/fichier?projet=vK4pJn9BUh4&nom=a.ifc",
+                       data=b"x").status_code == 401
+    assert client.post("/api/connect/fichier?projet=vK4pJn9BUh4&nom=a.exe",
+                       data=b"x", headers={"Authorization": "Bearer " + "j" * 40}).status_code == 400
+
+
+def test_le_depot_dun_fichier_passe_par_le_serveur(client, monkeypatch):
+    vus = {}
+
+    def deposer(jeton, projet, nom, donnees):
+        vus.update(jeton=jeton, projet=projet, nom=nom, donnees=donnees)
+        return {"ok": True, "projet": projet, "nom": nom, "fichier": {"id": "f1"}}
+
+    monkeypatch.setattr(module_app, "deposer_dans_projet", deposer)
+    r = client.post("/api/connect/fichier?projet=vK4pJn9BUh4&nom=vue3d-43.9-5.2-z500.ifc",
+                    data=b"ISO-10303-21;",
+                    headers={"Authorization": "Bearer " + "j" * 40})
+    assert r.status_code == 200 and r.get_json()["fichier"]["id"] == "f1"
+    assert vus["projet"] == "vK4pJn9BUh4" and vus["donnees"] == b"ISO-10303-21;"
+    assert vus["nom"] == "vue3d-43.9-5.2-z500.ifc" and vus["jeton"].startswith("Bearer ")

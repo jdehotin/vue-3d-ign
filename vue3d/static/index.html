@@ -759,11 +759,14 @@ coordonnées absolues.">
                     </label>
                     <div class="note" id="export-note">Un à quelques Mo, écrit par le
                         navigateur en une à deux secondes.</div>
+                    <div class="note" id="tc-auth-status" hidden></div>
                 </div>
                 <footer>
                     <button type="button" id="btn-export-telecharger">Télécharger</button>
                     <button type="button" class="principal" id="btn-export-enregistrer"
                             title="La fenêtre du système, pour choisir le dossier et le nom — Chromium seulement.">Enregistrer sous…</button>
+                    <button type="button" class="principal" id="btn-export-projet" hidden
+                            title="Déposer le fichier à la racine du projet Trimble Connect ouvert.">Enregistrer dans le projet</button>
                 </footer>
             </form>
         </dialog>
@@ -10577,12 +10580,31 @@ function etatCouchesExport() {
 
 // --- La fenêtre d'export -------------------------------------------------------
 const fenetreExport = document.getElementById('export-dialogue');
-const boutonsFenetre = ['btn-export-telecharger', 'btn-export-enregistrer']
+const boutonsFenetre = ['btn-export-telecharger', 'btn-export-enregistrer', 'btn-export-projet']
     .map(id => document.getElementById(id));
 // La fenêtre d'enregistrement du système n'existe que sur Chromium, et en
 // contexte sûr (https ou localhost) : ailleurs, « Enregistrer sous… » disparaît
 // plutôt que de promettre un choix qu'il ne fait pas — le reste y supplée.
 if (!window.showSaveFilePicker) document.getElementById('btn-export-enregistrer').hidden = true;
+
+// --- Trimble Connect : le jeton confié par la page d'extension ----------------
+// La page est servie par ce serveur, l'extension par Netlify : seul un
+// postMessage peut porter le jeton. Elle ne l'accepte que de cette origine, et
+// ne le renvoie qu'à son propre serveur — jamais à un tiers.
+const ORIGINE_EXTENSION = 'https://vue3d-trimble-connect.netlify.app';
+const boutonProjet = document.getElementById('btn-export-projet');
+const tcStatut = document.getElementById('tc-auth-status');
+let tcAuth = null;
+
+window.addEventListener('message', (evenement) => {
+    if (evenement.origin !== ORIGINE_EXTENSION) return;
+    const donnees = evenement.data;
+    if (!donnees || donnees.type !== 'vue3d-auth' || !donnees.token || !donnees.projet) return;
+    tcAuth = { token: donnees.token, projet: donnees.projet, nom: donnees.projetNom || '' };
+    boutonProjet.hidden = false;
+    tcStatut.hidden = false;
+    tcStatut.textContent = `Trimble Connect : connecté${tcAuth.nom ? ' au projet ' + tcAuth.nom : ''}.`;
+});
 
 document.getElementById('btn-reglages-export').addEventListener('click', () => {
     etatCouchesExport();
@@ -10632,9 +10654,35 @@ function resumeExport(modele, choix) {
 const nomFichierExport = () => `vue3d-${LAT0}-${LON0}-z${ZONE}`;
 
 /**
+ * Dépose le fichier à la racine du projet Trimble Connect, par ce serveur :
+ * l'API de Connect n'ouvre pas ses en-têtes CORS à cette origine, l'envoi ne
+ * peut donc pas partir du navigateur. Le jeton ne fait que passer ici.
+ */
+async function envoyerAuProjet(fichier, nomFichier, modele, choix) {
+    if (!tcAuth) throw new Error('Trimble Connect n’a pas donné son jeton : rouvrez cette page depuis l’extension.');
+    noterExport(`Envoi de ${nomFichier} vers Trimble Connect…`);
+    await new Promise(ok => requestAnimationFrame(() => setTimeout(ok)));
+    const adresse = `/api/connect/fichier?projet=${encodeURIComponent(tcAuth.projet)}`
+        + `&nom=${encodeURIComponent(nomFichier)}`;
+    const reponse = await fetch(adresse, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${tcAuth.token}` },
+        body: fichier,
+    });
+    const resultat = await reponse.json().catch(() => ({}));
+    if (!reponse.ok) {
+        throw new Error(resultat.erreur || `Trimble Connect a refusé le fichier (${reponse.status}).`);
+    }
+    noterExport(`${nomFichier} : ${(fichier.size / 1e6).toFixed(1).replace('.', ',')} Mo, `
+        + `déposé dans le projet${tcAuth.nom ? ' ' + tcAuth.nom : ''}. `
+        + resumeExport(modele, choix) + '.');
+}
+
+/**
  * Écrit le fichier du format demandé, avec les couches cochées. `mode` :
- * 'telecharger' (le dossier de téléchargement du navigateur) ou 'enregistrer'
- * (la fenêtre du système). Celle-ci s'ouvre AVANT le calcul, qui tient la main
+ * 'telecharger' (le dossier de téléchargement du navigateur), 'enregistrer'
+ * (la fenêtre du système) ou 'projet' (la racine du projet Trimble Connect).
+ * La fenêtre du système s'ouvre AVANT le calcul, qui tient la main
  * une à deux secondes en zone de 1 000 m : l'activation du clic serait sinon
  * perdue, et le navigateur refuserait la fenêtre — et son flux d'écriture
  * s'ouvre dans la foulée. Quand la plateforme refuse l'écriture directe, le
@@ -10706,6 +10754,10 @@ async function exporter(format, mode = 'telecharger') {
         }
         const texte = ecrire(modele);
         const fichier = new Blob(Array.isArray(texte) ? texte : [texte], { type });
+        if (mode === 'projet') {
+            await envoyerAuProjet(fichier, nomFichier, modele, choix);
+            return;
+        }
         let ecrit = nomFichier, repli = !flux && mode === 'enregistrer';
         if (flux) {
             try {
@@ -10745,6 +10797,8 @@ document.getElementById('btn-export-telecharger')
     .addEventListener('click', () => exporter(formatExport, 'telecharger'));
 document.getElementById('btn-export-enregistrer')
     .addEventListener('click', () => exporter(formatExport, 'enregistrer'));
+document.getElementById('btn-export-projet')
+    .addEventListener('click', () => exporter(formatExport, 'projet'));
 
 // --- Interactions --------------------------------------------------------
 const raycaster = new THREE.Raycaster();
