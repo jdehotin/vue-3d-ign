@@ -63,6 +63,7 @@
         #etat .rond { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:5px;
                       background:#3ba55d; vertical-align:0; }
         #etat .rond.faible { background:#e0a100; } #etat .rond.perdu { background:#d9453b; }
+        #etat .alerte { color:#ffb020; font-weight:600; }
         #boussole { position:fixed; right:max(14px, env(safe-area-inset-right)); top:max(12px, env(safe-area-inset-top));
                     width:52px; height:52px; border-radius:50%; padding:0; cursor:pointer; }
         #boussole svg { width:100%; height:100%; }
@@ -76,12 +77,21 @@
         .bouton:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
         .bouton.on { background:var(--accent); border-color:var(--accent); color:#fff; }
         .bouton[hidden] { display:none; }
+        /* Le bouton ⚠ au-dessus du compteur, comme celui de Coyote, à portée
+           du doigt ; il s'allume quand la page voit le sol manquer sous la
+           voiture. */
+        #b-signaler { position:fixed; left:calc(max(14px, env(safe-area-inset-left)) + 27px);
+                      bottom:calc(max(14px, env(safe-area-inset-bottom)) + 120px); }
+        .bouton.alerte { border-color:#e0a100; color:#ffb020; box-shadow:0 0 0 3px rgba(224,161,0,.4); }
+        .bouton.envoi { opacity:.5; pointer-events:none; }
         .bouton svg { width:24px; height:24px; fill:none; stroke:currentColor; stroke-width:1.8;
                       stroke-linecap:round; stroke-linejoin:round; }
         /* Sur un écran bas (téléphone en paysage), deux colonnes. */
         @media (max-height:520px) {
             #boutons { flex-direction:row; flex-wrap:wrap-reverse; justify-content:flex-end; max-width:190px; }
             #compteur { width:88px; height:88px; } #compteur b { font-size:32px; }
+            #b-signaler { left:calc(max(14px, env(safe-area-inset-left)) + 17px);
+                          bottom:calc(max(14px, env(safe-area-inset-bottom)) + 98px); }
             #limite { left:calc(max(14px, env(safe-area-inset-left)) + 98px); }
             #limite .panneau { width:56px; height:56px; border-width:6px; } #limite b { font-size:22px; }
         }
@@ -113,6 +123,8 @@
             #etat { display:none; }
             /* Au-dessus du compteur : à sa droite, les crédits. */
             #limite { left:max(24px, calc(env(safe-area-inset-left) + 10px)); bottom:calc(max(14px, env(safe-area-inset-bottom)) + 118px); }
+            /* Au-dessus du panneau de la limitation, lui-même au-dessus du compteur. */
+            #b-signaler { left:max(31px, calc(env(safe-area-inset-left) + 17px)); bottom:calc(max(14px, env(safe-area-inset-bottom)) + 214px); }
             #credits { left:130px; right:84px; transform:none; white-space:normal; text-align:center; font-size:9px; }
         }
     </style>
@@ -130,6 +142,9 @@
 </button>
 <div id="compteur" class="cartouche" aria-live="off"><b id="vitesse">–</b><small>km/h</small></div>
 <div id="limite" hidden><div class="panneau"><b id="limite-v"></b></div><small id="limite-source"></small></div>
+<button type="button" id="b-signaler" class="bouton" aria-label="Signaler un défaut de l'affichage"
+        title="Signaler un défaut de l'affichage : une capture de l'écran, la position et l'état du sol partent au serveur, pour l'analyse">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5L2.5 20h19z"/><path d="M12 9.5v5M12 17.4v.1"/></svg></button>
 <div id="boutons">
     <button type="button" id="b-vue" class="bouton" title="Vue de derrière (3D) ou de dessus (2D)">2D</button>
     <button type="button" id="b-fond" class="bouton" title="Fond : photographie aérienne ou plan IGN">Plan</button>
@@ -354,7 +369,8 @@ function tuileAlti(niveau, ligne, colonne) {
     t = { valeurs: null };
     t.promesse = (async () => {
         const reponse = await lireEnCache(ALTI_URL(niveau, ligne, colonne), DELAI_ALTI_MS);
-        if (reponse.status === 404) return new Float32Array(256 * 256).fill(NaN);
+        // Notée pour les signalements : sur la terre ferme, un 404 serait un refus.
+        if (reponse.status === 404) { t.absente = true; return new Float32Array(256 * 256).fill(NaN); }
         const type = reponse.headers.get('content-type') || '';
         if (!reponse.ok || !type.startsWith('image/x-bil')) throw new Error(`RGE ALTI : ${reponse.status} ${type}`);
         const v = new Float32Array(await reponse.arrayBuffer());
@@ -757,6 +773,7 @@ function habillerTuile(t) {
     if (m.map) { m.map.dispose(); m.map = null; }
     let a = t;
     while (a && !(a.fondGen === generationFond && a.image)) a = parentSol(a);
+    t.habit = a;                        // la tuile dont l'image l'habille, pour les signalements
     if (a) {
         const tex = new THREE.Texture(a.image);
         tex.colorSpace = THREE.SRGBColorSpace;
@@ -787,12 +804,18 @@ function construireTuile(t, niveau) {
     const pos = new Float32Array((nb + 4 * L) * 3), nor = new Float32Array((nb + 4 * L) * 3);
     const uv = new Float32Array((nb + 4 * L) * 2);
     let ymin = Infinity, ymax = -Infinity;
+    // Une altitude illisible ici (sa tuile du RGE ALTI évincée entre sa
+    // lecture et cette construction) pose le sommet à 0 m, pour la vie de la
+    // tuile : comptée, pour le bandeau et les signalements.
+    let manquantes = 0;
     for (let j = 0; j < L; j++) {
         for (let i = 0; i < L; i++) {
             const k = j * L + i;
             const [lon, lat] = versLonLat(t.x + i / N, t.y + j / N, t.z);
             const [x, y] = versLambert93(lon, lat);
-            const a = altitude(lon, lat, niveau) || 0;
+            const brute = altitude(lon, lat, niveau);
+            if (Number.isNaN(brute)) manquantes++;
+            const a = brute || 0;
             const dLat = dLon * Math.cos(lat * RAD);
             const mx = 2 * dLon * 111320 * Math.cos(lat * RAD), my = 2 * dLat * 111320;
             const gE = ((altitude(lon + dLon, lat, niveau) || 0) - (altitude(lon - dLon, lat, niveau) || 0)) / mx;
@@ -838,6 +861,7 @@ function construireTuile(t, niveau) {
     t.mesh = new THREE.Mesh(geo, courberSol(new THREE.MeshLambertMaterial({ color: COULEUR_SOL })));
     t.mesh.visible = false;
     t.ymin = ymin; t.ymax = ymax;
+    t.altiManquantes = manquantes;
     ancrer(t.mesh, t.cx, t.cy);
     habillerTuile(t);
     groupeSol.add(t.mesh);
@@ -2710,6 +2734,8 @@ function majHud(maintenant) {
     elCarres.innerHTML = (ch ? `Bâtiments prêts sur <b>${pret >= 1000 ? (pret / 1000).toFixed(1).replace('.', ',') + ' km'
         : Math.round(pret / 50) * 50 + ' m'}</b> devant` : `${construits} carrés de bâtiments`)
         + (manquees.size ? `<br>${manquees.size} tuile${manquees.size > 1 ? 's' : ''} en attente de réseau` : '');
+    const alerte = majAlerteSol(maintenant);
+    if (alerte) elCarres.innerHTML += `<br><span class="alerte">⚠ Sol ${alerte}</span>`;
     if (v.vue) majLienQuitter();
 }
 
@@ -2981,6 +3007,260 @@ function majSimu(dt, maintenant) {
 }
 
 // --- Boucle ---------------------------------------------------------------------------------
+// --- Signalements -----------------------------------------------------------------------
+// Le 23 octobre 2026, dans une Tesla, le sol près de la voiture n'avait pas
+// sa photo, alors qu'aucune tuile n'avait été refusée (aucune relecture au
+// serveur, aucune « tuile en attente » au bandeau) ; au même endroit, sur un
+// ordinateur, le sol était entier. La page dit donc ce qu'elle voit sous la
+// voiture, et le bouton ⚠ envoie au serveur une capture de l'écran avec
+// l'état du sol (vue3d/signalements.py) : ce qu'elle croit montrer, à
+// comparer à ce qui se voit.
+const ALERTE_SOL_S = 5;                 // un sol qui se charge n'est pas un défaut
+const DEVANT_ALERTE_M = 60;
+const alerteSol = { actif: false, texte: '', depuis: 0, affichee: '', dernier: -Infinity };
+const boutonSignaler = document.getElementById('b-signaler');
+
+/** La tuile du sol montrée sous (x, y), Lambert-93 ; null s'il n'y en a pas. */
+function tuileMontreeSous(x, y) {
+    const [lon, lat] = depuisLambert93(x, y);
+    for (let z = SOL_ZOOM_MAX; z >= SOL_ZOOM_MIN; z--) {
+        const [tx, ty] = versTuile(lon, lat, z);
+        const t = tuilesSol.get(`${z}/${tx}/${ty}`);
+        if (t?.mesh?.visible) return t;
+    }
+    return null;
+}
+
+/** La part des pixels d'un blanc pur d'une image, sur 16 × 16 : l'orthophoto au-delà de sa prise de vue. */
+function blancheur(img) {
+    if (img.__blancheur !== undefined) return img.__blancheur;
+    try {
+        const c = document.createElement('canvas');
+        c.width = c.height = 16;
+        const g = c.getContext('2d', { willReadFrequently: true });
+        g.drawImage(img, 0, 0, 16, 16);
+        const d = g.getImageData(0, 0, 16, 16).data;
+        let n = 0;
+        for (let k = 0; k < d.length; k += 4) if (Math.min(d[k], d[k + 1], d[k + 2]) > 245) n++;
+        img.__blancheur = n / 256;
+    } catch (e) { img.__blancheur = null; }
+    return img.__blancheur;
+}
+
+/** Ce qui manque au sol montré en (x, y) ; '' s'il est entier. `sous` : sous la voiture, dont l'altitude compte. */
+function defautSol(x, y, sous) {
+    const t = tuileMontreeSous(x, y);
+    if (!t) return 'absent';
+    if (t.altiManquantes) return `sans relief (zoom ${t.z})`;
+    if (!t.mesh.material.map) return `sans photo (zoom ${t.z})`;
+    // Blanche au niveau de la mer, la teinte de la mer la couvre (courberSol).
+    if (t.ymax > 1.5 && t.habit?.image && blancheur(t.habit.image) > 0.9) return `photo blanche (zoom ${t.habit.z})`;
+    // Hors d'un pont, la voiture se pose sur le relief que porte la tuile.
+    const v = voiture;
+    if (sous && Number.isFinite(v.alt) && !(v.arete?.sol > 0) && (v.alt < t.ymin - 25 || v.alt > t.ymax + 25)) {
+        return `à ${Math.round(t.ymin)}-${Math.round(t.ymax)} m, la voiture à ${Math.round(v.alt)} m (zoom ${t.z})`;
+    }
+    return '';
+}
+
+/** Le défaut du sol sous la voiture ou juste devant, une fois qu'il dure ; '' sinon. */
+function majAlerteSol(maintenant) {
+    if (maintenant - alerteSol.dernier < 1000) return alerteSol.affichee;
+    alerteSol.dernier = maintenant;
+    const v = voiture;
+    let texte = '';
+    if (v.vue && groupeSol.visible) {
+        texte = defautSol(v.x, v.y, true);
+        if (!texte) {
+            const devant = defautSol(v.x + Math.sin(v.cap * RAD) * DEVANT_ALERTE_M,
+                                     v.y + Math.cos(v.cap * RAD) * DEVANT_ALERTE_M, false);
+            if (devant) texte = `${devant}, ${DEVANT_ALERTE_M} m devant`;
+        }
+    }
+    if (!!texte !== alerteSol.actif) { alerteSol.actif = !!texte; alerteSol.depuis = maintenant; }
+    alerteSol.texte = texte;
+    alerteSol.affichee = texte && maintenant - alerteSol.depuis > ALERTE_SOL_S * 1000 ? texte : '';
+    boutonSignaler.classList.toggle('alerte', !!alerteSol.affichee);
+    return alerteSol.affichee;
+}
+
+// Ce que la page vit sans le voir : les pertes du contexte WebGL et ses
+// pauses (voiture endormie, onglet caché) — l'onglet photographié le 23
+// octobre était ouvert depuis la veille au soir.
+const gpu = { pertes: 0, retablissements: 0, dernierePerte: null };
+renderer.domElement.addEventListener('webglcontextlost', () => { gpu.pertes++; gpu.dernierePerte = new Date().toISOString(); });
+renderer.domElement.addEventListener('webglcontextrestored', () => { gpu.retablissements++; });
+const sommeils = [];
+let imagesParS = 0;
+
+const arrondi = (v, k = 1) => (Number.isFinite(v) ? Math.round(v * k) / k : null);
+
+function decrireTuile(t, maintenant) {
+    return { z: t.z, x: t.x, y: t.y, maillage: !!t.mesh, montree: !!t.mesh?.visible,
+             photo: !!t.mesh?.material.map, habit: t.habit ? t.habit.z : null,
+             image: t.image ? [t.image.naturalWidth, t.image.naturalHeight] : null,
+             blancheur: t.habit?.image ? arrondi(blancheur(t.habit.image), 100) : null,
+             sansImage: t.sansImage === generationFond, fondGen: t.fondGen, enCours: t.enCours,
+             echecs: t.echecs || 0, reessai_s: t.reessai > maintenant ? arrondi((t.reessai - maintenant) / 1000) : 0,
+             altiManquantes: t.altiManquantes ?? null, ymin: arrondi(t.ymin, 10), ymax: arrondi(t.ymax, 10),
+             vue_s: arrondi((maintenant - t.vue) / 1000) };
+}
+
+function infoGpu() {
+    const gl = renderer.getContext();
+    let nom = null;
+    try {
+        const ext = gl.getExtension('WEBGL_debug_renderer_info');
+        nom = gl.getParameter(ext ? ext.UNMASKED_RENDERER_WEBGL : gl.RENDERER);
+    } catch (e) { /* le nom du GPU n'est pas donné */ }
+    return { nom, perdu: gl.isContextLost(), webgl2: renderer.capabilities.isWebGL2,
+             textureMax: renderer.capabilities.maxTextureSize, anisotropie: ANISOTROPIE, ...gpu,
+             memoire: { ...renderer.info.memory }, programmes: renderer.info.programs?.length ?? null,
+             appels: renderer.info.render.calls, triangles: renderer.info.render.triangles };
+}
+
+/** Tout ce qui décide du sol à l'écran, pour un signalement. */
+function etatDiagnostic() {
+    const v = voiture, maintenant = performance.now();
+    const etat = {
+        pris: new Date().toISOString(),
+        page: { chargee: new Date(performance.timeOrigin).toISOString(), fichier: document.lastModified,
+                url: location.pathname + location.search, simu: SIMU },
+        ecran: { largeur: innerWidth, hauteur: innerHeight, dpr: devicePixelRatio, ratio, images_s: arrondi(imagesParS) },
+        bandeau: { gps: elGps.innerText, carres: elCarres.innerText, rue: elRue.hidden ? null : elNom.textContent },
+        alerte: alerteSol.texte, gpu: infoGpu(), sommeils,
+    };
+    const x = v.vue ? v.x : v.attendu?.x, y = v.vue ? v.y : v.attendu?.y;
+    if (x == null) return etat;
+    const [lon, lat] = depuisLambert93(x, y);
+    etat.voiture = { vue: v.vue, lat: arrondi(lat, 1e6), lon: arrondi(lon, 1e6), x: arrondi(x, 10), y: arrondi(y, 10),
+                     alt: arrondi(v.alt, 10), cap: arrondi(v.cap), kmh: arrondi(v.v * 3.6), horsRoute: v.horsRoute,
+                     precision: v.precision, releve_s: v.fix ? arrondi((maintenant - v.fix.t) / 1000) : null,
+                     route: v.arete ? { nom: v.arete.nom, nature: v.arete.nature, sol: v.arete.sol } : null };
+    etat.camera = { x: arrondi(camera.position.x + ORIGINE.x, 10), y: arrondi(ORIGINE.y - camera.position.z, 10),
+                    alt: arrondi(camera.position.y, 10), mode: camVue.mode, recul: arrondi(camVue.recul),
+                    lacet: arrondi(camVue.lacet), tangage: arrondi(camVue.tangage) };
+    const sol = etat.sol = { fond, generationFond, visible: groupeSol.visible, tuiles: tuilesSol.size, cache: SOL_CACHE,
+                             enVol: solEnVol, teinte: teinteSol.getHexString(), navigateur: { ...statsCache },
+                             manquees: manquees.size, manqueesExemples: [...manquees.keys()].slice(0, 10),
+                             precharge: { ...statsPrecharge }, sousVoiture: [], autour: [], parZoom: {} };
+    for (let z = SOL_ZOOM_MIN; z <= SOL_ZOOM_MAX; z++) {
+        const [tx, ty] = versTuile(lon, lat, z), t = tuilesSol.get(`${z}/${tx}/${ty}`);
+        sol.sousVoiture.push(t ? decrireTuile(t, maintenant) : { z, x: tx, y: ty, inconnue: true });
+    }
+    for (const t of tuilesSol.values()) {
+        const p = sol.parZoom[t.z] ??= { tuiles: 0, maillees: 0, montrees: 0, sansPhoto: 0, sansRelief: 0, sansImage: 0 };
+        p.tuiles++;
+        if (t.mesh) p.maillees++;
+        if (t.altiManquantes) p.sansRelief++;
+        if (t.sansImage === generationFond) p.sansImage++;
+        if (!t.mesh?.visible) continue;
+        p.montrees++;
+        if (!t.mesh.material.map) p.sansPhoto++;
+        const dx = Math.max(t.minX - x, 0, x - t.maxX), dy = Math.max(t.minY - y, 0, y - t.maxY);
+        if (Math.hypot(dx, dy) < 400) sol.autour.push(decrireTuile(t, maintenant));
+    }
+    etat.altitudes = { tuiles: altis.size, cache: ALTI_CACHE,
+                       absentes: [...altis].filter(([, a]) => a.absente).map(([k]) => k).slice(0, 20), sousVoiture: [] };
+    for (let n = ALTI_NIVEAU_MIN; n <= ALTI_NIVEAU_MAX; n++) {
+        const q = pasAlti(n) * 256, cle = `${n}/${Math.floor((90 - lat) / q)}/${Math.floor((lon + 180) / q)}`;
+        const a = altis.get(cle);
+        etat.altitudes.sousVoiture.push({ niveau: n, cle, connue: !!a, lue: !!a?.valeurs, absente: !!a?.absente,
+                                         m: arrondi(altitude(lon, lat, n), 10) });
+    }
+    const etats = {};
+    for (const c of carres.values()) etats[c.etat] = (etats[c.etat] || 0) + 1;
+    etat.carres = { total: carres.size, etats, construits: [...carres.values()].filter(c => c.mesh?.visible).length };
+    return etat;
+}
+
+// Au plus 1 280 px de large : 89 Ko en JPEG pour 1 280 × 800 (vue3d/signalements.py).
+const CAPTURE_LARGEUR = 1280;
+/** L'image de la vue, rendue à l'instant (le tampon WebGL ne la garde pas d'une image à l'autre) ; null si illisible. */
+function capturer() {
+    try {
+        rendre();
+        const src = renderer.domElement, k = Math.min(1, CAPTURE_LARGEUR / src.width);
+        const c = document.createElement('canvas');
+        c.width = Math.round(src.width * k); c.height = Math.round(src.height * k);
+        c.getContext('2d').drawImage(src, 0, 0, c.width, c.height);
+        return c.toDataURL('image/jpeg', 0.75);
+    } catch (e) { return null; }
+}
+
+// Sans réseau, le signalement attend, gardé d'une session à l'autre : c'est
+// souvent quand le sol manque que le réseau manque aussi.
+const SIGNALEMENTS_CLE = 'vue3d-voiture-signalements', SIGNALEMENTS_GARDES = 3, SIGNALEMENT_RENVOI_MS = 30000;
+let signalementsEnAttente = [];
+try {
+    signalementsEnAttente = JSON.parse(localStorage.getItem(SIGNALEMENTS_CLE) || '[]').filter(s => s && s.etat);
+} catch (e) { /* stockage refusé ou illisible : aucun en attente */ }
+function garderSignalements() {
+    try { localStorage.setItem(SIGNALEMENTS_CLE, JSON.stringify(signalementsEnAttente)); }
+    catch (e) {
+        // Trop gros pour le stockage : les captures s'en vont, les états restent.
+        try { localStorage.setItem(SIGNALEMENTS_CLE, JSON.stringify(signalementsEnAttente.map(s => ({ ...s, capture: null })))); }
+        catch (e2) { /* stockage refusé : ils vivent le temps de la page */ }
+    }
+}
+/** Le serveur n'en veut pas : le renvoyer n'y changerait rien. */
+class SignalementRefuse extends Error {}
+async function envoyerSignalement(s) {
+    const arret = new AbortController(), minuterie = setTimeout(() => arret.abort(), 20000);
+    try {
+        const r = await fetch('api/signalement', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                                    body: JSON.stringify(s), signal: arret.signal });
+        const corps = await r.json().catch(() => ({}));
+        if (r.ok) return corps.id;
+        if (r.status === 429 || (r.status >= 500 && r.status !== 507)) throw new Error(`HTTP ${r.status}`);
+        throw new SignalementRefuse(corps.erreur || `HTTP ${r.status}`);
+    } finally { clearTimeout(minuterie); }
+}
+
+let signalementEnCours = false, dernierRenvoi = -Infinity;
+async function signaler() {
+    if (signalementEnCours) return;
+    signalementEnCours = true;
+    boutonSignaler.classList.add('envoi');
+    const s = { etat: etatDiagnostic(), capture: capturer() };
+    try {
+        const id = await envoyerSignalement(s);
+        annoncer(`Signalement ${id} envoyé : capture, position et état du sol.`, 10);
+    } catch (e) {
+        if (e instanceof SignalementRefuse) {
+            annoncer(`Signalement refusé : ${e.message}`, 10);
+        } else {
+            signalementsEnAttente.push(s);
+            while (signalementsEnAttente.length > SIGNALEMENTS_GARDES) signalementsEnAttente.shift();
+            garderSignalements();
+            dernierRenvoi = performance.now();
+            annoncer('Pas de réseau : le signalement partira dès qu\'il reviendra.', 8);
+        }
+    } finally {
+        signalementEnCours = false;
+        boutonSignaler.classList.remove('envoi');
+    }
+}
+boutonSignaler.addEventListener('click', signaler);
+
+async function majSignalements(maintenant) {
+    if (!signalementsEnAttente.length || signalementEnCours || maintenant - dernierRenvoi < SIGNALEMENT_RENVOI_MS) return;
+    dernierRenvoi = maintenant;
+    signalementEnCours = true;
+    const s = signalementsEnAttente[0];
+    try {
+        const id = await envoyerSignalement(s);
+        signalementsEnAttente.shift();
+        const pris = new Date(s.etat.pris).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+        annoncer(`Signalement ${id} envoyé (pris à ${pris}).`, 8);
+    } catch (e) {
+        if (e instanceof SignalementRefuse) signalementsEnAttente.shift();
+    } finally {
+        garderSignalements();
+        signalementEnCours = false;
+    }
+}
+
 function dimensionner() {
     renderer.setSize(window.innerWidth, window.innerHeight);
     camera.aspect = window.innerWidth / Math.max(window.innerHeight, 1);
@@ -3004,10 +3284,25 @@ function adapterResolution(dt, maintenant) {
     mesure.somme = 0; mesure.n = 0; mesure.debut = maintenant;
 }
 
+function rendre() {
+    renderer.info.reset();
+    renderer.clear();
+    renderer.render(scene, camera);
+    if (maquette.visible) {
+        renderer.clearDepth();
+        renderer.render(sceneVoiture, camera);
+    }
+}
+
 let precedent = performance.now();
 function boucle(maintenant) {
     requestAnimationFrame(boucle);
+    if (maintenant - precedent > 30000) {
+        sommeils.push({ fin: new Date().toISOString(), duree_s: Math.round((maintenant - precedent) / 1000) });
+        if (sommeils.length > 10) sommeils.shift();
+    }
     const dt = Math.min((maintenant - precedent) / 1000, 0.1);
+    if (maintenant > precedent) imagesParS += (1000 / (maintenant - precedent) - imagesParS) * 0.05;
     precedent = maintenant;
     if (SIMU && voiture.attendu) majSimu(dt, maintenant);
     majVoiture(dt, maintenant);
@@ -3018,14 +3313,9 @@ function boucle(maintenant) {
     majManquees(maintenant);
     majRuban(maintenant);
     majCiel(maintenant);
+    majSignalements(maintenant);
     majHud(maintenant);
-    renderer.info.reset();
-    renderer.clear();
-    renderer.render(scene, camera);
-    if (maquette.visible) {
-        renderer.clearDepth();
-        renderer.render(sceneVoiture, camera);
-    }
+    rendre();
     adapterResolution(dt, maintenant);
 }
 
@@ -3033,7 +3323,7 @@ function boucle(maintenant) {
 const echapperHtml = t => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 window.__voiture = { voiture, carres, tuilesSol, aretes, camVue, camera, renderer, durees, dureesArbres, statsCache, simu,
                      get itineraire() { return itineraire; }, partir: () => { simuPartie = true; }, limites,
-                     manquees, statsPrecharge,
+                     manquees, statsPrecharge, diagnostic: etatDiagnostic, signaler,
                      get budget() { return budgetConstruction; } };
 
 // --- Départ ---------------------------------------------------------------------------------

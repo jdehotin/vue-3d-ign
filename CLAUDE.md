@@ -34,7 +34,7 @@ node outils/film-voiture.mjs "http://localhost:8080/voiture?simu=1&lat=48.8532&l
 
 ```
 vue3d/
-  app.py        Flask : /, /voiture, /api/scene, /api/carre, /api/vegetation, /api/vitesses, /api/ortho, /api/monuments, /api/ouvrages, /api/nuage, /api/piscines, /api/navires, /api/vehicules, /api/panneaux, /api/dpe, /api/dvf, /api/bornes, /api/avancement, /api/sante, /api/tuile, POST /api/reconstruire ; quota de scènes neuves par IP (VUE3D_QUOTA, VUE3D_PROXY derrière un proxy)
+  app.py        Flask : /, /voiture, /api/scene, /api/carre, /api/vegetation, /api/vitesses, /api/ortho, /api/monuments, /api/ouvrages, /api/nuage, /api/piscines, /api/navires, /api/vehicules, /api/panneaux, /api/dpe, /api/dvf, /api/bornes, /api/avancement, /api/sante, /api/tuile, POST /api/reconstruire, POST /api/signalement ; quota de scènes neuves par IP (VUE3D_QUOTA, VUE3D_PROXY derrière un proxy)
   scene.py      assemblage d'une scène, cache disque par point arrondi
   couches.py    lecture WFS (bâtiments, végétation, BD Forêt, routes)
   batiments.py  bâtiments découpés sur l'emprise, en retrait du bord
@@ -59,6 +59,7 @@ vue3d/
   carres.py     carrés de 500 m de la vue en voiture, grille Lambert-93 : bâtiments et routes BD TOPO lus en EPSG:2154 (cache/carres/), sans scène ni MNH ; leurs arbres en couche à part (/api/vegetation, houppiers.py sur le MNH à 0,5 m) ; quota à part (CARRES_PAR_HEURE)
   vitesses.py   limitations de vitesse des carrés de la voiture (/api/vitesses) : maxspeed OpenStreetMap (Overpass, par bloc de 2 km gardé dans cache/carres/), rapproché des tronçons BD TOPO sens par sens, sinon règle générale marquée estimée ; couche à part
   geopf.py      GET avec reprise sur la Géoplateforme ; 8 places pour tout le service, lectures groupées abandonnées au premier échec
+  signalements.py  le bouton ⚠ de la vue en voiture : capture de l'écran et état du sol gardés dans cache/signalements/ (<id>.json, <id>.jpg), bornés en taille, en nombre et par adresse
   tuiles.py     tuiles WMTS de la page (ortho, plan) : stock servi, sinon redirection vers l'IGN ; une tuile refusée au navigateur est relue ici et gardée 90 jours (cache/tuiles/)
   static/index.html   la page entière : HTML, CSS et JavaScript (three.js r160)
   static/voiture.html la vue en voiture, page à part : un monde qui défile en Lambert-93, sol en tuiles WMTS sur le RGE ALTI, carrés chargés le long de la route prévue sur le graphe BD TOPO, voiture calée sur la route

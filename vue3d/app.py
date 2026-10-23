@@ -27,6 +27,8 @@
     GET /api/tuile/<couche>/<z>/<x>/<y>  une tuile WMTS de l'IGN (ortho, plan) : du
                                    stock du serveur, sinon redirigée vers l'IGN ;
                                    `?relire=1` après un refus, lue et gardée ici
+    POST /api/signalement          le bouton ⚠ de la vue en voiture : sa capture
+                                   et l'état du sol, gardés pour l'analyse
     GET /api/sante                 contrôle de vie, pour Docker
 
 Chaque route d'API accepte `zone=` (150 à 2 000 m, arrondie à 50 m) : sans
@@ -42,6 +44,7 @@ un proxy, `VUE3D_PROXY` dit combien croire de `X-Forwarded-For`.
 import logging
 import math
 import os
+import secrets
 import threading
 import time
 
@@ -68,6 +71,8 @@ from .scene import (NOM_BORNES, NOM_DPE, NOM_DVF, NOM_MONUMENTS, NOM_NUAGE, NOM_
                     VehiculesDesactives, VehiculesIndisponibles, point_normalise,
                     zone_normalisee)
 from .scene import construire as construire_scene
+from .signalements import (SIGNALEMENT_OCTETS_MAX, SIGNALEMENTS_PAR_HEURE, SignalementInvalide,
+                           Signalements, SignalementsComplets)
 from .toits import autoriser_bassin
 from .tuiles import (COUCHES, TUILES_RELECTURES_PAR_HEURE, Stock, TuileAbsente, TuileIllisible,
                      TuilesOccupees, fetch_tuile, url_ign, valide)
@@ -211,6 +216,8 @@ def creer_app(dossier_cache=None, construire=construire_scene, lire_monuments=fe
     if quota_carres is None:
         quota_carres = CARRES_PAR_HEURE if quota else 0
     quota_carres = Quota(quota_carres) if quota_carres else None
+    signalements = Signalements(os.path.join(cache.dossier, "signalements"))
+    quota_signalements = Quota(SIGNALEMENTS_PAR_HEURE) if quota else None
 
     def point():
         """(lat, lon, zone) de la requête ; None si l'un d'eux est illisible."""
@@ -656,6 +663,34 @@ def creer_app(dossier_cache=None, construire=construire_scene, lire_monuments=fe
         # carré à chaque passage.
         reponse.headers["Cache-Control"] = "public, max-age=604800"
         return reponse
+
+    @app.post("/api/signalement")
+    def signalement():
+        """Le bouton ⚠ de la vue en voiture : une capture de l'écran et
+        l'état du sol, gardés sur disque pour l'analyse
+        (vue3d/signalements.py)."""
+        # Lu borné : un corps sans Content-Length serait lu jusqu'au bout.
+        corps = request.stream.read(SIGNALEMENT_OCTETS_MAX + 1)
+        if len(corps) > SIGNALEMENT_OCTETS_MAX:
+            return erreur(413, f"Signalement de plus de {SIGNALEMENT_OCTETS_MAX // 1_000_000} Mo.")
+        if quota_signalements and quota_signalements.attente(request.remote_addr, secrets.token_hex(8)):
+            app.logger.warning("Quota de %d signalements par heure atteint pour %s",
+                               quota_signalements.par_heure, request.remote_addr)
+            reponse, code = erreur(429, "Trop de signalements envoyés en une heure.")
+            reponse.headers["Retry-After"] = "600"
+            return reponse, code
+        try:
+            ident = signalements.enregistrer(corps, request.remote_addr,
+                                             request.headers.get("User-Agent"))
+        except SignalementInvalide as exc:
+            return erreur(400, f"Signalement illisible : {exc}.")
+        except SignalementsComplets:
+            app.logger.warning("Signalements : %s pleins, rien d'écrit", signalements.dossier)
+            return erreur(507, "Le serveur garde déjà assez de signalements à lire.")
+        app.logger.info("Signalement %s reçu de %s", ident, request.remote_addr)
+        reponse = jsonify({"id": ident})
+        reponse.headers["Cache-Control"] = "no-store"
+        return reponse, 201
 
     @app.get("/api/sante")
     def sante():

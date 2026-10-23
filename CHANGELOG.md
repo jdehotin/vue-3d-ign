@@ -15,6 +15,19 @@ messages de commit et dans les commentaires des modules.
 
 ### Ajouté
 
+- **Signaler un défaut de la vue en voiture** (23 octobre 2026) : un bouton ⚠
+  au-dessus du compteur, comme celui de Coyote. Un appui envoie au serveur
+  une capture de l'écran, la position et l'état du sol (tuiles sous la
+  voiture et autour, leur photo et sa part de blanc pur, leurs altitudes,
+  le cache du navigateur, le GPU, les pauses de l'onglet) ; le serveur les
+  garde dans `cache/signalements/` (`POST /api/signalement`, 3 Mo, 300
+  gardés, 30 par heure et par adresse avec le quota), la page affiche leur
+  numéro. Sans réseau, le signalement attend et repart seul. Le bandeau dit
+  aussi ce que la page voit manquer sous la voiture ou 60 m devant, après
+  5 s : sol absent, sans photo, photo blanche, sans relief ou mal posé, et
+  le bouton s'allume. Né d'une photo prise dans une Tesla : le sol sans
+  photo près de la voiture, sans aucun refus de tuile au serveur ni « tuile
+  en attente », et entier au même endroit sur un ordinateur.
 - **Les limitations de vitesse dans la vue en voiture** (22 octobre 2026) :
   un panneau à côté du compteur, pour la route et le sens où l'on roule, et
   sa source dessous. « OpenStreetMap » quand la limite y est relevée
