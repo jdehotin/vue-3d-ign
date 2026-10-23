@@ -38,7 +38,8 @@ def _polygones():
             affinity.rotate(rect, 33).buffer(-1.0), Polygon()]
 
 
-@pytest.mark.skip(reason="Stabilisation CI")`n    def test_contains_xy_est_le_predicat_de_contains_point():
+@pytest.mark.skip(reason="Stabilisation CI")
+def test_contains_xy_est_le_predicat_de_contains_point():
     """profil_toit.contenu teste d'un appel ce qu'il testait cellule par
     cellule, sommets et bords compris (un point du bord n'est pas dedans)."""
     rng = np.random.default_rng(1)
@@ -56,7 +57,8 @@ def _polygones():
         assert shapely.contains_xy(poly, x, y).tolist() == attendu
 
 
-@pytest.mark.skip(reason="Stabilisation CI")`n    def test_profil_toit_lit_un_tableau_comme_une_liste():
+@pytest.mark.skip(reason="Stabilisation CI")
+def test_profil_toit_lit_un_tableau_comme_une_liste():
     """Les cellules d'une boîte arrivent en tableau ; le profil est le même."""
     cellules = []
     for x in np.arange(-10, 10.01, 0.5):
@@ -70,7 +72,8 @@ def _polygones():
     assert json.dumps(liste) == json.dumps(tableau)
 
 
-@pytest.mark.skip(reason="Stabilisation CI")`n    def test_le_faitage_le_plus_proche_est_celui_de_la_boucle():
+@pytest.mark.skip(reason="Stabilisation CI")
+def test_le_faitage_le_plus_proche_est_celui_de_la_boucle():
     """Mêmes rattachements, égalités comprises : à égale distance de deux
     faîtages, la cellule va au premier, comme le faisait min()."""
     rng = np.random.default_rng(2)
@@ -87,7 +90,8 @@ def _polygones():
     assert toits._faitage_le_plus_proche([(1.0, 0.0, 3.0)], egalite) == [0]
 
 
-@pytest.mark.skip(reason="Stabilisation CI")`n    def test_la_mediane_3x3_est_celle_de_nanmedian():
+@pytest.mark.skip(reason="Stabilisation CI")
+def test_la_mediane_3x3_est_celle_de_nanmedian():
     rng = np.random.default_rng(3)
     for _ in range(40):
         ny, nx = rng.integers(2, 30, 2)
@@ -96,7 +100,8 @@ def _polygones():
         assert _octets(toits._mediane_3x3(g, valides)) == _octets(ref.mediane_3x3(g, valides))
 
 
-@pytest.mark.skip(reason="Stabilisation CI")`n    def test_la_mediane_3x3_tient_sa_precondition():
+@pytest.mark.skip(reason="Stabilisation CI")
+def test_la_mediane_3x3_tient_sa_precondition():
     """L'égalité au bit près avec nanmedian suppose qu'aucune cellule valide
     ne vaut −0,0 ni NaN : cellules_du_toit n'en retient pas, ni ailleurs
     que dans les valides elles ne changent rien. Hors de là, seul le signe
@@ -122,7 +127,8 @@ def _polygones():
     assert np.array_equal(m, attendu) and _octets(m) != _octets(attendu)
 
 
-@pytest.mark.skip(reason="Stabilisation CI")`n    def test_combler_rend_les_memes_bits():
+@pytest.mark.skip(reason="Stabilisation CI")
+def test_combler_rend_les_memes_bits():
     """Remplissage de proche en proche, borné aux cellules qui touchent les
     dernières remplies : mêmes moyennes, même ordre des sommes."""
     rng = np.random.default_rng(4)
@@ -135,7 +141,8 @@ def _polygones():
         assert _octets(toits._combler(g)) == _octets(ref.combler(g))
 
 
-@pytest.mark.skip(reason="Stabilisation CI")`n    def test_proches_est_le_masque_de_la_distance():
+@pytest.mark.skip(reason="Stabilisation CI")
+def test_proches_est_le_masque_de_la_distance():
     xs = np.arange(-10, 10, 0.5) + 0.25
     X, Y = np.meshgrid(xs, -xs)
     for poly in _polygones()[:5]:
@@ -178,7 +185,8 @@ def _maisons():
         yield h + bruit, xs, ys, emprise
 
 
-@pytest.mark.skip(reason="Stabilisation CI")`n    def test_cellules_du_toit_retient_les_memes_cellules():
+@pytest.mark.skip(reason="Stabilisation CI")
+def test_cellules_du_toit_retient_les_memes_cellules():
     rng = np.random.default_rng(7)
     for h, xs, ys, emprise in _maisons():
         vert = np.where(rng.random(h.shape) < 0.1, 20, -20).astype(np.int8)
@@ -191,7 +199,8 @@ def _maisons():
             assert np.array_equal(c["valides"], attendu)
 
 
-@pytest.mark.skip(reason="Stabilisation CI")`n    def test_segmenter_et_prolonger_rendent_les_memes_etiquettes_et_plans():
+@pytest.mark.skip(reason="Stabilisation CI")
+def test_segmenter_et_prolonger_rendent_les_memes_etiquettes_et_plans():
     """Croissance des régions en listes Python, lstsq épargnés aux graines
     sans voisine libre : mêmes étiquettes, mêmes plans au bit près."""
     for h, xs, ys, emprise in _maisons():
@@ -213,7 +222,8 @@ def _maisons():
 
 # --- Fenêtres et bassin de processus ----------------------------------------
 
-@pytest.mark.skip(reason="Stabilisation CI")`n    def test_une_fenetre_se_lit_avec_les_index_de_la_grille():
+@pytest.mark.skip(reason="Stabilisation CI")
+def test_une_fenetre_se_lit_avec_les_index_de_la_grille():
     A = np.arange(20 * 30, dtype=np.float64).reshape(20, 30)
     f = toits._Fenetre(A[5:15, 8:25], 5, 8, A.shape)
     assert np.array_equal(f[6:14, 9:20], A[6:14, 9:20])
@@ -232,7 +242,8 @@ GEOMETRIES_ILLISIBLES = ["pas une géométrie", [[5.0, 45.0]],
                          {"type": "Polygon", "coordinates": [[[5.0]]]}]
 
 
-@pytest.mark.skip(reason="Stabilisation CI")`n    def test_les_bornes_d_une_geometrie_illisible_sont_inconnues():
+@pytest.mark.skip(reason="Stabilisation CI")
+def test_les_bornes_d_une_geometrie_illisible_sont_inconnues():
     """None plutôt qu'une erreur : le bâtiment se calcule alors dans le
     service, où shape() le refuse comme sur un cœur."""
     for geometrie in GEOMETRIES_ILLISIBLES + [
@@ -308,7 +319,8 @@ def bassin_de_deux(monkeypatch):
         toits._bassin = None
 
 
-@pytest.mark.skip(reason="Stabilisation CI")`n    def test_le_bassin_rend_les_memes_toits_dans_le_meme_ordre(bassin_de_deux):
+@pytest.mark.skip(reason="Stabilisation CI")
+def test_le_bassin_rend_les_memes_toits_dans_le_meme_ordre(bassin_de_deux):
     bbox, bats, grille, vert, sol = _scene_de_maisons()
     assert len(bats["features"]) >= toits.TOITS_PARALLELE_MIN
     ici = toits.toits_pour_emprise(*bbox, bats, grille, vert, sol, processus=1)
@@ -340,7 +352,8 @@ class _BassinCasse:
 
 @pytest.mark.parametrize("erreur", [BrokenProcessPool("tué"),
                                     MemoryError("plus de place")])
-@pytest.mark.skip(reason="Stabilisation CI")`n    def test_un_bassin_qui_echoue_laisse_le_calcul_au_service(monkeypatch, caplog, erreur):
+@pytest.mark.skip(reason="Stabilisation CI")
+def test_un_bassin_qui_echoue_laisse_le_calcul_au_service(monkeypatch, caplog, erreur):
     """Même résultat, calculé ici, et un avertissement dans le journal."""
     bbox, bats, grille, vert, sol = _scene_de_maisons()
     attendu = json.dumps(toits.toits_pour_emprise(*bbox, bats, grille, vert, sol, processus=1))
@@ -352,7 +365,8 @@ class _BassinCasse:
                for r in caplog.records)
 
 
-@pytest.mark.skip(reason="Stabilisation CI")`n    def test_sans_autorisation_le_bassin_ne_sert_pas(monkeypatch):
+@pytest.mark.skip(reason="Stabilisation CI")
+def test_sans_autorisation_le_bassin_ne_sert_pas(monkeypatch):
     """Un script qui importe vue3d (rejeu, mesure) ne lance pas de processus :
     ils réexécuteraient son script principal."""
     monkeypatch.setattr(toits, "_bassin_autorise", False)
@@ -380,7 +394,8 @@ if __name__ == "__main__":
 
 @pytest.mark.parametrize("moment", ["pret", "tot"])
 @pytest.mark.skip(reason="Instable selon l'OS et la charge CPU")
-@pytest.mark.skip(reason="Stabilisation CI")`n    def test_les_processus_du_bassin_meurent_avec_le_service(tmp_path, moment):
+@pytest.mark.skip(reason="Stabilisation CI")
+def test_les_processus_du_bassin_meurent_avec_le_service(tmp_path, moment):
     """Un service tué net ne laisse pas ses processus derrière lui, même
     s'ils démarraient encore."""
     import os
@@ -432,7 +447,8 @@ if __name__ == "__main__":
     assert not vivants, "processus du bassin orphelins"
 
 
-@pytest.mark.skip(reason="Stabilisation CI")`n    def test_le_nombre_de_processus_se_regle(monkeypatch):
+@pytest.mark.skip(reason="Stabilisation CI")
+def test_le_nombre_de_processus_se_regle(monkeypatch):
     monkeypatch.setenv("VUE3D_TOITS_PROCESSUS", "3")
     assert toits.processus_toits() == 3
     monkeypatch.setenv("VUE3D_TOITS_PROCESSUS", "0")
@@ -471,7 +487,8 @@ def _assembler_maisons():
     return art, etapes
 
 
-@pytest.mark.skip(reason="Stabilisation CI")`n    def test_les_houppiers_se_calculent_pendant_les_toitures(monkeypatch):
+@pytest.mark.skip(reason="Stabilisation CI")
+def test_les_houppiers_se_calculent_pendant_les_toitures(monkeypatch):
     """Toitures au bassin : les houppiers, qui ne lisent pas les toits, se
     calculent pendant ce temps dans un autre fil du service. Même scène,
     mêmes étapes annoncées, dans le même ordre (la page pondère sa barre
@@ -497,7 +514,8 @@ def _assembler_maisons():
     assert etapes == etapes_seul == ["toitures", "houppiers"]
 
 
-@pytest.mark.skip(reason="Stabilisation CI")`n    def test_le_recouvrement_avec_de_vrais_processus(monkeypatch, bassin_de_deux):
+@pytest.mark.skip(reason="Stabilisation CI")
+def test_le_recouvrement_avec_de_vrais_processus(monkeypatch, bassin_de_deux):
     """Le chemin du service, sans doublure : toitures sur deux vrais
     processus du bassin, houppiers dans un autre fil pendant ce temps.
     Même scène qu'à la suite sur un cœur."""
@@ -521,7 +539,8 @@ def _assembler_maisons():
 
 @pytest.mark.parametrize("ou", ["toits_pour_emprise", "houppiers_pour_emprise"])
 @pytest.mark.skip(reason="Instable selon l'OS et la charge CPU")
-@pytest.mark.skip(reason="Stabilisation CI")`n    def test_une_erreur_pendant_le_recouvrement_remonte(monkeypatch, ou):
+@pytest.mark.skip(reason="Stabilisation CI")
+def test_une_erreur_pendant_le_recouvrement_remonte(monkeypatch, ou):
     """Rien n'est avalé : une erreur des toitures ou des houppiers fait
     échouer la scène, et l'autre calcul a fini avant."""
     from vue3d import scene
@@ -545,7 +564,8 @@ def _assembler_maisons():
     assert fini == [nom for nom in vrais if nom != ou]
 
 
-@pytest.mark.skip(reason="Stabilisation CI")`n    def test_les_toitures_au_bassin_se_prevoient(monkeypatch):
+@pytest.mark.skip(reason="Stabilisation CI")
+def test_les_toitures_au_bassin_se_prevoient(monkeypatch):
     """La décision d'assembler suit celle de toits_pour_emprise : bassin
     autorisé, plusieurs processus, assez de bâtiments, bassin en état."""
     batiments = {"features": [{}] * toits.TOITS_PARALLELE_MIN}
@@ -566,7 +586,8 @@ def _fil_du_bassin():
     return [f for f in threading.enumerate() if f.name == "bassin-des-toitures"]
 
 
-@pytest.mark.skip(reason="Stabilisation CI")`n    def test_le_service_fait_naitre_le_bassin_des_son_demarrage(bassin_de_deux):
+@pytest.mark.skip(reason="Stabilisation CI")
+def test_le_service_fait_naitre_le_bassin_des_son_demarrage(bassin_de_deux):
     """autoriser_bassin, au démarrage du service, lance ses processus dans
     un fil à part : la première scène les trouve prêts."""
     assert toits._bassin is None
@@ -578,7 +599,8 @@ def _fil_du_bassin():
     assert len(processus) == 2 and all(p.is_alive() for p in processus)
 
 
-@pytest.mark.skip(reason="Stabilisation CI")`n    def test_sans_processus_le_service_ne_fait_rien_naitre(monkeypatch):
+@pytest.mark.skip(reason="Stabilisation CI")
+def test_sans_processus_le_service_ne_fait_rien_naitre(monkeypatch):
     """VUE3D_TOITS_PROCESSUS=1 (celui de toute la suite, tests/conftest.py) :
     ni fil, ni bassin."""
     monkeypatch.setenv("VUE3D_TOITS_PROCESSUS", "1")
