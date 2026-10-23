@@ -26,7 +26,8 @@ messages de commit et dans les commentaires des modules.
   s'efface : à l'Étoile, six pastilles au lieu d'un ruban de plusieurs
   centaines. Lues au serveur par bloc de 4 km (`/api/bornes-bloc`, 0,5 s à
   la campagne, 8 à 35 s au cœur de Paris la première fois), gardées une
-  semaine ; `bornes=0` les retire.
+  semaine ; le choix du bouton est retenu d'une visite à l'autre, `bornes=0`
+  ou `bornes=1` l'emporte.
 - **Signaler un défaut de la vue en voiture** (23 octobre 2026) : un bouton ⚠
   au-dessus du compteur, comme celui de Coyote. Un appui envoie au serveur
   une capture de l'écran, la position et l'état du sol (tuiles sous la

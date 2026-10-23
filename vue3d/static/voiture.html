@@ -3088,7 +3088,11 @@ const BORNE_MAT_M = 8;
 // En part de la hauteur de la vue, à 55° : 32 px sur l'écran de la Tesla
 // (601 px de haut), assez pour le doigt, que la page cherche à 40 px autour.
 const BORNE_PASTILLE = 0.055, BORNE_TOUCHER_PX = 40;
-let bornesActives = PARAMS.get('bornes') !== '0';
+// Le choix du bouton est retenu d'une visite à l'autre ; `bornes=0` ou `bornes=1` l'emporte.
+const BORNES_CLE = 'vue3d-voiture-bornes';
+let bornesActives = PARAMS.has('bornes') ? PARAMS.get('bornes') !== '0' : (() => {
+    try { return localStorage.getItem(BORNES_CLE) !== '0'; } catch (e) { return true; }
+})();
 const blocsBornes = new Map();          // "bi/bj" → { bi, bj, etat, reessai, donnees, groupe, mats, stations }
 const groupeBornes = new THREE.Group();
 groupeBornes.visible = bornesActives;
@@ -3324,6 +3328,7 @@ function majBoutonBornes() {
 }
 boutonBornes.addEventListener('click', () => {
     bornesActives = !bornesActives;
+    try { localStorage.setItem(BORNES_CLE, bornesActives ? '1' : '0'); } catch (e) { /* stockage refusé : le choix vit le temps de la page */ }
     groupeBornes.visible = bornesActives;
     dernierBornes = -Infinity;
     if (!bornesActives) fermerBorne();
