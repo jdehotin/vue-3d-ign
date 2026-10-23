@@ -10338,7 +10338,11 @@ const PETITS_MOTS = new Set(['de', 'du', 'des', 'la', 'le', 'les', 'et', 'en', '
 function nomDeVoie(p) {
     const brut = String(p.nom_voie_ban_gauche || p.nom_voie_ban_droite || '').trim();
     if (!brut) return '';
-    return brut.split(' ').map((mot, i) => {
+    // Coupé sur toute suite de blancs : à Aix-en-Provence, la BAN écrit
+    // chaque voie « Rue  Paul Bert », deux espaces ; le mot vide entre elles
+    // faisait lever mot[0].toUpperCase(), et grapheJeu avec lui, et aucun
+    // des deux jeux ne démarrait.
+    return brut.split(/\s+/).map((mot, i) => {
         if (i > 0 && PETITS_MOTS.has(mot)) return mot;
         // « d'aix », « l'abbaye » : l'article reste en minuscule.
         const m = /^([dl]')(.+)$/.exec(mot);

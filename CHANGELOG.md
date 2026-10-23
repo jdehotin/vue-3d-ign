@@ -444,6 +444,12 @@ messages de commit et dans les commentaires des modules.
 
 ### Corrigé
 
+- **La traque et le cortège qui ne démarraient pas à Aix-en-Provence**
+  (23 octobre 2026) : la BAN y écrit chaque voie avec deux espaces
+  (« Rue  Paul Bert », « Cours  Mirabeau »), et le nom de la voie, coupé sur
+  une seule, laissait un mot vide qui arrêtait le graphe des rues sur une
+  erreur. Les deux boutons ne faisaient rien. Le nom est désormais coupé sur
+  toute suite de blancs.
 - **Le sol flou sous la voiture, d'Aix à Rousset** (23 octobre 2026), trouvé
   par les signalements d'une Tesla : une tuile d'altitude du RGE ALTI coupée
   par le réseau en plein corps entrait au cache du navigateur, puis en était
