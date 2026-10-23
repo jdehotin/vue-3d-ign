@@ -7,6 +7,7 @@ import pytest
 
 from vue3d import app as module_app
 from vue3d import signalements as module_signalements
+from vue3d.routes import voiture as routes_voiture
 from vue3d.signalements import SignalementInvalide, Signalements, SignalementsComplets
 
 JPEG = b"\xff\xd8\xff\xe0" + b"\x00" * 64
@@ -59,7 +60,7 @@ def test_un_corps_qui_n_est_pas_un_signalement_400(client, tmp_path, donnees):
 
 
 def test_un_signalement_trop_gros_413(client, tmp_path, monkeypatch):
-    monkeypatch.setattr(module_app, "SIGNALEMENT_OCTETS_MAX", 1000)
+    monkeypatch.setattr(routes_voiture, "SIGNALEMENT_OCTETS_MAX", 1000)
     r = client.post("/api/signalement", data=corps(capture=JPEG * 50), content_type="application/json")
     assert r.status_code == 413
     assert not (tmp_path / "signalements").exists()
