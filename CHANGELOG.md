@@ -58,7 +58,10 @@ messages de commit et dans les commentaires des modules.
   dessinent pas d'emprise : la page affiche alors « L'emprise du projet n'est
   pas définie dans Trimble Connect : à définir dans les paramètres du projet
   avant de synchroniser la scène. » La fiche n'est lue qu'une fois par requête,
-  et les dix routes de la page en héritent.
+  et les dix routes de la page en héritent. Le bouton « Emprise » du panneau
+  demande cette lecture au serveur et annonce le centre et les dimensions, ou
+  la raison de l'absence ; le serveur n'ouvre son CORS qu'à l'origine de
+  l'extension (`VUE3D_ORIGINES_AUTORISEES` pour le développement).
 - **Les houppiers se coupent par l'environnement.** `VUE3D_HOUPIERS=non` saute
   le calcul des arbres et des constructions ; sans cette variable, ils restent.
 

@@ -103,6 +103,12 @@ ICI = os.path.dirname(os.path.abspath(__file__))
 ORIGINES_CONNECT = ("https://app21.connect.trimble.com",     # Europe
                     "https://app.connect.trimble.com",       # Amérique du Nord
                     "https://app31.connect.trimble.com")     # Asie
+# L'extension (Netlify) demande l'emprise au serveur, depuis une autre origine
+# que lui : `VUE3D_ORIGINES_AUTORISEES` ajoute des origines de développement.
+ORIGINES_EXTENSION = tuple(
+    origine.strip() for origine in os.environ.get(
+        "VUE3D_ORIGINES_AUTORISEES",
+        "https://vue3d-trimble-connect.netlify.app").split(",") if origine.strip())
 TAILLE_MAX_DEPOT = 64 * 1024 * 1024
 EXTENSIONS_DEPOT = (".ifc", ".gml")
 
@@ -619,6 +625,22 @@ def creer_app(dossier_cache=None, construire=construire_scene, lire_monuments=fe
             reponse.headers["Content-Encoding"] = "gzip"
         reponse.set_etag(etag)
         reponse.headers["Cache-Control"] = "no-cache"
+        return reponse
+
+    @app.after_request
+    def ouvrir_au_panneau(reponse):
+        """Laisse l'extension lire l'emprise, et elle seule.
+
+        Une requête du panneau porte `Authorization` depuis l'origine Netlify :
+        sans ces en-têtes, le navigateur la refuserait avant même l'envoi. Le
+        reste du serveur garde son silence CORS.
+        """
+        origine = request.headers.get("Origin", "")
+        if origine in ORIGINES_EXTENSION and request.path == "/api/connect/emprise":
+            reponse.headers["Access-Control-Allow-Origin"] = origine
+            reponse.headers["Access-Control-Allow-Headers"] = "Authorization"
+            reponse.headers["Access-Control-Allow-Methods"] = "GET, OPTIONS"
+            reponse.headers["Vary"] = "Origin"
         return reponse
 
     @app.get("/")

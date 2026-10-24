@@ -765,3 +765,29 @@ def test_sans_contour_lemprise_demande_a_etre_definie(adresse):
     assert refus.value.code == 404
     assert "L'emprise du projet n'est pas définie dans Trimble Connect" in str(refus.value)
     assert "paramètres du projet" in str(refus.value)
+
+
+# --- Le panneau de l'extension lit l'emprise par le serveur -------------------
+
+def test_lemprise_souvre_au_panneau_de_lextension(client):
+    origine = "https://vue3d-trimble-connect.netlify.app"
+    # Sans jeton, le refus reste lisible par le panneau : il doit le lire.
+    r = client.get("/api/connect/emprise?projet=vK4pJn9BUh4",
+                   headers={"Origin": origine})
+    assert r.status_code == 401
+    assert r.headers["Access-Control-Allow-Origin"] == origine
+    assert "Authorization" in r.headers["Access-Control-Allow-Headers"]
+    # Le contrôle préalable du navigateur, pour l'en-tête Authorization.
+    avant = client.options("/api/connect/emprise?projet=vK4pJn9BUh4", headers={
+        "Origin": origine,
+        "Access-Control-Request-Method": "GET",
+        "Access-Control-Request-Headers": "authorization",
+    })
+    assert avant.status_code in (200, 204)
+    assert avant.headers["Access-Control-Allow-Origin"] == origine
+
+
+def test_lemprise_ne_souvre_pas_a_une_autre_origine(client):
+    r = client.get("/api/connect/emprise?projet=vK4pJn9BUh4",
+                   headers={"Origin": "https://exemple.test"})
+    assert "Access-Control-Allow-Origin" not in r.headers
