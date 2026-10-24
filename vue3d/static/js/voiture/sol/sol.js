@@ -241,10 +241,15 @@ function construireTuile(t, niveau) {
 
 // Une tuile sans altitudes ne se construit pas, et ses descendantes ne la
 // remplacent qu'au complet : sa mère reste affichée dès qu'une seule manque.
-// Après deux échecs de ses altitudes, elle se pose sur le niveau du RGE ALTI
-// de sa mère, déjà lu : un relief un peu plus lisse, plutôt qu'une tuile de
-// zoom 12 (10 km) sous la voiture tant que la sienne ne vient pas.
-const ECHECS_ALTI_AVANT_REPLI = 2;
+// Après un échec de ses altitudes (trois essais : sol/altitudes), elle se pose
+// tout de suite sur le niveau du RGE ALTI de sa mère, déjà lu : un relief un
+// peu plus lisse, plutôt qu'une tuile de zoom 12 (10 km) sous la voiture
+// tant que la sienne ne vient pas. Au deuxième échec, 4 s plus tard, comme
+// avant, le sol restait flou : l'IGN refusant toujours (400) la tuile
+// 8/66/263 à Aix, réseau bridé à 4 Mbit/s et 100 ms, le zoom 16 venait sous
+// la voiture en 21,7 s (19 requêtes de la tuile) ; ainsi en 12,1 s (7),
+// autant que sans refus (13,1 et 13,6 s).
+const ECHECS_ALTI_AVANT_REPLI = 1;
 const niveauSol = t => Math.min(Math.max(t.z - 5 - ((t.echecsAlti || 0) >= ECHECS_ALTI_AVANT_REPLI ? 1 : 0),
                                          ALTI_NIVEAU_MIN), ALTI_NIVEAU_MAX);
 
@@ -253,13 +258,18 @@ async function chargerTuileSol(t) {
     solEnVol++;
     const gen = generationFond;
     const niveau = niveauSol(t);
+    let repli = false;
     try {
         const marge = (t.e - t.o) / SOL_MAILLES * 1.5;
         const [alti, image] = await Promise.allSettled([
             t.mesh ? null : preparerAltitudes(t.o - marge, t.s - marge, t.e + marge, t.n + marge, niveau),
             t.fondGen === gen ? t.image : imageSol(t, gen)]);
         if (image.status === 'fulfilled' && gen === generationFond) { t.image = image.value; t.fondGen = gen; }
-        if (alti.status === 'rejected') { t.echecsAlti = (t.echecsAlti || 0) + 1; throw alti.reason; }
+        if (alti.status === 'rejected') {
+            t.echecsAlti = (t.echecsAlti || 0) + 1;
+            repli = t.echecsAlti === ECHECS_ALTI_AVANT_REPLI;
+            throw alti.reason;
+        }
         if (image.status === 'rejected') throw image.reason;
         if (!tuilesSol.has(t.cle)) return;
         if (!t.mesh) construireTuile(t, niveau);
@@ -269,10 +279,10 @@ async function chargerTuileSol(t) {
     } catch (e) {
         // Altitudes ou image en panne : redemandée de plus en plus tard, de
         // 4 à 20 s, pas plus : le réseau revenu, le sol doit suivre ; d'ici
-        // là, sa mère la couvre.
+        // là, sa mère la couvre. Sur le relief de sa mère, tout de suite.
         t.echecs = (t.echecs || 0) + 1;
         t.erreur = String(e?.message || e).slice(0, 160);
-        t.reessai = performance.now() + Math.min(4000 * 2 ** (t.echecs - 1), 20000);
+        t.reessai = repli ? 0 : performance.now() + Math.min(4000 * 2 ** (t.echecs - 1), 20000);
     } finally {
         t.enCours = false;
         solEnVol--;

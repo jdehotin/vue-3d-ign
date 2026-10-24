@@ -496,6 +496,16 @@ messages de commit et dans les commentaires des modules.
 
 ### Corrigé
 
+- **Le sol flou sous la voiture, quand l'IGN refuse une tuile d'altitude**
+  (24 octobre 2026), signalé deux fois depuis une Tesla : deux tuiles du RGE
+  ALTI refusées en 400, qui répondaient 200 une heure plus tard, laissaient
+  le sol au zoom 12 (un aplat beige sous la voiture) sur une cinquantaine de
+  kilomètres. La page rejoue désormais tout refus d'une tuile d'altitude,
+  trois fois à 1,5 s d'écart, comme le serveur le fait déjà ; au premier
+  échec, le sol se pose aussitôt sur le relief de la tuile mère, un peu plus
+  lisse, au lieu d'attendre un second échec. Refus simulé à Aix sur un
+  réseau bridé : le sol fin vient en 12 s au lieu de 22, autant que sans
+  refus.
 - **La traque et le cortège qui ne démarraient pas à Aix-en-Provence**
   (23 octobre 2026) : la BAN y écrit chaque voie avec deux espaces
   (« Rue  Paul Bert », « Cours  Mirabeau »), et le nom de la voie, coupé sur

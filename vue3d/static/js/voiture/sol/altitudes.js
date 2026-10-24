@@ -14,12 +14,16 @@ import { lireEnCache } from './cache.js';
 export const NIVEAU_PROCHE = 13;
 export const ALTI_CACHE = 160;                 // 256 Kio chacune
 // Hors de la pyramide (la mer au large, l'étranger), l'IGN répond 404 ; mais
-// il en rend aussi pour une tuile qui existe : 7/32/132, de Digne au Verdon,
-// en 404 dans une Tesla le 23 octobre 2026, en 200 trois fois de suite
-// redemandée le même jour. Prise pour la mer, tout ce pan du relief restait à
-// 0 m pour la vie de la page. Trois réponses pour une absence, à 1,5 s
-// d'écart, comme le serveur pour une photo (vue3d/tuiles.py).
-const ALTI_ESSAIS_404 = 3, ALTI_PAUSE_404_MS = 1500;
+// il refuse aussi de loin en loin une tuile qui existe : 7/32/132, de Digne au
+// Verdon, en 404 dans une Tesla le 23 octobre 2026, en 200 trois fois de
+// suite redemandée le même jour (prise pour la mer, tout ce pan du relief
+// restait à 0 m pour la vie de la page) ; 8/66/263 et 8/66/264 en 400
+// text/xml dans la même Tesla le 24, en 200 cinq fois de suite rejouées une
+// heure plus tard avec ses en-têtes, quand le serveur relisait au même moment
+// une photo qu'on lui avait refusée. Le sol retombait au zoom 12 sur 50 km.
+// Comme le serveur (geopf.get_avec_reprise, vue3d/tuiles.py) : trois essais à
+// 1,5 s d'écart, tout refus compris, et trois 404 pour une absence.
+const ALTI_ESSAIS = 3, ALTI_PAUSE_MS = 1500;
 export const altis = new Map();                // "niveau/ligne/colonne" → { promesse, valeurs }
 export const erreursAlti = new Map();          // "niveau/ligne/colonne" → la dernière erreur, pour les signalements
 function tuileAlti(niveau, ligne, colonne) {
@@ -29,18 +33,26 @@ function tuileAlti(niveau, ligne, colonne) {
     t = { valeurs: null };
     t.promesse = (async () => {
         const url = ALTI_URL(niveau, ligne, colonne);
-        let reponse = await lireEnCache(url, DELAI_ALTI_MS);
-        for (let essai = 1; reponse.status === 404 && essai < ALTI_ESSAIS_404; essai++) {
-            await new Promise(r => setTimeout(r, ALTI_PAUSE_404_MS));
-            reponse = await lireEnCache(url, DELAI_ALTI_MS);
+        let refus = null;                      // null : un 404
+        for (let essai = 1; ; essai++) {
+            const reponse = await lireEnCache(url, DELAI_ALTI_MS);
+            const type = reponse.headers.get('content-type') || '';
+            if (reponse.ok && type.startsWith('image/x-bil')) {
+                const octets = await reponse.arrayBuffer();
+                if (octets.byteLength === 256 * 256 * 4) {
+                    const v = new Float32Array(octets);
+                    for (let i = 0; i < v.length; i++) if (v[i] < -100) v[i] = NaN;
+                    return v;
+                }
+                refus = 'RGE ALTI tronqué';
+            } else {
+                refus = reponse.status === 404 ? null : `RGE ALTI : ${reponse.status} ${type}`;
+            }
+            if (essai >= ALTI_ESSAIS) break;
+            await new Promise(r => setTimeout(r, ALTI_PAUSE_MS));
         }
-        if (reponse.status === 404) { t.absente = true; return new Float32Array(256 * 256).fill(NaN); }
-        const type = reponse.headers.get('content-type') || '';
-        if (!reponse.ok || !type.startsWith('image/x-bil')) throw new Error(`RGE ALTI : ${reponse.status} ${type}`);
-        const v = new Float32Array(await reponse.arrayBuffer());
-        if (v.length !== 256 * 256) throw new Error('RGE ALTI tronqué');
-        for (let i = 0; i < v.length; i++) if (v[i] < -100) v[i] = NaN;
-        return v;
+        if (refus === null) { t.absente = true; return new Float32Array(256 * 256).fill(NaN); }
+        throw new Error(refus);
     })().then(v => { t.valeurs = v; erreursAlti.delete(cle); return v; },
               e => {
                   if (altis.get(cle) === t) altis.delete(cle);
