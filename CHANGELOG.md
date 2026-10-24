@@ -496,6 +496,17 @@ messages de commit et dans les commentaires des modules.
 
 ### Corrigé
 
+- **Les ponts effondrés de la vue en voiture** (24 octobre 2026), signalé
+  depuis une Tesla : la BD TOPO pose parfois l'intérieur d'un tablier sur la
+  route qu'il franchit. Le pont de la route de Simiane au-dessus de la D6 est
+  à 231 et 232 m à ses deux bouts, mais à 228 m au droit de l'autoroute, soit
+  1,5 m au-dessus de sa chaussée. Un tablier ne descend plus sous la droite
+  qui joint ses deux bouts ; 22 des 415 tronçons de pont du cache de prod
+  creusaient de plus d'un mètre. Et, à l'approche d'un pont, la route ne
+  plonge plus dans le creux que le relief lisse au pied de la culée (plus de
+  3 m pour un bout de route sur six qui touchent un pont) : sur ses 30
+  derniers mètres, elle garde son altitude BD TOPO quand elle passe le
+  relief. La voiture et la route prévue suivent.
 - **Le sol flou sous la voiture, quand l'IGN refuse une tuile d'altitude**
   (24 octobre 2026), signalé deux fois depuis une Tesla : deux tuiles du RGE
   ALTI refusées en 400, qui répondaient 200 une heure plus tard, laissaient

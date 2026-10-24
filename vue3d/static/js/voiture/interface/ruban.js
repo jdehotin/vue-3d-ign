@@ -6,7 +6,7 @@ import { ORIGINE } from '../socle/monde.js';
 import { scene, courber } from '../socle/rendu.js';
 import { voiture } from '../socle/etat.js';
 import { altitudeL93 } from '../sol/altitudes.js';
-import { pointArete, pointDuChemin, areteDuChemin } from '../route/graphe.js';
+import { pointArete, pointDuChemin, areteDuChemin, altitudeApproche } from '../route/graphe.js';
 import { altitudeSousTerre } from '../route/tunnels.js';
 import { echelleMaquette, parDessus } from './maquette.js';
 
@@ -66,6 +66,7 @@ export function majRuban(maintenant) {
         let alt = altitudeL93(p.x, p.y), sousTerre = false;
         if (e.a.sol > 0) { const z = pointArete(e.a, e.s).z; if (Number.isFinite(z)) alt = Math.max(alt || -1e9, z); }
         else if (e.a.sol < 0) { const z = altitudeSousTerre(e.a, e.s); if (Number.isFinite(z)) { alt = z; sousTerre = true; } }
+        else { const z = altitudeApproche(e.a, e.s); if (Number.isFinite(z)) alt = Math.max(alt || -1e9, z); }
         if (!Number.isFinite(alt)) alt = voiture.alt;
         // Vers la droite de la route, en Lambert-93.
         const rx = Math.cos(p.cap * RAD), ry = -Math.sin(p.cap * RAD);

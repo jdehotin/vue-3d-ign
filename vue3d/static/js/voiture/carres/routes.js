@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { scene, courber } from '../socle/rendu.js';
 import { altitudeL93 } from '../sol/altitudes.js';
 import { CARRE_M } from './grille.js';
-import { noeuds, capDepuis } from '../route/graphe.js';
+import { noeuds, capDepuis, releverTablier, APPROCHE_M, touchePont } from '../route/graphe.js';
 import { estEntree, altitudeAuNoeud } from '../route/tunnels.js';
 import { fond } from '../sol/sol.js';
 
@@ -197,12 +197,41 @@ export function construireRoutes(c, cx, cy) {
             }
         }
     };
-    /** Les morceaux d'une ligne du carré (décimètres depuis son origine) dans son emprise. */
-    const morceaux = ligne => {
-        const n = ligne.length / 3, xs = [], ys = [], zs = [];
+    /**
+     * Les morceaux d'une ligne du carré (décimètres depuis son origine) dans
+     * son emprise. Un tablier, relevé ; une route au sol ne garde son altitude
+     * qu'à l'approche d'un pont (route/graphe, APPROCHE_M), −∞ ailleurs.
+     */
+    const morceaux = (ligne, tablier = false) => {
+        const n = ligne.length / 3, xs = [], ys = [], zs = [], cum = [];
         for (let k = 0; k < n; k++) {
             xs.push(ox + ligne[3 * k] / 10); ys.push(oy + ligne[3 * k + 1] / 10);
             zs.push(ligne[3 * k + 2] == null ? NaN : ligne[3 * k + 2] / 10);
+            cum.push(k ? cum[k - 1] + Math.hypot(xs[k] - xs[k - 1], ys[k] - ys[k - 1]) : 0);
+        }
+        if (tablier) releverTablier(zs, cum);
+        else {
+            const cle = k => `${ox * 10 + ligne[3 * k]},${oy * 10 + ligne[3 * k + 1]}`;
+            const debut = touchePont(noeuds.get(cle(0))), fin = touchePont(noeuds.get(cle(n - 1)));
+            const L = cum[n - 1];
+            // Un sommet au bout de l'approche : entre deux sommets éloignés,
+            // elle ne vaudrait qu'au bout du tablier.
+            const inserer = d => {
+                let k = 1;
+                while (k < cum.length && cum[k] < d) k++;
+                if (k >= cum.length || cum[k] - d < 0.01 || d - cum[k - 1] < 0.01) return;
+                const t = (d - cum[k - 1]) / (cum[k] - cum[k - 1]);
+                xs.splice(k, 0, xs[k - 1] + (xs[k] - xs[k - 1]) * t);
+                ys.splice(k, 0, ys[k - 1] + (ys[k] - ys[k - 1]) * t);
+                zs.splice(k, 0, zs[k - 1] + (zs[k] - zs[k - 1]) * t);
+                cum.splice(k, 0, d);
+            };
+            if (debut) inserer(APPROCHE_M);
+            if (fin) inserer(L - APPROCHE_M);
+            for (let k = 0; k < cum.length; k++) {
+                const pres = (debut && cum[k] <= APPROCHE_M + 0.01) || (fin && L - cum[k] <= APPROCHE_M + 0.01);
+                if (!pres || !Number.isFinite(zs[k])) zs[k] = -1e4;
+            }
         }
         return decouper(xs, ys, zs, x0, y0, x0 + CARRE_M, y0 + CARRE_M);
     };
@@ -210,14 +239,14 @@ export function construireRoutes(c, cx, cy) {
         if (r.sol < 0) { if (!r.fictif) tetesDeTunnel(r); continue; }
         if (r.fictif || r.nature === 'Bac ou liaison maritime') continue;
         const largeur = r.largeur > 0 ? r.largeur : LARGEUR_PAR_NATURE[r.nature] || 3;
-        for (const morceau of morceaux(r.ligne)) {
+        for (const morceau of morceaux(r.ligne, r.sol > 0)) {
             if (r.sol === 0) {
                 const coul = NATURES_TERRE.has(r.nature) ? COULEUR_CHEMIN : COULEUR_ROUTE;
                 const pts = echantillonner(morceau, ROUTE_PAS_M);
                 let prec = null;
                 for (const p of pts) {
                     const a = altitudeL93(p.x, p.y);
-                    const alt = (Number.isFinite(a) ? a : 0) + ROUTE_LEVE_M;
+                    const alt = Math.max(Number.isFinite(a) ? a : 0, p.z) + ROUTE_LEVE_M;
                     const gx = -p.uy * largeur / 2, gy = p.ux * largeur / 2;
                     const g = ici(p.x + gx, p.y + gy, alt), dr = ici(p.x - gx, p.y - gy, alt);
                     if (prec) quad(sol, prec[1], dr, g, prec[0], [0, 1, 0], coul);
@@ -232,7 +261,7 @@ export function construireRoutes(c, cx, cy) {
     // aérien, passerelles.
     for (const r of d.ponts || []) {
         const w = r.largeur > 0 ? r.largeur : LARGEUR_PASSERELLE[r.nature] || 2.5;
-        for (const morceau of morceaux(r.ligne)) {
+        for (const morceau of morceaux(r.ligne, true)) {
             tablier(morceau, w, r.ferre ? COULEUR_BALLAST : COULEUR_PASSERELLE, r.ferre ? PARAPET_M : GARDE_CORPS_M, r.ferre);
         }
     }

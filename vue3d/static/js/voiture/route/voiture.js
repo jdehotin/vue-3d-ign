@@ -9,7 +9,7 @@ import {
 import { majLienQuitter } from '../interface/ecran.js';
 import { altitudeL93 } from '../sol/altitudes.js';
 import {
-    pointArete, ecartCap, cheminDepuis, pointDuChemin, areteDuChemin, caler,
+    pointArete, ecartCap, cheminDepuis, pointDuChemin, areteDuChemin, caler, altitudeApproche,
 } from './graphe.js';
 import { altitudeSousTerre, sortieDuTunnel } from './tunnels.js';
 import { majBoutonVue } from '../interface/camera.js';
@@ -146,9 +146,9 @@ export function majVoiture(dt, maintenant) {
     if (an.v > 0.8) v.cap += ecartCap(ccap, v.cap) * (1 - Math.exp(-dt / LISSAGE_CAP_S));
     // Figée faute de relevé, la voiture affiche 0, pas sa dernière vitesse.
     v.v += ((depuis > limite ? 0 : an.v || 0) - v.v) * (1 - Math.exp(-dt / 0.8));
-    // L'altitude : celle du relief, sauf sur un pont, où la route BD TOPO
-    // porte la sienne, et dans un tunnel, sous le relief (route/tunnels) ;
-    // lissée, pour ne pas sauter d'une tuile à l'autre.
+    // L'altitude : celle du relief, sauf sur un pont et à son approche, où la
+    // route BD TOPO porte la sienne (route/graphe), et dans un tunnel, sous le
+    // relief (route/tunnels) ; lissée, pour ne pas sauter d'une tuile à l'autre.
     let alt = altitudeL93(v.x, v.y);
     if (p && an.a) {
         const e = areteDuChemin(v.chemin, v.dChemin);
@@ -158,6 +158,9 @@ export function majVoiture(dt, maintenant) {
         } else if (e.a.sol < 0) {
             const z = altitudeSousTerre(e.a, e.s);
             if (Number.isFinite(z)) alt = z;
+        } else {
+            const z = altitudeApproche(e.a, e.s);
+            if (Number.isFinite(z)) alt = Number.isFinite(alt) ? Math.max(alt, z) : z;
         }
         v.arete = e.a;
         v.sensArete = e.sens;

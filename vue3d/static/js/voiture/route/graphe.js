@@ -27,6 +27,41 @@ function cellules(a, k, faire) {
     }
 }
 
+// Un tablier ne s'affaisse pas sous la droite qui joint ses deux bouts ; la
+// BD TOPO en pose parfois l'intérieur sur la route qu'il franchit. Route de
+// Simiane, au-dessus de la D6 : 231,9 et 231,0 m aux bouts, 227,9 au droit de
+// l'autoroute, à 1,5 m de sa chaussée — « un tablier sacrément effondré sur
+// la route », signalé depuis la Tesla le 24 octobre 2026. Sur les 415
+// tronçons de pont du cache de prod, 22 creusent de plus d'un mètre sous
+// cette droite, 10 de plus de 3 m ; le viaduc de Millau, de 0,4 à 0,8 m.
+/** Relève en place les altitudes `z` d'un tablier (abscisses `cum`) au-dessus de la droite de ses bouts ; un sommet sans altitude la prend. */
+export function releverTablier(z, cum) {
+    const n = z.length, L = cum[n - 1];
+    if (n < 3 || !(L > 0) || !Number.isFinite(z[0]) || !Number.isFinite(z[n - 1])) return z;
+    for (let k = 1; k < n - 1; k++) {
+        const corde = z[0] + (z[n - 1] - z[0]) * cum[k] / L;
+        if (!(z[k] >= corde)) z[k] = corde;
+    }
+    return z;
+}
+
+// À un bout de pont, le RGE ALTI lisse la culée vers le vide qu'elle borde :
+// la route au sol qui y arrive plongeait avant de remonter sur le tablier,
+// de 5,3 m au bout du pont de la route de Simiane. Sur 450 sommets de routes
+// au sol qui touchent un pont (cache de prod, le 24 octobre 2026), l'altitude
+// BD TOPO passe le relief de 0,9 m en médiane, et de plus de 3 m pour 18 %
+// d'entre eux, quand ailleurs elle s'y tient à ±2 m (5e et 95e centiles de
+// 1 500 sommets pris au hasard, médiane −0,03 m). Sur APPROCHE_M depuis un
+// bout de pont, une route au sol est posée au plus haut des deux.
+export const APPROCHE_M = 30;
+export const touchePont = n => !!n && n.aretes.some(b => b.sol > 0);
+/** L'altitude BD TOPO de la route au sol `a` à l'abscisse `s`, à moins de APPROCHE_M d'un bout de pont ; NaN ailleurs. */
+export function altitudeApproche(a, s) {
+    if (a.sol !== 0) return NaN;
+    if (!(s <= APPROCHE_M && touchePont(a.n0)) && !(a.L - s <= APPROCHE_M && touchePont(a.n1))) return NaN;
+    return pointArete(a, s).z;
+}
+
 export function integrerRoutes(c) {
     generationGraphe++;
     const [ox, oy] = c.donnees.origine;
@@ -42,6 +77,7 @@ export function integrerRoutes(c) {
             z[k] = r.ligne[3 * k + 2] == null ? NaN : r.ligne[3 * k + 2] / 10;
             if (k) cum[k] = cum[k - 1] + Math.hypot(pts[2 * k] - pts[2 * k - 2], pts[2 * k + 1] - pts[2 * k - 1]);
         }
+        if (r.sol > 0) releverTablier(z, cum);
         const cleDe = k => `${ox * 10 + r.ligne[3 * k]},${oy * 10 + r.ligne[3 * k + 1]}`;
         const a = { ...r, pts, z, cum, L: cum[n - 1], carres: new Set([c.cle]) };
         delete a.ligne;
