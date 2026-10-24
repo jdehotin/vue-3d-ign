@@ -95,6 +95,7 @@ export function majHud(maintenant) {
             : 'Calcul de l\'itinéraire…')
         : SIMU ? (SIMU_LIMITE ? 'Simulation <b>aux limitations</b>' : `Simulation à <b>${VITESSE_SIMU_KMH} km/h</b>`)
         : !v.fix ? 'Position attendue…'
+        : age > 10 && v.arete?.sol < 0 ? 'Tunnel : <b>position estimée</b>'
         : age > 10 ? `<b>Signal GPS perdu</b> depuis ${Math.round(age)} s`
         : `GPS <b>± ${Math.round(v.precision)} m</b>`;
     // Jusqu'où les bâtiments sont prêts le long de la route prévue.

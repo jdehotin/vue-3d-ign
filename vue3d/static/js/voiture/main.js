@@ -13,6 +13,7 @@ import './sol/cache.js';
 import './sol/altitudes.js';
 import './carres/grille.js';
 import './route/graphe.js';
+import './route/tunnels.js';
 import './sol/sol.js';
 import './carres/routes.js';
 import './carres/batiments.js';

@@ -1,8 +1,9 @@
 // La caméra, derrière la voiture ou au-dessus, et ses gestes.
 
+import * as THREE from 'three';
 import { RAD } from '../socle/parametres.js';
 import { ORIGINE } from '../socle/monde.js';
-import { hote, camera, ciel } from '../socle/rendu.js';
+import { hote, renderer, camera, ciel } from '../socle/rendu.js';
 import { voiture, PENTE_DEFAUT, camVue } from '../socle/etat.js';
 import { altitudeL93 } from '../sol/altitudes.js';
 import { ecartCap } from '../route/graphe.js';
@@ -19,6 +20,12 @@ const RETOUR_GESTE_S = 8;
 // à la demande de Yannick ; la route devant elle a la place.
 const POSITION_VOITURE = 0.42;
 export const RECUL = [15, 600], HAUTEUR = [60, 3000];
+const coupe = new THREE.Plane(new THREE.Vector3(0, -1, 0), 0);
+function sousTerre(oui, altitude = 0) {
+    ciel.visible = !oui;
+    coupe.constant = altitude;
+    if (oui !== renderer.clippingPlanes.length > 0) renderer.clippingPlanes = oui ? [coupe] : [];
+}
 export function majCamera(dt, maintenant) {
     const v = voiture;
     if (!v.vue && !v.attendu) return;
@@ -42,7 +49,18 @@ export function majCamera(dt, maintenant) {
         const cx = px - ux * recul * Math.cos(pente), cz = pz + uy * recul * Math.cos(pente);
         let cy = alt + recul * Math.sin(pente) + 3;
         const sol = altitudeL93(cx + ORIGINE.x, ORIGINE.y - cz);
-        if (Number.isFinite(sol)) cy = Math.max(cy, sol + 6);
+        // Au-dessus du relief, sauf derrière une voiture sous terre : tenue
+        // au-dessus, la caméra passait à Fourvière dans les toits de la
+        // colline, 60 à 85 m au-dessus de la voiture, et serait jusqu'à
+        // 2,3 km au-dessus d'elle au Mont-Blanc. Elle la suit dans le tunnel,
+        // où l'on ne voit plus que la voûte, la route et la voiture
+        // (interface/ruban), sur le noir de la roche : le ciel s'efface, et
+        // tout ce qui passe au-dessus de la caméra est coupé — vue d'en
+        // dessous, la ville de Fourvière n'était que murs, fûts et bords de
+        // tuiles pendus en l'air. Ce qui est plus bas qu'elle reste : la
+        // sortie, au bout.
+        if (Number.isFinite(sol) && !(v.arete?.sol < 0)) cy = Math.max(cy, sol + 6);
+        sousTerre(Number.isFinite(sol) && cy < sol, cy);
         camera.position.set(cx, cy, cz);
         camera.up.set(0, 1, 0);
         // La visée, d'après la place voulue de la voiture à l'écran, et non
@@ -53,9 +71,12 @@ export function majCamera(dt, maintenant) {
         camVue.cible.set(cx + ux * Math.cos(visee) * 100, cy - Math.sin(visee) * 100, cz - uy * Math.cos(visee) * 100);
     } else {
         // De dessus, la caméra vise devant la voiture d'autant : elle se
-        // tient à la même place de l'écran.
+        // tient à la même place de l'écran. Toujours au-dessus du relief :
+        // sous terre, la carte reste, et le tunnel s'y voit par transparence.
         const h = camVue.hauteur, devant = POSITION_VOITURE * h * Math.tan(camera.fov / 2 * RAD);
-        camera.position.set(px + ux * devant, alt + h, pz - uy * devant);
+        const sol = altitudeL93(x, y), haut = Number.isFinite(sol) ? Math.max(alt, sol) : alt;
+        camera.position.set(px + ux * devant, haut + h, pz - uy * devant);
+        sousTerre(false);
         camera.up.set(ux, 0, -uy);
         camVue.cible.set(px + ux * devant, alt, pz - uy * devant);
     }

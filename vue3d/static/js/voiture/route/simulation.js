@@ -188,6 +188,8 @@ export function majSimu(dt, maintenant) {
     }
     if (maintenant - simu.dernier < 1000) return;
     simu.dernier = maintenant;
+    // Sous terre, le GPS ne capte pas : la page file sur sa lancée.
+    if (simu.a.sol < 0) return;
     const p = pointArete(simu.a, simu.s, simu.sens);
     const [lon, lat] = depuisLambert93(p.x + 2.5 * gauss(), p.y + 2.5 * gauss());
     recevoirPosition({ coords: { latitude: lat, longitude: lon, accuracy: 5,

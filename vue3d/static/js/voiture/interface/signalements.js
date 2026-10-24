@@ -86,9 +86,9 @@ function defautSol(x, y, sous) {
     if (!t.mesh.material.map) return `sans photo (zoom ${t.z})`;
     // Blanche au niveau de la mer, la teinte de la mer la couvre (courberSol).
     if (t.ymax > 1.5 && t.habit?.image && blancheur(t.habit.image) > 0.9) return `photo blanche (zoom ${t.habit.z})`;
-    // Hors d'un pont, la voiture se pose sur le relief que porte la tuile.
+    // Hors d'un pont ou d'un tunnel, la voiture se pose sur le relief que porte la tuile.
     const v = voiture;
-    if (sous && Number.isFinite(v.alt) && !(v.arete?.sol > 0) && (v.alt < t.ymin - 25 || v.alt > t.ymax + 25)) {
+    if (sous && Number.isFinite(v.alt) && !v.arete?.sol && (v.alt < t.ymin - 25 || v.alt > t.ymax + 25)) {
         return `à ${Math.round(t.ymin)}-${Math.round(t.ymax)} m, la voiture à ${Math.round(v.alt)} m (zoom ${t.z})`;
     }
     return '';

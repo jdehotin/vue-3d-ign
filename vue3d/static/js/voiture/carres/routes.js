@@ -1,9 +1,11 @@
-// Les routes et les ponts des carrés.
+// Les routes, les ponts et les têtes de tunnel des carrés.
 
 import * as THREE from 'three';
 import { scene, courber } from '../socle/rendu.js';
 import { altitudeL93 } from '../sol/altitudes.js';
 import { CARRE_M } from './grille.js';
+import { noeuds, capDepuis } from '../route/graphe.js';
+import { estEntree, altitudeAuNoeud } from '../route/tunnels.js';
 import { fond } from '../sol/sol.js';
 
 // Les tronçons du carré, découpés à son bord : un viaduc à cheval sur trois
@@ -14,10 +16,17 @@ import { fond } from '../sol/sol.js';
 // noms. Un pont (position au-dessus du sol) est un tablier à l'altitude de
 // ses tronçons — celle du tablier : de 598 à 676 m sur le viaduc de Millau,
 // sa pente de 3 % —, avec ses parapets, et des piles là où le vide dépasse
-// PILE_VIDE_M. Le relief du RGE ALTI, sol nu, passe dessous. Les tunnels ne
-// sont pas dessinés.
+// PILE_VIDE_M. Le relief du RGE ALTI, sol nu, passe dessous. Un tunnel n'a
+// ici que ses têtes, un mur de béton percé d'une voûte noire à chaque entrée,
+// à l'altitude de la route (route/tunnels) ; on le voit sous terre quand la
+// route prévue y passe (interface/ruban).
 const ROUTE_LEVE_M = 0.12, ROUTE_PAS_M = 5, PONT_PAS_M = 6;
 const PONT_EPAISSEUR_M = 1.4, PARAPET_M = 0.9, PILE_ECART_M = 45, PILE_VIDE_M = 3, PILE_EPAISSEUR_M = 1.6;
+// Une tête de tunnel à vue d'œil : une voûte large de la chaussée et de
+// 1,25 m de part et d'autre, droite sur 3,5 m puis cintrée (2,5 m de flèche
+// au plus), dans un mur qui la déborde de 2 m et descend 2 m sous la route.
+const TETE_DEBORD_M = 1.25, TETE_PIEDROIT_M = 3.5, TETE_FLECHE_M = 2.5, TETE_MUR_M = 2, TETE_ENFOUIE_M = 2;
+const COULEUR_NOIR_TUNNEL = new THREE.Color(0x141618);
 const LARGEUR_PAR_NATURE = {
     'Type autoroutier': 7, 'Route à 1 chaussée': 3, 'Route à 2 chaussées': 5.5, 'Rond-point': 4, 'Bretelle': 4,
     'Route empierrée': 3, 'Chemin': 2.5,
@@ -29,6 +38,9 @@ const OPACITE_ROUTE = 0.6;
 const MAT_ROUTE = courber(new THREE.MeshLambertMaterial({ vertexColors: true, transparent: true,
     opacity: OPACITE_ROUTE, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -4 }));
 const MAT_PONT = courber(new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide }));
+// D'un seul côté, vers le dehors : vue du tunnel, la tête bouchait la sortie
+// de Fourvière de son noir, et son dos sortait de la colline.
+const MAT_TETE = courber(new THREE.MeshLambertMaterial({ vertexColors: true }));
 const COULEUR_ROUTE = new THREE.Color(0x5f636a), COULEUR_CHEMIN = new THREE.Color(0x9c8a6e);
 const COULEUR_BETON = new THREE.Color(0xc9c5bb);
 export const groupeRoutes = new THREE.Group();
@@ -82,7 +94,7 @@ export function construireRoutes(c, cx, cy) {
     const d = c.donnees;
     const [ox, oy] = d.origine;
     const x0 = c.i * CARRE_M, y0 = c.j * CARRE_M;
-    const sol = { pos: [], nor: [], col: [] }, pont = { pos: [], nor: [], col: [] };
+    const sol = { pos: [], nor: [], col: [] }, pont = { pos: [], nor: [], col: [] }, tetes = { pos: [], nor: [], col: [] };
     // Un triangle en coordonnées de la scène relatives au centre du carré,
     // tourné pour que sa normale suive `n`.
     const v1 = new THREE.Vector3(), v2 = new THREE.Vector3(), vn = new THREE.Vector3();
@@ -96,8 +108,46 @@ export function construireRoutes(c, cx, cy) {
     };
     const quad = (cible, A, B, C, D, n, coul) => { tri(cible, A, B, C, n, coul); tri(cible, A, C, D, n, coul); };
     const ici = (x, y, alt) => [x - cx, alt, cy - y];
+    // Un polygone plan (t le long de (vx, vy), h au-dessus de `alt`), troué.
+    const plaque = (contour, trous, px, py, vx, vy, alt, n, coul) => {
+        const tous = contour.concat(...trous);
+        for (const [i0, i1, i2] of THREE.ShapeUtils.triangulateShape(contour, trous)) {
+            const [A, B, C] = [tous[i0], tous[i1], tous[i2]].map(q => ici(px + vx * q.x, py + vy * q.x, alt + q.y));
+            tri(tetes, A, B, C, n, coul);
+        }
+    };
+    const entrees = new Set();
+    const tetesDeTunnel = r => {
+        const nb = r.ligne.length / 3;
+        for (const k of [0, nb - 1]) {
+            const nd = noeuds.get(`${ox * 10 + r.ligne[3 * k]},${oy * 10 + r.ligne[3 * k + 1]}`);
+            // Chaque entrée une fois, par le carré où elle se trouve.
+            if (!nd || entrees.has(nd) || !estEntree(nd)) continue;
+            if (nd.x < x0 || nd.x >= x0 + CARRE_M || nd.y < y0 || nd.y >= y0 + CARRE_M) continue;
+            const a = nd.aretes.find(b => b.sol < 0), z = altitudeAuNoeud(nd);
+            if (!a || !Number.isFinite(z)) continue;
+            entrees.add(nd);
+            const cap = capDepuis(a, nd) * Math.PI / 180, ux = Math.sin(cap), uy = Math.cos(cap);
+            const largeur = (a.largeur > 0 ? a.largeur : LARGEUR_PAR_NATURE[a.nature] || 3) + 2 * TETE_DEBORD_M;
+            const fleche = Math.min(largeur / 2, TETE_FLECHE_M), haut = TETE_PIEDROIT_M + fleche + TETE_MUR_M;
+            const l = largeur / 2, L = l + TETE_MUR_M;
+            const voute = [new THREE.Vector2(-l, 0), new THREE.Vector2(-l, TETE_PIEDROIT_M)];
+            for (let q = 1; q < 12; q++) {
+                const t = Math.PI * (1 - q / 12);
+                voute.push(new THREE.Vector2(Math.cos(t) * l, TETE_PIEDROIT_M + Math.sin(t) * fleche));
+            }
+            voute.push(new THREE.Vector2(l, TETE_PIEDROIT_M), new THREE.Vector2(l, 0));
+            const mur = [new THREE.Vector2(-L, -TETE_ENFOUIE_M), new THREE.Vector2(L, -TETE_ENFOUIE_M),
+                         new THREE.Vector2(L, haut), new THREE.Vector2(-L, haut)];
+            // Face au dehors ; le noir de la voûte un peu en retrait, dedans.
+            const dehors = [-ux, 0, uy];
+            plaque(mur, [voute], nd.x + ux * 0.3, nd.y + uy * 0.3, -uy, ux, z, dehors, COULEUR_BETON);
+            plaque(voute, [], nd.x + ux * 1.5, nd.y + uy * 1.5, -uy, ux, z, dehors, COULEUR_NOIR_TUNNEL);
+        }
+    };
     for (const r of d.routes) {
-        if (r.sol < 0 || r.fictif || r.nature === 'Bac ou liaison maritime') continue;
+        if (r.sol < 0) { if (!r.fictif) tetesDeTunnel(r); continue; }
+        if (r.fictif || r.nature === 'Bac ou liaison maritime') continue;
         const n = r.ligne.length / 3, xs = [], ys = [], zs = [];
         for (let k = 0; k < n; k++) {
             xs.push(ox + r.ligne[3 * k] / 10); ys.push(oy + r.ligne[3 * k + 1] / 10);
@@ -162,7 +212,7 @@ export function construireRoutes(c, cx, cy) {
         }
     }
     const groupe = new THREE.Group();
-    for (const [donnees, materiau] of [[sol, MAT_ROUTE], [pont, MAT_PONT]]) {
+    for (const [donnees, materiau] of [[sol, MAT_ROUTE], [pont, MAT_PONT], [tetes, MAT_TETE]]) {
         if (!donnees.pos.length) continue;
         const geo = new THREE.BufferGeometry();
         geo.setAttribute('position', new THREE.Float32BufferAttribute(donnees.pos, 3));

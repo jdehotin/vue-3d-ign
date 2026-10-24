@@ -67,7 +67,7 @@ vue3d/
   static/css/scene.css   sa feuille de style
   static/js/scene/    ses modules ES (three.js r160), chargés par main.js dans l'ordre de leurs effets : socle/, terrain/, batiments/, couches/ (une couche par module), vegetation/, export/, interface/, geometrie/
   static/voiture.html la vue en voiture, page à part : un monde qui défile en Lambert-93, sol en tuiles WMTS sur le RGE ALTI, carrés chargés le long de la route prévue sur le graphe BD TOPO, voiture calée sur la route
-  static/css/voiture.css, static/js/voiture/   sa feuille de style et ses modules : socle/ (paramètres, Lambert-93, monde, rendu, état partagé), sol/, carres/, route/ (graphe, voiture, limitations, simulation), couches/ (bornes), interface/
+  static/css/voiture.css, static/js/voiture/   sa feuille de style et ses modules : socle/ (paramètres, Lambert-93, monde, rendu, état partagé), sol/, carres/, route/ (graphe, tunnels : l'altitude sous terre, voiture, limitations, simulation), couches/ (bornes), interface/
   static/js/commun/   ce que les deux pages partagent : tuiles (fonds, RGE ALTI), règles des bâtiments et des arbres
   static/favicon.svg, favicon-32.png, apple-touch-icon.png   le logo de la page, tiré de docs/logo/
 docs/logo/      le logo « Tuile » : SVG avec et sans le nom (vectorisé), icône, aperçu GitHub

@@ -80,7 +80,10 @@ maquette.visible = false;
 const sceneVoiture = new THREE.Scene();
 export const ambianceVoiture = new THREE.HemisphereLight(0xdfe8f5, 0x5a5348, 1.5);
 export const soleilVoiture = new THREE.DirectionalLight(0xfff2dd, 2.0);
-sceneVoiture.add(maquette, ambianceVoiture, soleilVoiture, soleilVoiture.target);
+// Et, de même, ce que le relief cache : le tunnel où la route prévue passe
+// (interface/ruban).
+export const parDessus = new THREE.Group();
+sceneVoiture.add(maquette, parDessus, ambianceVoiture, soleilVoiture, soleilVoiture.target);
 // Le halo de la précision du relevé, à plat, à l'échelle réelle.
 const halo = new THREE.Mesh(new THREE.CircleGeometry(1, 48),
     new THREE.MeshBasicMaterial({ color: 0x3d8bff, transparent: true, opacity: 0.16, depthWrite: false }));
@@ -105,13 +108,18 @@ export function poserVoiture() {
     halo.scale.setScalar(Math.max(v.precision, 3));
 }
 
-// La scène, puis la maquette par-dessus, sans le relief pour la cacher.
+// La scène, puis la maquette par-dessus, sans le relief pour la cacher. La
+// coupe de la caméra sous terre (interface/camera) ne vaut que pour la scène :
+// la voûte et le ruban montent au-dessus d'elle quand le tunnel monte.
 export function rendre() {
     renderer.info.reset();
     renderer.clear();
     renderer.render(scene, camera);
     if (maquette.visible) {
         renderer.clearDepth();
+        const coupes = renderer.clippingPlanes;
+        renderer.clippingPlanes = [];
         renderer.render(sceneVoiture, camera);
+        renderer.clippingPlanes = coupes;
     }
 }

@@ -9,6 +9,9 @@ import { carreDe } from '../carres/grille.js';
 // identiques), et indexés par cellules de 50 m pour caler la voiture.
 export const noeuds = new Map(), aretes = new Map(), grille = new Map();
 const CELLULE_M = 50;
+// Compté à chaque carré ajouté ou retiré : ce qui se calcule sur le graphe
+// (l'altitude sous terre, route/tunnels) se périme avec lui.
+export let generationGraphe = 0;
 
 function noeud(cle, x, y) {
     let n = noeuds.get(cle);
@@ -25,6 +28,7 @@ function cellules(a, k, faire) {
 }
 
 export function integrerRoutes(c) {
+    generationGraphe++;
     const [ox, oy] = c.donnees.origine;
     for (const r of c.donnees.routes) {
         const deja = aretes.get(r.id);
@@ -56,6 +60,7 @@ export function integrerRoutes(c) {
 }
 
 export function retirerRoutes(c) {
+    generationGraphe++;
     for (const r of c.donnees.routes) {
         const a = aretes.get(r.id);
         if (!a) continue;
@@ -160,6 +165,11 @@ export function suiteProbable(a, sens, n, etat, vues = null, hasard = 0) {
     return choix;
 }
 
+// Passé sa longueur, la route prévue va jusqu'à la sortie du tunnel où elle
+// se trouve : sans GPS sous terre, la voiture y file jusqu'au jour
+// (route/voiture), et le tunnel de l'A86 fait 10 km, celui du Fréjus 13.
+const TRAVERSEE_TUNNEL_MAX_M = 15000;
+
 /**
  * La route prévue depuis `depart` ({a, s, sens}), sur `longueur` mètres :
  * à chaque carrefour, la suite la plus probable. Elle s'arrête à une
@@ -197,7 +207,7 @@ export function cheminDepuis(depart, longueur) {
         }
         if (sens > 0) { for (let k = 1; k < a.cum.length; k++) if (a.cum[k] > s) ajouter(a.pts[2 * k], a.pts[2 * k + 1]); }
         else { for (let k = a.cum.length - 2; k >= 0; k--) if (a.cum[k] < s) ajouter(a.pts[2 * k], a.pts[2 * k + 1]); }
-        if (total >= longueur) break;
+        if (total >= longueur && (a.sol >= 0 || total >= longueur + TRAVERSEE_TUNNEL_MAX_M)) break;
         const n = sens > 0 ? a.n1 : a.n0;
         const suite = k >= 0 ? itineraire.etapes[++k] : suiteProbable(a, sens, n, etat, vues);
         if (!suite) {

@@ -176,7 +176,7 @@ La vue en voiture (`static/voiture.html`, `css/voiture.css`, `js/voiture/`)
 suit le même découpage, avec ses dossiers : `socle/` (paramètres, Lambert-93,
 origine du monde, rendu, et l'état partagé — la voiture, la caméra, la route
 prévue), `sol/` (tuiles, cache, altitudes, sol), `carres/` (grille, bâtiments,
-routes, arbres, sélection), `route/` (graphe, voiture, limitations,
+routes, arbres, sélection), `route/` (graphe, tunnels, voiture, limitations,
 simulation), `couches/` (bornes) et `interface/`. Ce que les deux pages
 partagent est dans `js/commun/` : les adresses des tuiles, les règles des
 bâtiments et des arbres.

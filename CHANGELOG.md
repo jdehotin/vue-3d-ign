@@ -15,6 +15,18 @@ messages de commit et dans les commentaires des modules.
 
 ### Ajouté
 
+- **Les tunnels dans la vue en voiture** (24 octobre 2026). Jusqu'ici, la
+  voiture suivait le relief et passait par-dessus la colline ; elle passe
+  maintenant dessous. La route souterraine va en ligne droite d'une entrée
+  à l'autre : l'altitude que donne la BD TOPO manque à Toulon et au
+  Mont-Blanc, et passe au-dessus du terrain sur un sommet sur cinq au
+  Prado-Carénage. Chaque entrée a sa tête, un mur de béton percé d'une
+  voûte noire. Quand la route prévue passe sous terre, une voûte
+  translucide la montre à travers le relief, et la caméra suit la voiture
+  dans le tunnel : on n'y voit plus que la voûte, la route et la voiture,
+  sur le noir de la roche. La 2D reste au-dessus de la carte. Sans GPS, la
+  voiture file jusqu'à la sortie au lieu de se figer au bout de 40 s ; la
+  conduite simulée perd le GPS sous terre, comme une vraie.
 - **« Macron démission ! » dans le cortège** (23 octobre 2026) : un second
   chant de foule, tiré d'une vidéo de Luc Auffret place de la République
   (repris avec son accord), alterne avec « Tous ensemble » d'une vague à

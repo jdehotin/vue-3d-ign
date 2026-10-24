@@ -11,14 +11,16 @@ import { altitudeL93 } from '../sol/altitudes.js';
 import {
     pointArete, ecartCap, cheminDepuis, pointDuChemin, areteDuChemin, caler,
 } from './graphe.js';
+import { altitudeSousTerre, sortieDuTunnel } from './tunnels.js';
 import { majBoutonVue } from '../interface/camera.js';
 import { poserVoiture } from '../interface/maquette.js';
 
 // Un relevé par seconde au mieux : entre deux, la voiture avance le long de
 // la route prévue à sa vitesse, et l'image se raccorde en douceur au relevé
-// suivant. Sans relevé, elle s'arrête au bout de EXTRAPOLATION_S (bien plus
-// tard dans un tunnel, où le GPS ne capte plus).
-const EXTRAPOLATION_S = 3, EXTRAPOLATION_TUNNEL_S = 40;
+// suivant. Sans relevé, elle s'arrête au bout de EXTRAPOLATION_S ; dans un
+// tunnel, où le GPS ne capte plus, à la sortie, EXTRAPOLATION_S passées : à
+// 40 s au plus, comme avant, elle se figeait au bout de 800 m à 70 km/h.
+const EXTRAPOLATION_S = 3;
 const LISSAGE_POSITION_S = 0.3, LISSAGE_CAP_S = 0.35;
 const SAUT_M = 150;
 
@@ -121,8 +123,10 @@ export function majVoiture(dt, maintenant) {
     // la voiture arrive sur sa lancée qui compte.
     const depuis = (maintenant - an.t) / 1000;
     let limite = EXTRAPOLATION_S;
-    if (v.chemin && an.v > 1 && depuis > EXTRAPOLATION_S
-        && areteDuChemin(v.chemin, an.v * EXTRAPOLATION_S).a.sol < 0) limite = EXTRAPOLATION_TUNNEL_S;
+    if (v.chemin && an.v > 1 && depuis > EXTRAPOLATION_S) {
+        const sortie = sortieDuTunnel(v.chemin, an.v * EXTRAPOLATION_S);
+        if (sortie != null) limite = sortie / an.v + EXTRAPOLATION_S;
+    }
     const ecoule = Math.min(depuis, limite);
     let cx, cy, ccap;
     const p = v.chemin && pointDuChemin(v.chemin, an.v * ecoule);
@@ -143,13 +147,17 @@ export function majVoiture(dt, maintenant) {
     // Figée faute de relevé, la voiture affiche 0, pas sa dernière vitesse.
     v.v += ((depuis > limite ? 0 : an.v || 0) - v.v) * (1 - Math.exp(-dt / 0.8));
     // L'altitude : celle du relief, sauf sur un pont, où la route BD TOPO
-    // porte la sienne ; lissée, pour ne pas sauter d'une tuile à l'autre.
+    // porte la sienne, et dans un tunnel, sous le relief (route/tunnels) ;
+    // lissée, pour ne pas sauter d'une tuile à l'autre.
     let alt = altitudeL93(v.x, v.y);
     if (p && an.a) {
         const e = areteDuChemin(v.chemin, v.dChemin);
         if (e.a.sol > 0) {
             const z = pointArete(e.a, e.s).z;
             if (Number.isFinite(z)) alt = Number.isFinite(alt) ? Math.max(alt, z) : z;
+        } else if (e.a.sol < 0) {
+            const z = altitudeSousTerre(e.a, e.s);
+            if (Number.isFinite(z)) alt = z;
         }
         v.arete = e.a;
         v.sensArete = e.sens;
