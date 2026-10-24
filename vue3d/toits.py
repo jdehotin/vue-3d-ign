@@ -1342,13 +1342,10 @@ def _bassin_de_calcul():
     with _bassin_verrou:
         if _bassin is None and _bassin_casse < TOITS_BASSIN_ESSAIS:
             n = max(2, processus_toits())
-            methode = "forkserver" if sys.platform.startswith("linux") else "spawn"
+            # On utilise 'spawn' partout : le mode 'forkserver' provoque un import
+            # circulaire dans Python 3.12, faisant planter le serveur Render.
+            contexte = multiprocessing.get_context("spawn")
             try:
-                contexte = multiprocessing.get_context(methode)
-                if methode == "forkserver":
-                    # Le serveur importe numpy et shapely une fois ; chaque
-                    # processus en naît prêt.
-                    contexte.set_forkserver_preload([__name__])
                 _bassin = concurrent.futures.ProcessPoolExecutor(
                     max_workers=n, mp_context=contexte, initializer=_veiller_parent,
                     initargs=(os.getpid(),))
