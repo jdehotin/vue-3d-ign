@@ -716,3 +716,52 @@ def test_le_depot_dun_fichier_passe_par_le_serveur(client, monkeypatch):
     assert r.status_code == 200 and r.get_json()["fichier"]["id"] == "f1"
     assert vus["projet"] == "vK4pJn9BUh4" and vus["donnees"] == b"ISO-10303-21;"
     assert vus["nom"] == "vue3d-43.9-5.2-z500.ifc" and vus["jeton"].startswith("Bearer ")
+
+
+# --- L'emprise d'un projet, lue dans sa fiche ---------------------------------
+
+class _Projet(_Session):
+    """La fiche du projet, avec l'adresse que Connect y range."""
+
+    def __init__(self, adresse):
+        super().__init__()
+        self.adresse = adresse
+
+    def get(self, url, headers=None, timeout=None):
+        self.appels.append(("GET", url))
+        if url.startswith(self.origine + "/tc/api/2.0/projects/"):
+            fiche = {"id": "projet", "rootId": "racine"}
+            if self.adresse is not None:
+                fiche["address"] = self.adresse
+            return _Reponse(200, fiche)
+        return _Reponse(404)
+
+
+def test_lemprise_se_lit_dans_le_contour_de_ladresse():
+    # La forme documentée par l'API Core : un tableau de sommets [lat, lon].
+    session = _Projet({"text": "Aix",
+                       "geometry": "[[43.5, 5.4], [43.5, 5.5], [43.6, 5.5]]"})
+    assert module_app.obtenir_emprise_projet(session, {}, "vK4pJn9BUh4") == \
+        {"minLat": 43.5, "maxLat": 43.6, "minLon": 5.4, "maxLon": 5.5}
+
+
+def test_lemprise_lit_aussi_un_polygone_geojson():
+    # L'autre forme, en longitude puis latitude : le même carré.
+    session = _Projet({"geometry": '{"type": "Polygon", "coordinates": '
+                                   '[[[5.4, 43.5], [5.5, 43.5], [5.5, 43.6]]]}'})
+    assert module_app.obtenir_emprise_projet(session, {}, "vK4pJn9BUh4") == \
+        {"minLat": 43.5, "maxLat": 43.6, "minLon": 5.4, "maxLon": 5.5}
+
+
+@pytest.mark.parametrize("adresse", [
+    None,                                            # pas d'adresse du tout
+    {"text": "Aix"},                                 # une adresse sans contour
+    {"geometry": "[[43.5, 5.4]]"},                   # un seul point d'ancrage
+    {"geometry": "[[43.5, 5.4], [43.6, 5.5]]"},      # deux sommets : pas une zone
+])
+def test_sans_contour_lemprise_demande_a_etre_definie(adresse):
+    with pytest.raises(module_app.DepotRefuse) as refus:
+        module_app.obtenir_emprise_projet(_Projet(adresse), {}, "vK4pJn9BUh4")
+    assert refus.value.code == 404
+    assert "L'emprise du projet n'est pas définie dans Trimble Connect" in str(refus.value)
+    assert "paramètres du projet" in str(refus.value)

@@ -51,6 +51,16 @@ messages de commit et dans les commentaires des modules.
   `origine=tc` ; la page y lit le libellé « Emprise du projet Trimble
   Connect ». Changer de zone ou dessiner un contour retire `origine`, qui ne
   décrit plus la scène.
+- **La scène peut se synchroniser sur l'emprise du projet.** `use_connect=1`
+  fait lire au serveur la fiche du projet (`address.geometry`, en GeoJSON ou en
+  tableau `[lat, lon]`) : son centre devient le point, son contour la zone. Une
+  adresse absente, un simple point d'ancrage ou moins de trois sommets ne
+  dessinent pas d'emprise : la page affiche alors « L'emprise du projet n'est
+  pas définie dans Trimble Connect : à définir dans les paramètres du projet
+  avant de synchroniser la scène. » La fiche n'est lue qu'une fois par requête,
+  et les dix routes de la page en héritent.
+- **Les houppiers se coupent par l'environnement.** `VUE3D_HOUPIERS=non` saute
+  le calcul des arbres et des constructions ; sans cette variable, ils restent.
 
 ### Vérifié
 

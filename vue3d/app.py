@@ -26,6 +26,13 @@
                                    CityGML, corps de la requête) à la racine du
                                    projet Trimble Connect ; le jeton d'accès est
                                    dans l'en-tête Authorization
+    GET /api/connect/emprise?projet=…   l'emprise du projet Trimble Connect, ou
+                                   le message qui dit qu'elle reste à définir ;
+                                   le jeton d'accès est dans l'en-tête Authorization
+
+Toute route de scène accepte `use_connect=1` avec le jeton et `projet=…` : le
+point et la zone viennent alors de l'emprise du projet Trimble Connect, et non
+de `lat`, `lon`, `zone` ou `poly`.
 
 Chaque route d'API accepte `zone=` (150 à 2 000 m, arrondie à 50 m) : sans
 elle, l'emprise par défaut d'environ 356 m. `poly=` la remplace : un contour
@@ -40,6 +47,7 @@ heure (429 au-delà) ; derrière un proxy, `VUE3D_PROXY` dit combien croire de
 `X-Forwarded-For`.
 """
 
+import json
 import logging
 import math
 import os
@@ -114,23 +122,104 @@ def _donnees(reponse):
     return corps.get("data", corps) if isinstance(corps, dict) else corps
 
 
-def obtenir_emprise_projet(session, entetes, projet):
-    """Récupère l'emprise du projet Trimble Connect et son système de projection.
-    
-    Raises:
-        DepotRefuse: si le projet est introuvable ou l'emprise non définie.
+def _paire(paire):
+    """(a, b) flottants d'une paire, ou None si elle est illisible."""
+    if not isinstance(paire, (list, tuple)) or len(paire) < 2:
+        return None
+    try:
+        return float(paire[0]), float(paire[1])
+    except (TypeError, ValueError):
+        return None
+
+
+def _lon_lat(paire):
+    """(lat, lon) d'une paire GeoJSON, toujours écrite longitude puis latitude."""
+    valeurs = _paire(paire)
+    if not valeurs:
+        return None
+    lon, lat = valeurs
+    if abs(lat) > 90 or abs(lon) > 180:
+        return None
+    return lat, lon
+
+
+def _sommets_emprise(geometry):
+    """Les sommets (lat, lon) de l'`address.geometry` d'un projet, ou None.
+
+    L'API Core documente deux formes pour cette géométrie : un GeoJSON —
+    Point, Polygon, MultiPolygon, en longitude puis latitude — ou un simple
+    tableau de sommets [lat, lon]. Tout le reste est illisible.
     """
-    origine, fiche = origine_projet(session, entetes, projet)
-    # Note : L'endpoint exact pour la BBOX dépend de la version de l'API TC.
-    # On suppose ici un appel à /projects/{id}/bbox ou l'extraction depuis la fiche.
-    api = f"{origine}/tc/api/2.0"
-    reponse = session.get(f"{api}/projects/{projet}/bbox", headers=entetes, timeout=20)
-    if reponse.status_code != 200:
-        raise DepotRefuse("L'emprise du projet n'est pas définie ou inaccessible dans Trimble Connect.", 404)
-    
-    donnees = _donnees(reponse)
-    # On attend un format { "minLat": ..., "maxLat": ..., "minLon": ..., "maxLon": ... }
-    return donnees
+    if isinstance(geometry, str):
+        try:
+            geometry = json.loads(geometry)
+        except ValueError:
+            return None
+    if isinstance(geometry, list):
+        paires = [_paire(sommet) for sommet in geometry]
+        if not paires or not all(paires):
+            return None
+        # La forme documentée est [lat, lon] ; un premier composant hors des
+        # bornes d'une latitude dit que l'ordre reçu est (lon, lat).
+        if all(abs(a) <= 90 for a, _ in paires):
+            return paires
+        echanges = [(b, a) for a, b in paires]
+        return echanges if all(abs(b) <= 90 for b, _ in echanges) else None
+    if isinstance(geometry, dict):
+        type_ = geometry.get("type")
+        coord = geometry.get("coordinates")
+        if type_ == "Point":
+            sommet = _lon_lat(coord)
+            return [sommet] if sommet else None
+        if type_ == "Feature":
+            return _sommets_emprise(geometry.get("geometry"))
+        if type_ == "Polygon":
+            anneaux = coord or []
+            anneau = anneaux[0] if anneaux else None
+            sommets = [_lon_lat(sommet) for sommet in (anneau or [])]
+            return sommets if sommets and all(sommets) else None
+        if type_ == "MultiPolygon":
+            for polygone in coord or []:
+                sommets = _sommets_emprise({"type": "Polygon", "coordinates": polygone})
+                if sommets:
+                    return sommets
+        return None
+    return None
+
+
+MESSAGE_EMPRISE = ("L'emprise du projet n'est pas définie dans Trimble Connect : "
+                   "à définir dans les paramètres du projet avant de synchroniser "
+                   "la scène.")
+
+
+def obtenir_emprise_projet(session, entetes, projet):
+    """L'emprise d'un projet Connect : les bords min et max de son contour.
+
+    Connect range le contour du projet dans `address.geometry` de sa fiche,
+    lue sans seconde requête puisque `origine_projet` vient de la chercher.
+    Un point d'ancrage, ou moins de trois sommets, ne dessine pas de zone :
+    l'utilisateur doit tracer la limite dans les paramètres du projet.
+
+    Returns:
+        {"minLat": …, "maxLat": …, "minLon": …, "maxLon": …}, en degrés.
+
+    Raises:
+        DepotRefuse: projet introuvable pour ce jeton, ou emprise non définie —
+            le message est celui que la page affiche.
+    """
+    _, fiche = origine_projet(session, entetes, projet)
+    adresse = fiche.get("address") or {}
+    sommets = _sommets_emprise(adresse.get("geometry")) \
+        if isinstance(adresse, dict) else None
+    if sommets is None or len(sommets) < 3:
+        raise DepotRefuse(MESSAGE_EMPRISE, 404)
+    lats = [lat for lat, _ in sommets]
+    lons = [lon for _, lon in sommets]
+    emprise = {"minLat": min(lats), "maxLat": max(lats),
+               "minLon": min(lons), "maxLon": max(lons)}
+    if emprise["minLat"] == emprise["maxLat"] or emprise["minLon"] == emprise["maxLon"]:
+        raise DepotRefuse(MESSAGE_EMPRISE, 404)
+    return emprise
 
 
 
@@ -356,9 +445,7 @@ def creer_app(dossier_cache=None, construire=construire_scene, lire_monuments=fe
                                            "Accept": "application/json"}, projet)
             cles = ("minLat", "maxLat", "minLon", "maxLon")
             if any(cle not in bbox for cle in cles):
-                raise DepotRefuse("L'emprise du projet n'est pas définie dans "
-                                  "Trimble Connect : à définir dans les paramètres "
-                                  "du projet avant de synchroniser la scène.", 404)
+                raise DepotRefuse(MESSAGE_EMPRISE, 404)
             lat = (bbox["minLat"] + bbox["maxLat"]) / 2
             lon = (bbox["minLon"] + bbox["maxLon"]) / 2
             # Même écriture que ?poly= de la page, six décimales, même ordre.
