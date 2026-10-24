@@ -58,7 +58,7 @@ vue3d/
   dpe.py        DPE de l'ADEME rattachés aux bâtiments (RNB, sinon adresse à 5 m) : couche à part, lue au clic seulement, datée
   dvf.py        ventes DVF (fichiers Etalab) jointes aux parcelles du cadastre IGN : couche à part, lue au clic seulement, datée
   bornes.py     bornes de recharge (Base nationale des IRVE, API tabulaire de data.gouv.fr) réunies par station : couche à part, lue au clic seulement, datée ; pour la voiture, par bloc de 4 km (cache/carres/bornes-v1/), relu après 7 jours
-  carres.py     carrés de 500 m de la vue en voiture, grille Lambert-93 : bâtiments et routes BD TOPO lus en EPSG:2154 (cache/carres/), sans scène ni MNH ; leurs arbres en couche à part (/api/vegetation, houppiers.py sur le MNH à 0,5 m) ; quota à part (CARRES_PAR_HEURE)
+  carres.py     carrés de 500 m de la vue en voiture, grille Lambert-93 : bâtiments, routes, et voies ferrées et passerelles au-dessus du sol (`ponts`), BD TOPO lus en EPSG:2154 (cache/carres/), sans scène ni MNH ; leurs arbres en couche à part (/api/vegetation, houppiers.py sur le MNH à 0,5 m) ; quota à part (CARRES_PAR_HEURE)
   vitesses.py   limitations de vitesse des carrés de la voiture (/api/vitesses) : maxspeed OpenStreetMap (Overpass, par bloc de 2 km gardé dans cache/carres/), rapproché des tronçons BD TOPO sens par sens, sinon règle générale marquée estimée ; couche à part
   geopf.py      GET avec reprise sur la Géoplateforme ; 8 places pour tout le service, lectures groupées abandonnées au premier échec
   signalements.py  le bouton ⚠ de la vue en voiture : capture de l'écran et état du sol gardés dans cache/signalements/ (<id>.json, <id>.jpg), bornés en taille, en nombre et par adresse

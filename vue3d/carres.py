@@ -7,9 +7,11 @@ carré et que la prod limite à 20 par heure et par visiteur, quand une voiture
 la grille Lambert-93, faits des seules couches BD TOPO qui se lisent d'une
 requête : 0,14 à 0,20 s par couche sur un carré de 500 m, mesuré le
 2026-10-20 à Paris (Opéra), à Gordes et le long de l'A7 à Montélimar, de 46
-à 49 Ko compressés pour les bâtiments, de 16 à 29 Ko pour les routes. Ni
-LiDAR, ni MNH, ni végétation : la page y gagne de quoi charger plusieurs
-kilomètres devant elle.
+à 49 Ko compressés pour les bâtiments, de 16 à 29 Ko pour les routes ; les
+voies ferrées, lues en même temps, de 0,10 à 0,20 s (le 2026-10-24, aux
+mêmes lieux, à Grenelle et à la Part-Dieu). Ni LiDAR, ni MNH, ni
+végétation : la page y gagne de quoi charger plusieurs kilomètres devant
+elle.
 
 Un carré est la règle des scènes en petit : complet ou absent, jamais
 périmé, écrit d'un bloc. Une couche en échec lève CarreIndisponible et rien
@@ -40,7 +42,16 @@ carré (`origine`, en mètres Lambert-93) :
   péage », « Restreint aux ayants droit »…), `fictif` (présent et vrai pour
   un tronçon qui ne fait que raccorder le réseau, à travers une place :
   gardé pour le graphe, pas dessiné), `ligne` [x0, y0, z0, x1, y1, z1, …] (z
-  en décimètres d'altitude).
+  en décimètres d'altitude) ;
+- `ponts` : ce qui passe au-dessus du sol sans que la voiture le prenne, et
+  qu'elle voit en passant dessous — viaducs ferroviaires, métro aérien,
+  passerelles (sentiers, escaliers, pistes cyclables) —, entiers comme les
+  routes. Chacun : `id`, `nature` (BD TOPO), `ferre` (vrai pour une voie
+  ferrée), `sol`, `largeur` (m : la chaussée, ou 4 m par voie ferrée, comme
+  la scène), `ligne`. Leur altitude BD TOPO est celle du tablier, comme pour
+  les ponts routiers : de 7 à 13 m au-dessus du terrain sur le métro aérien
+  de Grenelle, jusqu'à 99 m à Garabit, 11 m en médiane sur les 26
+  passerelles d'un kilomètre du 13e arrondissement.
 """
 
 import gzip
@@ -63,11 +74,13 @@ from .geopf import LectureAbandonnee, en_parallele
 from .houppiers import HOUPPIERS_RESOLUTION_M, houppiers_pour_emprise
 from .mnh import dimensions_grille, fetch_mnh_grid
 from .ortho import fetch_exg_grid
+from .ouvrages import COUCHES as COUCHES_OUVRAGES, LARGEUR_PAR_VOIE_M
 
 # Version du format et de son contenu : le cache ne périme jamais, un carré
 # change de dossier avec elle. La page la met dans l'adresse du carré, que le
-# navigateur garde une semaine. 2 : `fictif` sur les routes.
-CARRES_VERSION = 2
+# navigateur garde une semaine. 2 : `fictif` sur les routes. 3 : `ponts`.
+CARRES_VERSION = 3
+COUCHE_VOIES_FERREES = COUCHES_OUVRAGES["voies"]
 # 500 m : la moitié d'une zone de la page, de quoi charger finement le long
 # de la route sans lire tout un kilomètre de part et d'autre. Une réponse de
 # 255 à 382 bâtiments aux trois lieux mesurés, loin des 5 000 du plafond WFS.
@@ -231,20 +244,36 @@ def batiments_du_carre(geojson, i, j):
     return sortie
 
 
+def _ligne(coordonnees, x0, y0):
+    """[x0, y0, z0, …] en décimètres depuis (x0, y0), z en décimètres d'altitude ou None."""
+    ligne = []
+    for s in coordonnees:
+        z = s[2] if len(s) > 2 and _nombre(s[2]) is not None and s[2] > -1000 else None
+        ligne += [_dm(s[0], x0), _dm(s[1], y0), None if z is None else round(z * 10)]
+    return ligne
+
+
+def _niveau(p):
+    """La position par rapport au sol d'un tronçon BD TOPO (0 si elle manque)."""
+    v = p.get("position_par_rapport_au_sol")
+    return int(v) if str(v).lstrip("-").isdigit() else 0
+
+
+def _lineaire(f):
+    g = f.get("geometry") or {}
+    return g.get("type") == "LineString" and len(g.get("coordinates") or []) >= 2
+
+
 def routes_du_carre(geojson, i, j):
     """Les tronçons carrossables qui touchent le carré, au format compact."""
     x0, y0, _, _ = emprise_carre(i, j)
     sortie = []
     for f in geojson.get("features", []):
         p = f.get("properties") or {}
-        g = f.get("geometry") or {}
         if (p.get("etat_de_l_objet") in ETATS_ECARTES or p.get("nature") in NATURES_ECARTEES
-                or p.get("acces_vehicule_leger") == ACCES_ECARTE or g.get("type") != "LineString" or len(g.get("coordinates") or []) < 2):
+                or p.get("acces_vehicule_leger") == ACCES_ECARTE or not _lineaire(f)):
             continue
-        ligne = []
-        for s in g["coordinates"]:
-            z = s[2] if len(s) > 2 and _nombre(s[2]) is not None and s[2] > -1000 else None
-            ligne += [_dm(s[0], x0), _dm(s[1], y0), None if z is None else round(z * 10)]
+        ligne = _ligne(f["geometry"]["coordinates"], x0, y0)
         importance = p.get("importance")
         route = {
             "id": p.get("cleabs"),
@@ -253,8 +282,7 @@ def routes_du_carre(geojson, i, j):
             "numero": p.get("cpx_numero"),
             "importance": int(importance) if str(importance).isdigit() else 6,
             "nature": p.get("nature"),
-            "sol": int(p["position_par_rapport_au_sol"])
-                   if str(p.get("position_par_rapport_au_sol")).lstrip("-").isdigit() else 0,
+            "sol": _niveau(p),
             "sens": SENS.get(p.get("sens_de_circulation"), ""),
             "voies": _nombre(p.get("nombre_de_voies")),
             "largeur": _nombre(p.get("largeur_de_chaussee")),
@@ -267,17 +295,39 @@ def routes_du_carre(geojson, i, j):
     return sortie
 
 
+def ponts_du_carre(voies, routes, i, j):
+    """Les voies ferrées et les passerelles au-dessus du sol qui touchent le
+    carré, entières, au format compact (voir le module)."""
+    x0, y0, _, _ = emprise_carre(i, j)
+    sortie = []
+    for geojson, ferre in ((voies, True), (routes, False)):
+        for f in geojson.get("features", []):
+            p = f.get("properties") or {}
+            if (p.get("etat_de_l_objet") in ETATS_ECARTES or _niveau(p) <= 0 or not _lineaire(f)
+                    or (not ferre and p.get("nature") not in NATURES_ECARTEES)):
+                continue
+            if ferre:
+                largeur = (_nombre(p.get("nombre_de_voies")) or 1) * LARGEUR_PAR_VOIE_M.get(p.get("largeur"), 4.0)
+            else:
+                largeur = _nombre(p.get("largeur_de_chaussee"))
+            sortie.append({"id": p.get("cleabs"), "nature": p.get("nature"), "ferre": ferre, "sol": _niveau(p),
+                           "largeur": largeur, "ligne": _ligne(f["geometry"]["coordinates"], x0, y0)})
+    return sortie
+
+
 def fetch_carre(i, j):
-    """Le carré (i, j), lu à la Géoplateforme : bâtiments et routes ensemble.
+    """Le carré (i, j), lu à la Géoplateforme : bâtiments, routes et voies
+    ferrées ensemble.
 
     Raises:
-        CarreIndisponible si l'une des deux couches n'a pas pu être lue.
+        CarreIndisponible si l'une des trois couches n'a pas pu être lue.
     """
     emprise = emprise_carre(i, j)
     try:
-        batiments, routes = en_parallele(
+        batiments, routes, voies = en_parallele(
             lambda: lire_couche(COUCHE_BATIMENTS, *emprise, srs=SRS_LAMBERT93),
-            lambda: lire_couche(COUCHE_ROUTES, *emprise, srs=SRS_LAMBERT93))
+            lambda: lire_couche(COUCHE_ROUTES, *emprise, srs=SRS_LAMBERT93),
+            lambda: lire_couche(COUCHE_VOIES_FERREES, *emprise, srs=SRS_LAMBERT93))
     except (requests.RequestException, LectureAbandonnee) as exc:
         raise CarreIndisponible(str(exc)) from exc
     return {
@@ -285,6 +335,7 @@ def fetch_carre(i, j):
         "origine": [emprise[0], emprise[1]], "lu": date.today().isoformat(),
         "batiments": batiments_du_carre(batiments, i, j),
         "routes": routes_du_carre(routes, i, j),
+        "ponts": ponts_du_carre(voies, routes, i, j),
     }
 
 

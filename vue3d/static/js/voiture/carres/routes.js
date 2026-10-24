@@ -1,4 +1,4 @@
-// Les routes, les ponts et les têtes de tunnel des carrés.
+// Les routes, les ponts, les viaducs et passerelles, et les têtes de tunnel des carrés.
 
 import * as THREE from 'three';
 import { scene, courber } from '../socle/rendu.js';
@@ -16,10 +16,13 @@ import { fond } from '../sol/sol.js';
 // noms. Un pont (position au-dessus du sol) est un tablier à l'altitude de
 // ses tronçons — celle du tablier : de 598 à 676 m sur le viaduc de Millau,
 // sa pente de 3 % —, avec ses parapets, et des piles là où le vide dépasse
-// PILE_VIDE_M. Le relief du RGE ALTI, sol nu, passe dessous. Un tunnel n'a
-// ici que ses têtes, un mur de béton percé d'une voûte noire à chaque entrée,
-// à l'altitude de la route (route/tunnels) ; on le voit sous terre quand la
-// route prévue y passe (interface/ruban).
+// PILE_VIDE_M. Le relief du RGE ALTI, sol nu, passe dessous. Les viaducs
+// ferroviaires, le métro aérien et les passerelles qui enjambent la route
+// (`ponts` du carré) ont le même tablier, sur leur ballast ou leur dalle, à
+// l'altitude BD TOPO, qui est aussi la leur. Un tunnel n'a ici que ses têtes,
+// un mur de béton percé d'une voûte noire à chaque entrée, à l'altitude de
+// la route (route/tunnels) ; on le voit sous terre quand la route prévue y
+// passe (interface/ruban).
 const ROUTE_LEVE_M = 0.12, ROUTE_PAS_M = 5, PONT_PAS_M = 6;
 const PONT_EPAISSEUR_M = 1.4, PARAPET_M = 0.9, PILE_ECART_M = 45, PILE_VIDE_M = 3, PILE_EPAISSEUR_M = 1.6;
 // Une tête de tunnel à vue d'œil : une voûte large de la chaussée et de
@@ -43,6 +46,14 @@ const MAT_PONT = courber(new THREE.MeshLambertMaterial({ vertexColors: true, sid
 const MAT_TETE = courber(new THREE.MeshLambertMaterial({ vertexColors: true }));
 const COULEUR_ROUTE = new THREE.Color(0x5f636a), COULEUR_CHEMIN = new THREE.Color(0x9c8a6e);
 const COULEUR_BETON = new THREE.Color(0xc9c5bb);
+// Les viaducs ferroviaires (4 m par voie, comme la scène) sur leur ballast ;
+// les passerelles, à leur largeur BD TOPO ou à celle de leur nature, avec un
+// garde-corps d'homme et sans piles : légères, elles franchissent d'un bond
+// (la passerelle Simone-de-Beauvoir, 190 m au-dessus de la Seine), et la
+// règle des ponts lui en plantait quatre dans le fleuve.
+const COULEUR_BALLAST = new THREE.Color(0x857c73), COULEUR_PASSERELLE = new THREE.Color(0xb3ada3);
+const LARGEUR_PASSERELLE = { 'Sentier': 2.5, 'Escalier': 2, 'Piste cyclable': 3 };
+const GARDE_CORPS_M = 1.1;
 export const groupeRoutes = new THREE.Group();
 scene.add(groupeRoutes);
 export const montrerRoutesAuSol = () => { MAT_ROUTE.visible = fond === 'ortho'; };
@@ -145,16 +156,61 @@ export function construireRoutes(c, cx, cy) {
             plaque(voute, [], nd.x + ux * 1.5, nd.y + uy * 1.5, -uy, ux, z, dehors, COULEUR_NOIR_TUNNEL);
         }
     };
+    // Un tablier : dessus, sous-face, rives, parapets, et des piles là où le vide dépasse PILE_VIDE_M.
+    const tablier = (morceau, w, dessus, parapet, piles = true) => {
+        const pts = echantillonner(morceau, PONT_PAS_M);
+        let prec = null, parcouru = 0, pile = PILE_ECART_M / 2;
+        for (let i = 0; i < pts.length; i++) {
+            const p = pts[i];
+            let z = p.z;
+            if (!Number.isFinite(z)) { const a = altitudeL93(p.x, p.y); z = (Number.isFinite(a) ? a : 0) + 5; }
+            const gx = -p.uy * w / 2, gy = p.ux * w / 2;
+            const haut = [ici(p.x + gx, p.y + gy, z + 0.05), ici(p.x - gx, p.y - gy, z + 0.05)];
+            const bas = [ici(p.x + gx, p.y + gy, z - PONT_EPAISSEUR_M), ici(p.x - gx, p.y - gy, z - PONT_EPAISSEUR_M)];
+            const garde = [ici(p.x + gx, p.y + gy, z + parapet), ici(p.x - gx, p.y - gy, z + parapet)];
+            const lat = [-p.uy, 0, -p.ux];   // vers la gauche, en coordonnées de la scène
+            if (prec) {
+                quad(pont, prec.haut[1], haut[1], haut[0], prec.haut[0], [0, 1, 0], dessus);
+                quad(pont, prec.bas[0], bas[0], bas[1], prec.bas[1], [0, -1, 0], COULEUR_BETON);
+                quad(pont, prec.haut[0], haut[0], bas[0], prec.bas[0], lat, COULEUR_BETON);
+                quad(pont, prec.haut[1], haut[1], bas[1], prec.bas[1], [-lat[0], 0, -lat[2]], COULEUR_BETON);
+                quad(pont, prec.haut[0], haut[0], garde[0], prec.garde[0], lat, COULEUR_BETON);
+                quad(pont, prec.haut[1], haut[1], garde[1], prec.garde[1], [-lat[0], 0, -lat[2]], COULEUR_BETON);
+                parcouru += Math.hypot(p.x - pts[i - 1].x, p.y - pts[i - 1].y);
+            }
+            prec = { haut, bas, garde };
+            if (!piles || parcouru < pile) continue;
+            pile += PILE_ECART_M;
+            const a = altitudeL93(p.x, p.y);
+            if (!Number.isFinite(a) || z - PONT_EPAISSEUR_M - a < PILE_VIDE_M) continue;
+            // Une pile, un voile de la moitié du tablier, dans l'axe.
+            const e = PILE_EPAISSEUR_M / 2, l = Math.max(w * 0.25, e);
+            const coin = (u, v, alt) => ici(p.x + p.ux * u - p.uy * v, p.y + p.uy * u + p.ux * v, alt);
+            const pied = a - 1, tete = z - PONT_EPAISSEUR_M;
+            const c4 = [[e, l], [e, -l], [-e, -l], [-e, l]];
+            for (let k = 0; k < 4; k++) {
+                const [u0, w0] = c4[k], [u1, w1] = c4[(k + 1) % 4];
+                const nu = (u0 + u1) / 2, nv = (w0 + w1) / 2, nl = Math.hypot(nu, nv) || 1;
+                const nx = (p.ux * nu - p.uy * nv) / nl, ny = (p.uy * nu + p.ux * nv) / nl;
+                quad(pont, coin(u0, w0, pied), coin(u1, w1, pied), coin(u1, w1, tete), coin(u0, w0, tete),
+                     [nx, 0, -ny], COULEUR_BETON);
+            }
+        }
+    };
+    /** Les morceaux d'une ligne du carré (décimètres depuis son origine) dans son emprise. */
+    const morceaux = ligne => {
+        const n = ligne.length / 3, xs = [], ys = [], zs = [];
+        for (let k = 0; k < n; k++) {
+            xs.push(ox + ligne[3 * k] / 10); ys.push(oy + ligne[3 * k + 1] / 10);
+            zs.push(ligne[3 * k + 2] == null ? NaN : ligne[3 * k + 2] / 10);
+        }
+        return decouper(xs, ys, zs, x0, y0, x0 + CARRE_M, y0 + CARRE_M);
+    };
     for (const r of d.routes) {
         if (r.sol < 0) { if (!r.fictif) tetesDeTunnel(r); continue; }
         if (r.fictif || r.nature === 'Bac ou liaison maritime') continue;
-        const n = r.ligne.length / 3, xs = [], ys = [], zs = [];
-        for (let k = 0; k < n; k++) {
-            xs.push(ox + r.ligne[3 * k] / 10); ys.push(oy + r.ligne[3 * k + 1] / 10);
-            zs.push(r.ligne[3 * k + 2] == null ? NaN : r.ligne[3 * k + 2] / 10);
-        }
         const largeur = r.largeur > 0 ? r.largeur : LARGEUR_PAR_NATURE[r.nature] || 3;
-        for (const morceau of decouper(xs, ys, zs, x0, y0, x0 + CARRE_M, y0 + CARRE_M)) {
+        for (const morceau of morceaux(r.ligne)) {
             if (r.sol === 0) {
                 const coul = NATURES_TERRE.has(r.nature) ? COULEUR_CHEMIN : COULEUR_ROUTE;
                 const pts = echantillonner(morceau, ROUTE_PAS_M);
@@ -169,46 +225,15 @@ export function construireRoutes(c, cx, cy) {
                 }
                 continue;
             }
-            // Un pont : tablier, parapets, piles.
-            const pts = echantillonner(morceau, PONT_PAS_M);
-            const w = largeur + 1;
-            let prec = null, parcouru = 0, pile = PILE_ECART_M / 2;
-            for (let i = 0; i < pts.length; i++) {
-                const p = pts[i];
-                let z = p.z;
-                if (!Number.isFinite(z)) { const a = altitudeL93(p.x, p.y); z = (Number.isFinite(a) ? a : 0) + 5; }
-                const gx = -p.uy * w / 2, gy = p.ux * w / 2;
-                const haut = [ici(p.x + gx, p.y + gy, z + 0.05), ici(p.x - gx, p.y - gy, z + 0.05)];
-                const bas = [ici(p.x + gx, p.y + gy, z - PONT_EPAISSEUR_M), ici(p.x - gx, p.y - gy, z - PONT_EPAISSEUR_M)];
-                const garde = [ici(p.x + gx, p.y + gy, z + PARAPET_M), ici(p.x - gx, p.y - gy, z + PARAPET_M)];
-                const lat = [-p.uy, 0, -p.ux];   // vers la gauche, en coordonnées de la scène
-                if (prec) {
-                    quad(pont, prec.haut[1], haut[1], haut[0], prec.haut[0], [0, 1, 0], COULEUR_ROUTE);
-                    quad(pont, prec.bas[0], bas[0], bas[1], prec.bas[1], [0, -1, 0], COULEUR_BETON);
-                    quad(pont, prec.haut[0], haut[0], bas[0], prec.bas[0], lat, COULEUR_BETON);
-                    quad(pont, prec.haut[1], haut[1], bas[1], prec.bas[1], [-lat[0], 0, -lat[2]], COULEUR_BETON);
-                    quad(pont, prec.haut[0], haut[0], garde[0], prec.garde[0], lat, COULEUR_BETON);
-                    quad(pont, prec.haut[1], haut[1], garde[1], prec.garde[1], [-lat[0], 0, -lat[2]], COULEUR_BETON);
-                    parcouru += Math.hypot(p.x - pts[i - 1].x, p.y - pts[i - 1].y);
-                }
-                prec = { haut, bas, garde };
-                if (parcouru < pile) continue;
-                pile += PILE_ECART_M;
-                const a = altitudeL93(p.x, p.y);
-                if (!Number.isFinite(a) || z - PONT_EPAISSEUR_M - a < PILE_VIDE_M) continue;
-                // Une pile, un voile de la moitié du tablier, dans l'axe.
-                const e = PILE_EPAISSEUR_M / 2, l = Math.max(w * 0.25, e);
-                const coin = (u, v, alt) => ici(p.x + p.ux * u - p.uy * v, p.y + p.uy * u + p.ux * v, alt);
-                const pied = a - 1, tete = z - PONT_EPAISSEUR_M;
-                const c4 = [[e, l], [e, -l], [-e, -l], [-e, l]];
-                for (let k = 0; k < 4; k++) {
-                    const [u0, w0] = c4[k], [u1, w1] = c4[(k + 1) % 4];
-                    const nu = (u0 + u1) / 2, nv = (w0 + w1) / 2, nl = Math.hypot(nu, nv) || 1;
-                    const nx = (p.ux * nu - p.uy * nv) / nl, ny = (p.uy * nu + p.ux * nv) / nl;
-                    quad(pont, coin(u0, w0, pied), coin(u1, w1, pied), coin(u1, w1, tete), coin(u0, w0, tete),
-                         [nx, 0, -ny], COULEUR_BETON);
-                }
-            }
+            tablier(morceau, largeur + 1, COULEUR_ROUTE, PARAPET_M);
+        }
+    }
+    // Ce qui passe au-dessus de la route : viaducs ferroviaires, métro
+    // aérien, passerelles.
+    for (const r of d.ponts || []) {
+        const w = r.largeur > 0 ? r.largeur : LARGEUR_PASSERELLE[r.nature] || 2.5;
+        for (const morceau of morceaux(r.ligne)) {
+            tablier(morceau, w, r.ferre ? COULEUR_BALLAST : COULEUR_PASSERELLE, r.ferre ? PARAPET_M : GARDE_CORPS_M, r.ferre);
         }
     }
     const groupe = new THREE.Group();

@@ -89,6 +89,37 @@ def test_le_nom_collaboratif_supplee_la_ban():
     assert carres.routes_du_carre(geojson, I, J)[0]["nom"] == "R DE LA CHAUSSEE D'ANTIN"
 
 
+def _voie(cleabs, sommets, **props):
+    return {"type": "Feature", "geometry": {"type": "LineString", "coordinates": sommets},
+            "properties": {"cleabs": cleabs, "etat_de_l_objet": "En service", "nature": "Métro",
+                           "position_par_rapport_au_sol": "1", "nombre_de_voies": 2, "largeur": "Normale",
+                           **props}}
+
+
+def test_les_ponts_sont_ce_que_la_voiture_voit_passer_au_dessus():
+    """Voies ferrées et passerelles au-dessus du sol, entières ; au sol ou
+    dessous, elles ne sont pas dessinées, et une route carrossable sur un
+    pont est déjà dans `routes`."""
+    ligne = [[X0 - 50, Y0 + 10, 39.25], [X0 + 250, Y0 + 260, 41.0]]
+    voies = {"features": [
+        _voie("VIADUC", ligne),
+        _voie("AU_SOL", ligne, position_par_rapport_au_sol="0"),
+        _voie("TUNNEL", ligne, position_par_rapport_au_sol="-1"),
+        _voie("EN_PROJET", ligne, etat_de_l_objet="En projet"),
+        _voie("ETROITE", ligne, nombre_de_voies=1, largeur="Etroite", nature="Voie ferrée principale"),
+    ]}
+    routes = {"features": [
+        _route("PASSERELLE", ligne, nature="Sentier", position_par_rapport_au_sol="1", largeur_de_chaussee=None),
+        _route("SENTIER", ligne, nature="Sentier"),
+        _route("PONT_ROUTIER", ligne, position_par_rapport_au_sol="1"),
+    ]}
+    ponts = carres.ponts_du_carre(voies, routes, I, J)
+    assert [(p["id"], p["ferre"], p["largeur"]) for p in ponts] == \
+        [("VIADUC", True, 8.0), ("ETROITE", True, 3.0), ("PASSERELLE", False, None)]
+    assert ponts[0]["ligne"] == [-500, 100, 392, 2500, 2600, 410]
+    assert (ponts[0]["nature"], ponts[0]["sol"]) == ("Métro", 1)
+
+
 def test_un_carre_se_lit_en_lambert_93(monkeypatch):
     lus = []
 
@@ -99,7 +130,8 @@ def test_un_carre_se_lit_en_lambert_93(monkeypatch):
     monkeypatch.setattr(carres, "lire_couche", lire_couche)
     carre = carres.fetch_carre(I, J)
     assert sorted(lus) == sorted([(c, X0, Y0, X0 + 500, Y0 + 500, SRS_LAMBERT93)
-                                  for c in (carres.COUCHE_BATIMENTS, carres.COUCHE_ROUTES)])
+                                  for c in (carres.COUCHE_BATIMENTS, carres.COUCHE_ROUTES,
+                                            carres.COUCHE_VOIES_FERREES)])
     assert (carre["carre"], carre["origine"], carre["taille"]) == ([I, J], [X0, Y0], 500)
 
 

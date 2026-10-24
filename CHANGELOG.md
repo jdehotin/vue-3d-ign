@@ -15,6 +15,14 @@ messages de commit et dans les commentaires des modules.
 
 ### Ajouté
 
+- **Viaducs ferroviaires, métro aérien et passerelles dans la vue en voiture**
+  (24 octobre 2026). Seuls les ponts que la route emprunte étaient dessinés ;
+  ce qui l'enjambe l'est aussi maintenant, à l'altitude de son tablier : les
+  voies ferrées au-dessus du sol sur leur ballast (le métro aérien du
+  boulevard de Grenelle, 7 à 13 m au-dessus du terrain), et les passerelles,
+  sans piles (la passerelle Simone-de-Beauvoir franchit la Seine d'un bond).
+  Les carrés passent en version 3 : relus à la Géoplateforme à leur première
+  demande, avec les voies ferrées, lues en même temps que le reste.
 - **Les tunnels dans la vue en voiture** (24 octobre 2026). Jusqu'ici, la
   voiture suivait le relief et passait par-dessus la colline ; elle passe
   maintenant dessous. La route souterraine va en ligne droite d'une entrée
