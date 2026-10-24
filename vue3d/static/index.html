@@ -1478,7 +1478,10 @@ document.getElementById('btn-reconstruire').addEventListener('click', async e =>
             return;
         }
         const corps = await r.json().catch(() => ({}));
-        alert(corps.erreur || `Reconstruction impossible (HTTP ${r.status}).`);
+        alert(corps.erreur || ([502, 503, 504].includes(r.status)
+            ? `Reconstruction impossible : le serveur est indisponible (HTTP ${r.status}), `
+              + 'souvent le temps d’un redéploiement. Réessayez dans un instant.'
+            : `Reconstruction impossible (HTTP ${r.status}).`));
     } catch (err) {
         alert(`Reconstruction impossible : ${err.message}`);
     }
