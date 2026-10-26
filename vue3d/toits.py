@@ -778,7 +778,30 @@ SURFACE_ECART_RESUME_M = 0.7
 # des toits gris (≤ 0,11) de 0,3 à 2,6° ; premier toit de tuiles (0,30) à
 # 4,1° ; toits de 14° et plus, médiane 0,24. Entre 4 et 14°, des appentis de
 # tuiles de 15 à 60 m², qui gardent leur résumé.
-TOITS_PLAT_PENTE_DEG = 3.0
+# Le seuil se règle par VUE3D_PENTE_PLAT : en degrés (« 5 »), ou en
+# pourcentage, suffixé (« 8 % ») et converti par la tangente. Muet, il reste
+# celui mesuré ici.
+def _seuil_plat(valeur=None):
+    """Le seuil de pente d'un toit plat, en degrés.
+
+    `valeur` s'écrit comme la variable d'environnement : « 5 » pour cinq
+    degrés, « 8 % » ou « 8% » pour huit pour cent. Illisible, elle rend le
+    seuil mesuré sur le coteau (3°).
+    """
+    if valeur is None:
+        valeur = os.environ.get("VUE3D_PENTE_PLAT", "")
+    texte = str(valeur).strip().replace(",", ".")
+    if not texte:
+        return 3.0
+    try:
+        if texte.endswith("%"):
+            return math.degrees(math.atan(float(texte[:-1]) / 100.0))
+        return float(texte)
+    except (TypeError, ValueError):
+        return 3.0
+
+
+TOITS_PLAT_PENTE_DEG = _seuil_plat()
 # Étendue minimale d'un pan plat dans sa direction la plus étroite
 # (écart-type des centres de ses cellules ; environ 3,5 m de large). Sur une
 # annexe de 2,5 m de large, une fois écartées les cellules à moins de

@@ -2,6 +2,7 @@
 import math
 
 import numpy as np
+import pytest
 from shapely.geometry import box, Point
 
 from vue3d.toits import profil_toit, TOITS_MIN_CELLULES
@@ -647,3 +648,25 @@ def test_un_toit_a_deux_pans_proche_du_resume_garde_son_resume():
                            grille, None)["toits"]["MAISON"]
     assert t["fiable"] and t["ecart_resume"] <= SURFACE_ECART_RESUME_M
     assert "pans" not in t and "surface" not in t
+
+
+# --- Le seuil de toit plat, réglé par VUE3D_PENTE_PLAT -----------------------
+
+def test_le_seuil_de_toit_plat_se_dit_en_degres_ou_en_pour_cent():
+    """« 5 » vaut cinq degrés ; « 8 % » la tangente de huit pour cent, 4,57°."""
+    from vue3d.toits import _seuil_plat
+    assert _seuil_plat("5") == 5.0
+    assert _seuil_plat(" 4,5 ") == 4.5
+    assert _seuil_plat("8 %") == pytest.approx(4.574, abs=1e-3)
+    assert _seuil_plat("8%") == pytest.approx(4.574, abs=1e-3)
+
+
+def test_sans_variable_le_seuil_de_toit_plat_reste_celui_du_coteau(monkeypatch):
+    """Muet, illisible ou vide : les 3° mesurés sur les toits de Gordes."""
+    from vue3d.toits import _seuil_plat
+    monkeypatch.delenv("VUE3D_PENTE_PLAT", raising=False)
+    assert _seuil_plat() == 3.0
+    assert _seuil_plat("") == 3.0
+    assert _seuil_plat("pentu") == 3.0
+    monkeypatch.setenv("VUE3D_PENTE_PLAT", "12")
+    assert _seuil_plat() == 12.0
