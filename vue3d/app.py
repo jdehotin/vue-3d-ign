@@ -309,6 +309,35 @@ def _dossier_du_projet(session, entetes, origine, racine, dossier):
     return parent
 
 
+def lister_dossiers(session, entetes, projet, parent=""):
+    """Les sous-dossiers de `parent` (identifiant ; vide : la racine du projet).
+
+    Sert au sélecteur de dossier de la page, qui déplie l'arborescence un
+    niveau à la fois : un projet compte vite des milliers de dossiers, que
+    personne ne lit d'un coup.
+
+    Returns:
+        [{"id": …, "name": …}], triés par nom sans tenir compte de la casse.
+
+    Raises:
+        DepotRefuse: projet introuvable, ou Connect n'a pas listé le dossier.
+    """
+    origine, fiche = origine_projet(session, entetes, projet)
+    parent = parent or fiche.get("rootId") or projet
+    reponse = session.get(f"{origine}/tc/api/2.1/folders/{parent}/items",
+                          headers=entetes, timeout=30,
+                          params={"objectTypes": "FOLDER", "pageSize": 500})
+    if reponse.status_code != 200:
+        raise DepotRefuse(
+            f"Trimble Connect n'a pas listé le dossier ({reponse.status_code}).", 502)
+    contenu = _donnees(reponse)
+    items = contenu.get("items", []) if isinstance(contenu, dict) else contenu
+    dossiers = [{"id": i["id"], "name": str(i.get("name", ""))}
+                for i in items or []
+                if str(i.get("type", "")).upper() == "FOLDER" and i.get("id")]
+    return sorted(dossiers, key=lambda d: d["name"].casefold())
+
+
 def _deposer_dans_projet(jeton, projet, nom, donnees, dossier, session):
     """Les trois temps du dépôt, dans `dossier` (vide : la racine)."""
     session = session or requests.Session()
@@ -904,6 +933,35 @@ def creer_app(dossier_cache=None, construire=construire_scene, lire_monuments=fe
         reponse = jsonify({"etat": "a_reconstruire"})
         reponse.headers["Cache-Control"] = "no-store"
         return reponse, 202
+
+    @app.get("/api/connect/dossiers")
+    def connect_dossiers():
+        """Les sous-dossiers d'un dossier du projet Trimble Connect.
+
+        `parent` : identifiant du dossier ; absent, la racine du projet. Même
+        jeton, même règle que le dépôt : il passe ici sans être gardé.
+        """
+        jeton = (request.headers.get("Authorization") or "").strip()
+        if len(jeton) < 20:
+            return erreur(401, "Jeton Trimble Connect manquant.")
+        if not jeton.lower().startswith("bearer "):
+            jeton = f"Bearer {jeton}"
+        projet = request.args.get("projet", "").strip()
+        parent = request.args.get("parent", "").strip()
+        if not all(v and len(v) <= 64 and all(c.isalnum() or c in "-_" for c in v)
+                   for v in ([projet] + ([parent] if parent else []))):
+            return erreur(400, "Projet ou dossier Trimble Connect invalide.")
+        try:
+            entetes = {"Authorization": jeton, "Accept": "application/json"}
+            dossiers = lister_dossiers(requests.Session(), entetes, projet, parent)
+        except DepotRefuse as exc:
+            return erreur(exc.code, str(exc))
+        except (requests.RequestException, KeyError, ValueError) as exc:
+            app.logger.warning("Liste des dossiers Connect impossible (%s) : %s", projet, exc)
+            return erreur(503, "Trimble Connect n'a pas répondu.")
+        reponse = jsonify({"dossiers": dossiers})
+        reponse.headers["Cache-Control"] = "no-store"
+        return reponse
 
     @app.post("/api/connect/fichier")
     def connect_fichier():

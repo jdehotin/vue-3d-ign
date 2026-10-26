@@ -11,6 +11,15 @@ Les plus récents en premier. Les chiffres cités sont ceux mesurés au moment d
 changement, sur des lieux publics ; le détail et la méthode sont dans les
 messages de commit et dans les commentaires des modules.
 
+## Scène v16 — 26 octobre 2026
+
+- **Export vers Trimble Connect** : le jeton envoyé par l'extension est capté
+  dès le chargement de la page (le module de la scène, lancé au clic, le
+  manquait et « Enregistrer dans le projet » restait caché). Un bouton « Parcourir
+  les dossiers du projet… » lit l'arborescence par `GET /api/connect/dossiers`,
+  un niveau à la fois, et remplit le champ du dossier. Le nom du fichier, pris
+  aussi pour le CityGML, reçoit le focus à l'ouverture de la fenêtre.
+
 ## Scène v16 — 21 octobre 2026
 
 ### Ajouté

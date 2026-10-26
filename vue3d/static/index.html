@@ -105,6 +105,13 @@
         }
     </style>
     <style>
+        #export-arbo { max-height:180px; overflow:auto; margin:4px 0; padding:4px; background:#161a1e; border:1px solid #3a4148; border-radius:4px; font-size:12px; }
+        #export-arbo ul { list-style:none; margin:0; padding-left:14px; }
+        #export-arbo > ul { padding-left:0; }
+        #export-arbo button { background:none; border:0; color:#e8eaed; cursor:pointer; font:inherit; padding:2px 4px; text-align:left; }
+        #export-arbo .arbo-nom:hover, #export-arbo .arbo-nom.on { background:#2d4a6b; border-radius:3px; }
+        #export-arbo .arbo-plie { width:18px; color:#9aa4ad; }
+        #export-arbo .arbo-note { color:#9aa4ad; padding:2px 4px; }
         :root { --accent:#e07b00; --panel:#1f2328; --panel-soft:#2b3138;
                 --text:#e8eaed; --muted:#9aa0a6; --line:#3a4149; }
         * { box-sizing: border-box; }
@@ -168,6 +175,7 @@
         .lien-ext:hover { border-color:var(--accent); }
         button.lien-ext { background:none; font-family:inherit; cursor:pointer; margin-right:4px; }
         button.lien-ext:disabled { color:var(--muted); cursor:wait; }
+        button.lien-ext[hidden] { display:none; }
         /* min-width et le canvas hors du flux : sinon la vue gardait la
            largeur de son canvas et débordait de l'écran, boussole et crédits
            coupés (iPhone en paysage, 600 px de vue pour 544 de place). */
@@ -457,6 +465,27 @@
         window.majTiroir();
         petit.addEventListener('change', window.majTiroir);
     })();
+    // Le jeton Trimble Connect, reçu dès le chargement : l'extension le poste
+    // une fois la page ouverte, mais le module de la scène ne s'exécute qu'au
+    // clic sur « Ouvrir la Vue 3D IGN » — son écouteur arrivait trop tard et le
+    // bouton « Enregistrer dans le projet » restait caché. Gardé ici, il est
+    // relu par le module, qui écoute en plus l'événement 'vue3d-auth'.
+    (() => {
+        const ORIGINE_EXTENSION = 'https://vue3d-trimble-connect.netlify.app';
+        window.addEventListener('message', (evenement) => {
+            if (evenement.origin !== ORIGINE_EXTENSION) return;
+            const d = evenement.data;
+            if (!d || d.type !== 'vue3d-auth' || !d.token || !d.projet) return;
+            window.tcAuthRecu = { token: d.token, projet: d.projet, nom: d.projetNom || '' };
+            window.dispatchEvent(new Event('vue3d-auth'));
+        });
+        // Une extension qui n'a pas encore envoyé son jeton le fait à ce signal.
+        for (const hote of [window.parent, window.opener]) {
+            if (hote && hote !== window) {
+                try { hote.postMessage({ type: 'vue3d-pret' }, ORIGINE_EXTENSION); } catch (e) { /* hôte fermé */ }
+            }
+        }
+    })();
     </script>
 </head>
 <body>
@@ -649,7 +678,7 @@
         <div class="section">
             <h2>Export BIM</h2>
             <button type="button" class="lien-ext" id="btn-reglages-export"
-                    title="Cocher les couches du fichier, choisir son format et son dossier.">⚙ Couches et dossier…</button>
+                    title="Choisir le nom du fichier, ses couches, son format et son dossier Trimble Connect.">⚙ Nom, couches et dossier…</button>
             <button type="button" class="lien-ext" id="btn-ifc" data-format="ifc"
                     title="Pour Revit, ArchiCAD, Vectorworks, Allplan… Écrit tout de suite, avec les couches cochées.">⬇ IFC 4</button>
             <button type="button" class="lien-ext" id="btn-citygml" data-format="citygml"
@@ -886,7 +915,7 @@
                         <button type="button" role="radio" aria-checked="false"
                                 data-export-format="citygml">CityGML 2.0 <span>· SIG</span></button>
                     </div>
-                    <div class="sous-titre">Nom du fichier IFC</div>
+                    <div class="sous-titre">Nom du fichier</div>
                     <label class="zone">
                         <input type="text" id="export-nom-fichier" style="width:100%; background:#161a1e; color:#e8eaed; border:1px solid #3a4148; border-radius:4px; padding:4px 6px; font-size:12px;" />
                     </label>
@@ -894,6 +923,9 @@
                     <label class="zone">
                         <input type="text" id="export-dossier" style="width:100%; background:#161a1e; color:#e8eaed; border:1px solid #3a4148; border-radius:4px; padding:4px 6px; font-size:12px;" />
                     </label>
+                    <button type="button" class="lien-ext" id="export-parcourir" hidden
+                            title="Lire l'arborescence des dossiers du projet Trimble Connect et y choisir celui qui recevra le fichier.">📁 Parcourir les dossiers du projet…</button>
+                    <div id="export-arbo" hidden></div>
                     <div class="sous-titre">Projection</div>
                     <label class="zone" title="Le repère des coordonnées écrites, et celui que le fichier
 déclare. Lambert-93 est celui de la BD TOPO et de la vue ; les CC servent aux grands
@@ -11147,12 +11179,12 @@ function etatCouchesExport() {
 const fenetreExport = document.getElementById('export-dialogue');
 const boutonsFenetre = ['btn-export-telecharger', 'btn-export-enregistrer', 'btn-export-projet']
     .map(id => document.getElementById(id));
-// Les deux champs libres de l'export : le nom du fichier IFC — « <projet> +
+// Les deux champs libres de l'export : le nom du fichier — « <projet> +
 // Ign3D.ifc », le projet venant de ?projet= — et le dossier Trimble Connect
 // où le déposer. Le nom garde son extension : on la retire à l'usage.
 const champNomIfc = document.getElementById('export-nom-fichier');
 const champDossier = document.getElementById('export-dossier');
-champNomIfc.value = NOM_FICHIER_IFC_DEFAUT;
+champNomIfc.value = NOM_FICHIER_IFC_DEFAUT.replace(/\.ifc$/i, '');
 champDossier.value = '/10_REFERENCES/13_DONNEES_ENTREES';
 // La fenêtre d'enregistrement du système n'existe que sur Chromium, et en
 // contexte sûr (https ou localhost) : ailleurs, « Enregistrer sous… » disparaît
@@ -11163,24 +11195,109 @@ if (!window.showSaveFilePicker) document.getElementById('btn-export-enregistrer'
 // La page est servie par ce serveur, l'extension par Netlify : seul un
 // postMessage peut porter le jeton. Elle ne l'accepte que de cette origine, et
 // ne le renvoie qu'à son propre serveur — jamais à un tiers.
-const ORIGINE_EXTENSION = 'https://vue3d-trimble-connect.netlify.app';
 const boutonProjet = document.getElementById('btn-export-projet');
 const tcStatut = document.getElementById('tc-auth-status');
+const boutonParcourir = document.getElementById('export-parcourir');
+const arboDossiers = document.getElementById('export-arbo');
 let tcAuth = null;
 
-window.addEventListener('message', (evenement) => {
-    if (evenement.origin !== ORIGINE_EXTENSION) return;
-    const donnees = evenement.data;
-    if (!donnees || donnees.type !== 'vue3d-auth' || !donnees.token || !donnees.projet) return;
-    tcAuth = { token: donnees.token, projet: donnees.projet, nom: donnees.projetNom || '' };
+// Le jeton est capté par le script de l'en-tête, avant le module : ici on le
+// relit s'il est déjà là, et on écoute l'événement s'il vient après.
+function adopterAuth() {
+    if (!window.tcAuthRecu) return;
+    tcAuth = window.tcAuthRecu;
     boutonProjet.hidden = false;
+    boutonParcourir.hidden = false;
     tcStatut.hidden = false;
     tcStatut.textContent = `Trimble Connect : connecté${tcAuth.nom ? ' au projet ' + tcAuth.nom : ''}.`;
+}
+window.addEventListener('vue3d-auth', adopterAuth);
+adopterAuth();
+
+// --- Le sélecteur de dossier : l'arborescence du projet, un niveau à la fois ---
+/** Les sous-dossiers de `parent` (vide : la racine), lus par ce serveur. */
+async function dossiersDe(parent) {
+    const reponse = await fetch(`/api/connect/dossiers?projet=${encodeURIComponent(tcAuth.projet)}`
+        + (parent ? `&parent=${encodeURIComponent(parent)}` : ''),
+        { headers: { Authorization: `Bearer ${tcAuth.token}` } });
+    const resultat = await reponse.json().catch(() => ({}));
+    if (!reponse.ok) throw new Error(resultat.erreur || `Trimble Connect a refusé la liste (${reponse.status}).`);
+    return resultat.dossiers || [];
+}
+
+/** Remplit `liste` des dossiers de `parent` ; chaque ligne se déplie au clic sur
+ *  ▸ et se choisit au clic sur son nom, qui écrit son chemin dans le champ. */
+async function remplirArbo(liste, parent, chemin) {
+    liste.textContent = '';
+    const note = document.createElement('li');
+    note.className = 'arbo-note';
+    note.textContent = 'Lecture des dossiers…';
+    liste.append(note);
+    let dossiers;
+    try {
+        dossiers = await dossiersDe(parent);
+    } catch (err) {
+        note.textContent = err.message;
+        return;
+    }
+    liste.textContent = '';
+    if (!dossiers.length) {
+        note.textContent = 'Aucun sous-dossier.';
+        liste.append(note);
+        return;
+    }
+    for (const d of dossiers) {
+        const ici = `${chemin}/${d.name}`;
+        const ligne = document.createElement('li');
+        const plie = document.createElement('button');
+        plie.type = 'button';
+        plie.className = 'arbo-plie';
+        plie.textContent = '▸';
+        plie.setAttribute('aria-label', `Déplier ${d.name}`);
+        const nom = document.createElement('button');
+        nom.type = 'button';
+        nom.className = 'arbo-nom';
+        nom.textContent = d.name;
+        const fils = document.createElement('ul');
+        fils.hidden = true;
+        let lu = false;
+        plie.addEventListener('click', async () => {
+            fils.hidden = !fils.hidden;
+            plie.textContent = fils.hidden ? '▸' : '▾';
+            if (!fils.hidden && !lu) { lu = true; await remplirArbo(fils, d.id, ici); }
+        });
+        nom.addEventListener('click', () => {
+            champDossier.value = ici;
+            for (const x of arboDossiers.querySelectorAll('.arbo-nom.on')) x.classList.remove('on');
+            nom.classList.add('on');
+        });
+        ligne.append(plie, nom, fils);
+        liste.append(ligne);
+    }
+}
+
+boutonParcourir.addEventListener('click', async () => {
+    if (!tcAuth) return;
+    arboDossiers.hidden = !arboDossiers.hidden;
+    if (arboDossiers.hidden || arboDossiers.dataset.lu) return;
+    arboDossiers.dataset.lu = '1';
+    const racine = document.createElement('ul');
+    const choisir = document.createElement('button');
+    choisir.type = 'button';
+    choisir.className = 'arbo-nom';
+    choisir.textContent = '/ (racine du projet)';
+    choisir.addEventListener('click', () => { champDossier.value = ''; });
+    arboDossiers.replaceChildren(choisir, racine);
+    await remplirArbo(racine, '', '');
+    // Une erreur de lecture se retente à la prochaine ouverture.
+    if (racine.querySelector('.arbo-note')) delete arboDossiers.dataset.lu;
 });
 
 document.getElementById('btn-reglages-export').addEventListener('click', () => {
     etatCouchesExport();
     fenetreExport.showModal();
+    champNomIfc.focus();
+    champNomIfc.select();
 });
 
 let formatExport = 'ifc';
@@ -11224,10 +11341,8 @@ function resumeExport(modele, choix) {
  *  doit le proposer avant le calcul. Même formule que `modeleExport().base`,
  *  que reprend outils/essai-navigateur.mjs. */
 const nomFichierExport = () => {
-    if (formatExport === 'ifc') {
-        const voulu = champNomIfc.value.trim().replace(/\.ifc$/i, '');
-        if (voulu) return voulu;
-    }
+    const voulu = champNomIfc.value.trim().replace(/\.(ifc|gml)$/i, '');
+    if (voulu) return voulu;
     return `vue3d-${LAT0}-${LON0}-z${ZONE}`;
 };
 

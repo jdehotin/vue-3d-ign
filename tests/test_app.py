@@ -777,6 +777,27 @@ def test_le_depot_du_fichier_suit_le_dossier_demande(client, monkeypatch):
     assert vus == {"dossier": "/10_REFERENCES/13_DONNEES_ENTREES", "nom": "a.ifc"}
 
 
+def test_les_dossiers_se_listent_un_niveau_a_la_fois_sans_les_fichiers():
+    session = _Arborescence()
+    racine = module_app.lister_dossiers(session, {}, "vK4pJn9BUh4")
+    assert racine == [{"id": "refs", "name": "10_REFERENCES"}]
+    sous = module_app.lister_dossiers(session, {}, "vK4pJn9BUh4", "refs")
+    # Triés sans tenir compte de la casse ; « modele.ifc » n'est pas un dossier.
+    assert [d["name"] for d in sous] == ["13_DONNEES_ENTREES", "Autres"]
+    assert module_app.lister_dossiers(session, {}, "vK4pJn9BUh4", "donnees") == []
+
+
+def test_la_route_des_dossiers_exige_jeton_et_identifiants_sains(client, monkeypatch):
+    assert client.get("/api/connect/dossiers?projet=vK4pJn9BUh4").status_code == 401
+    entete = {"Authorization": "Bearer " + "j" * 40}
+    assert client.get("/api/connect/dossiers?projet=vK4pJn9BUh4&parent=../x",
+                      headers=entete).status_code == 400
+    monkeypatch.setattr(module_app, "lister_dossiers",
+                        lambda session, entetes, projet, parent="": [{"id": "a", "name": "A"}])
+    r = client.get("/api/connect/dossiers?projet=vK4pJn9BUh4", headers=entete)
+    assert r.status_code == 200 and r.get_json() == {"dossiers": [{"id": "a", "name": "A"}]}
+
+
 # --- L'emprise d'un projet, lue dans sa fiche ---------------------------------
 
 class _Projet(_Session):
