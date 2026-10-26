@@ -39,6 +39,12 @@ Les arbres, ensuite. Mesuré sur un terrain boisé du sud de la France :
 """
 
 import concurrent.futures
+# Importé ici, dans le fil principal : `concurrent.futures.ProcessPoolExecutor`
+# ne se charge sinon qu'au premier accès, et deux fils qui y accèdent ensemble
+# (lectures de la scène, bassin lancé au démarrage) voient le second
+# « cannot import name 'ProcessPoolExecutor' from partially initialized
+# module » — vu sur Render (Python 3.12), le bassin tombait alors en repli.
+import concurrent.futures.process  # noqa: F401
 import logging
 import math
 import multiprocessing
