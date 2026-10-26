@@ -65,6 +65,35 @@ def analyser(valeur):
     return [_coordonnees(m) for m in morceaux]
 
 
+def _rectangle_remis_en_ordre(points):
+    """Les quatre coins d'une boîte lus en zigzag (SO, SE, NO, NE) deviennent
+    le tour de la boîte, sinon ils dessinent un « huit » que le contour refuse.
+
+    C'est l'ordre d'un lecteur qui énumère « minLat/minLon, minLat/maxLon,
+    maxLat/minLon, maxLat/maxLon » — celui de l'emprise d'un projet Connect
+    selon l'appelant. Seuls les quatre coins exacts d'une boîte sont remis en
+    ordre : l'intention est sans ambiguïté et la surface ne change pas. Tout
+    autre contour croisé reste refusé.
+    """
+    if len(points) != 4:
+        return points
+    lats = sorted({p[0] for p in points})
+    lons = sorted({p[1] for p in points})
+    if len(lats) != 2 or len(lons) != 2 or len(set(points)) != 4:
+        return points
+    (s, n), (o, e) = lats, lons
+    if _est_tour(points):
+        return points
+    return [(s, o), (s, e), (n, e), (n, o)]
+
+
+def _est_tour(points):
+    """Vrai si les quatre sommets se suivent le long d'un tour : deux côtés
+    consécutifs ne sont jamais une diagonale."""
+    return all(points[i][0] == points[(i + 1) % 4][0]
+               or points[i][1] == points[(i + 1) % 4][1] for i in range(4))
+
+
 class Polygone:
     """Contour fermé (lat, lon) : emprise, découpe et appartenance.
 
@@ -88,6 +117,7 @@ class Polygone:
         if len(points) < SOMMETS_MIN:
             raise ValueError(f"un contour a au moins {SOMMETS_MIN} sommets, "
                              f"reçu {len(points)}")
+        points = _rectangle_remis_en_ordre(points)
         self.sommets = tuple(points)
         lats = [p[0] for p in points]
         lons = [p[1] for p in points]

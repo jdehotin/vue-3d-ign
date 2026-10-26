@@ -82,6 +82,16 @@ def test_un_contour_mal_forme_est_refuse(brute):
         Polygone(analyser(brute))
 
 
+def test_les_quatre_coins_d_une_boite_en_zigzag_redeviennent_le_tour():
+    """SO, SE, NO, NE : l'ordre d'une énumération minLat/maxLat — un « huit » —
+    se lit comme la boîte, même surface ; un vrai « huit » reste refusé."""
+    zigzag = Polygone(analyser("43.90,5.19;43.90,5.21;43.92,5.19;43.92,5.21"))
+    tour = Polygone(analyser("43.90,5.19;43.90,5.21;43.92,5.21;43.92,5.19"))
+    assert zigzag == tour and zigzag.aire_m2 == tour.aire_m2
+    with pytest.raises(ValueError):
+        Polygone(analyser("43.90,5.19;43.92,5.21;43.92,5.19;43.905,5.21"))
+
+
 def test_l_aire_du_contour_est_celle_de_shapely():
     """L'aire du lacet sur les sommets projetés vaut celle du polygone en
     mètres : c'est elle qui est annoncée à l'utilisateur (10 km² conseillés)."""
