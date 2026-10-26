@@ -10,6 +10,100 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="theme-color" content="#1f2328" />
     <title>Vue 3D IGN</title>
+    <!-- L'accueil : la carte du site, avant que la scène ne se construise.
+         Leaflet, lui, ne sert qu'à cette carte. -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style id="accueil-style">
+        /* L'accueil couvre la page tant que la scène n'est pas demandée : la
+           recherche y déplace la carte seule, jamais la vue 3D. */
+        #accueil { position:fixed; inset:0; z-index:900; display:flex; align-items:center; justify-content:center;
+                   padding:clamp(0px, 2.2vw, 26px);
+                   background:radial-gradient(120% 120% at 15% 0%, #1b2127 0%, #101317 55%, #0b0d0f 100%);
+                   color:var(--text, #e8eaed);
+                   font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                   transition:opacity .35s ease; }
+        #accueil.cache { opacity:0; pointer-events:none; }
+        #accueil[hidden] { display:none; }
+        .accueil-carte { display:flex; flex-direction:column; width:min(1340px, 100%); height:min(880px, 100%);
+                         overflow:hidden; background:var(--panel, #1f2328);
+                         border:1px solid var(--line, #3a4149); border-radius:16px;
+                         box-shadow:0 30px 90px rgba(0,0,0,.6); }
+        .accueil-tete { display:flex; align-items:center; gap:12px; padding:14px 18px;
+                        border-bottom:1px solid var(--line, #3a4149); }
+        .accueil-logo { display:grid; place-items:center; width:38px; height:38px; border-radius:10px;
+                        background:linear-gradient(145deg, #e07b00, #b35f00); color:#fff; font-size:19px; }
+        .accueil-tete h1 { margin:0; font-size:16px; font-weight:600; letter-spacing:.2px; }
+        .accueil-tete p { margin:2px 0 0; font-size:12px; color:var(--muted, #9aa0a6); }
+        .accueil-badge { margin-left:auto; padding:4px 10px; border:1px solid var(--line, #3a4149);
+                         border-radius:999px; font-size:10px; letter-spacing:.9px; text-transform:uppercase;
+                         color:var(--muted, #9aa0a6); white-space:nowrap; }
+        .accueil-corps { display:flex; flex:1; min-height:0; }
+        .accueil-panneau { display:flex; flex-direction:column; gap:14px; width:372px; flex:0 0 372px;
+                           padding:18px; overflow-y:auto; border-right:1px solid var(--line, #3a4149); }
+        .accueil-titre { display:block; margin-bottom:7px; font-size:10.5px; letter-spacing:.9px;
+                         text-transform:uppercase; color:var(--muted, #9aa0a6); }
+        .accueil-recherche { position:relative; }
+        .accueil-recherche input { width:100%; padding:10px 34px 10px 12px; border-radius:9px;
+                                   border:1px solid var(--line, #3a4149); background:#15191d;
+                                   color:var(--text, #e8eaed); font-size:13px; outline:none; }
+        .accueil-recherche input:focus { border-color:var(--accent, #e07b00);
+                                         box-shadow:0 0 0 3px rgba(224,123,0,.18); }
+        .accueil-effacer { position:absolute; right:5px; top:50%; transform:translateY(-50%);
+                           border:0; background:none; color:var(--muted, #9aa0a6);
+                           font-size:18px; line-height:1; padding:2px 6px; cursor:pointer; }
+        .accueil-suggestions { list-style:none; margin:6px 0 0; padding:4px; max-height:230px; overflow-y:auto;
+                               background:#15191d; border:1px solid var(--line, #3a4149); border-radius:9px; }
+        .accueil-suggestions li { padding:7px 9px; border-radius:6px; font-size:13px; cursor:pointer; }
+        .accueil-suggestions li:hover, .accueil-suggestions li.actif { background:#252b32; }
+        .accueil-suggestions small { display:block; margin-top:2px; font-size:11px; color:var(--muted, #9aa0a6); }
+        .accueil-zones { display:flex; flex-wrap:wrap; gap:6px; }
+        .accueil-zones button { padding:7px 10px; border-radius:8px; border:1px solid var(--line, #3a4149);
+                                background:#1a1f24; color:var(--text, #e8eaed); font-size:12px; cursor:pointer; }
+        .accueil-zones button:hover { border-color:#4d5866; }
+        .accueil-zones button.on { background:rgba(224,123,0,.16); border-color:var(--accent, #e07b00);
+                                   color:#ffcf8a; }
+        .accueil-aide { margin:8px 0 0; font-size:12px; line-height:1.45; color:var(--muted, #9aa0a6); }
+        .accueil-dessin { display:flex; gap:6px; }
+        .accueil-dessin button { flex:1; padding:8px 10px; border-radius:8px; font-size:12px; cursor:pointer;
+                                 border:1px solid var(--accent, #e07b00); color:#ffcf8a;
+                                 background:rgba(224,123,0,.16); }
+        .accueil-dessin button:disabled { opacity:.45; cursor:default; }
+        .accueil-mesures { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin:0; }
+        .accueil-mesures div { padding:9px 11px; border-radius:9px; background:#1a1f24;
+                               border:1px solid var(--line, #3a4149); }
+        .accueil-mesures dt { font-size:9.5px; letter-spacing:.7px; text-transform:uppercase;
+                              color:var(--muted, #9aa0a6); }
+        .accueil-mesures dd { margin:3px 0 0; font-size:12.5px; font-variant-numeric:tabular-nums; }
+        .accueil-actions { display:flex; flex-direction:column; gap:8px; margin-top:auto; }
+        .accueil-actions button { padding:11px 14px; border-radius:9px; font-size:13.5px; cursor:pointer;
+                                  border:1px solid var(--line, #3a4149); background:#1a1f24; color:var(--text, #e8eaed); }
+        .accueil-actions button.secondaire:hover { background:#232a31; }
+        .accueil-actions .principal { border:0; font-weight:600; color:#fff;
+                                      background:linear-gradient(140deg, #f08a08, #c96a00); }
+        .accueil-actions .principal:hover { filter:brightness(1.08); }
+        .accueil-actions button:disabled { opacity:.6; cursor:wait; }
+        .accueil-mention { margin:0; font-size:11px; line-height:1.45; color:var(--muted, #9aa0a6); }
+        #accueil-map { flex:1; min-width:0; min-height:260px; background:#0f1216; }
+        .accueil-punaise { background:none; border:0; }
+        .leaflet-container { font:inherit; background:#0f1216; }
+        .leaflet-control-attribution { background:rgba(15,18,22,.8) !important;
+                                       color:#9aa0a6 !important; font-size:10px !important; }
+        .leaflet-control-attribution a { color:#c0c6cc !important; }
+        .leaflet-bar a { background:#1f2328 !important; color:#e8eaed !important;
+                         border-color:#3a4149 !important; }
+        @media (max-width: 820px) {
+            #accueil { padding:0; }
+            .accueil-carte { height:100%; border:0; border-radius:0; }
+            .accueil-tete { padding:10px 12px; }
+            .accueil-badge { display:none; }
+            .accueil-corps { flex-direction:column-reverse; }
+            .accueil-panneau { width:auto; flex:0 0 auto; max-height:58%; padding:12px;
+                               border-right:0; border-top:1px solid var(--line, #3a4149); }
+            #accueil-map { flex:1; min-height:42%; }
+            .accueil-actions { margin-top:8px; }
+        }
+    </style>
     <style>
         :root { --accent:#e07b00; --panel:#1f2328; --panel-soft:#2b3138;
                 --text:#e8eaed; --muted:#9aa0a6; --line:#3a4149; }
@@ -366,6 +460,61 @@
     </script>
 </head>
 <body>
+<!-- L'accueil : le choix du site sur une carte, avant la scène. La recherche
+     n'y déplace que la carte ; la vue 3D ne part qu'au clic sur « Ouvrir ». -->
+<div id="accueil">
+    <div class="accueil-carte">
+        <header class="accueil-tete">
+            <div class="accueil-logo">◈</div>
+            <div>
+                <h1>Vue 3D IGN</h1>
+                <p id="accueil-projet">Projet</p>
+            </div>
+            <span class="accueil-badge">Choix du site</span>
+        </header>
+        <div class="accueil-corps">
+            <aside class="accueil-panneau">
+                <label>
+                    <span class="accueil-titre">Adresse, lieu ou coordonnées</span>
+                    <div class="accueil-recherche">
+                        <input id="accueil-recherche" type="search" autocomplete="off" spellcheck="false"
+                               placeholder="Tour Eiffel, 75007…"
+                               aria-label="Adresse, lieu ou coordonnées" />
+                        <button type="button" class="accueil-effacer" id="accueil-effacer"
+                                aria-label="Effacer">×</button>
+                    </div>
+                </label>
+                <ul class="accueil-suggestions" id="accueil-suggestions" role="listbox" hidden></ul>
+                <div>
+                    <span class="accueil-titre">Emprise du projet</span>
+                    <div class="accueil-zones" role="radiogroup" aria-label="Taille de l'emprise">
+                        <button type="button" data-zone="350">350 m</button>
+                        <button type="button" data-zone="500">500 m</button>
+                        <button type="button" data-zone="700">700 m</button>
+                        <button type="button" data-zone="1000" class="on">1 000 m</button>
+                        <button type="button" data-zone="dessin" id="accueil-dessiner">✎ Dessiner</button>
+                    </div>
+                    <p class="accueil-aide" id="accueil-aide"></p>
+                    <div class="accueil-dessin" id="accueil-dessin-actions" hidden>
+                        <button type="button" id="accueil-valider" disabled>Valider le contour</button>
+                        <button type="button" id="accueil-annuler">Annuler</button>
+                    </div>
+                </div>
+                <dl class="accueil-mesures">
+                    <div><dt>Centre</dt><dd id="accueil-coord">—</dd></div>
+                    <div><dt>Surface</dt><dd id="accueil-surface">—</dd></div>
+                </dl>
+                <div class="accueil-actions">
+                    <button type="button" class="secondaire" id="accueil-position">Ma position</button>
+                    <button type="button" class="principal" id="accueil-ouvrir">Ouvrir la Vue 3D IGN →</button>
+                </div>
+                <p class="accueil-mention">La vue 3D ne se construit qu'au clic : la carte ne charge que ses tuiles.</p>
+            </aside>
+            <div id="accueil-map" role="application" aria-label="Carte de choix du site"></div>
+        </div>
+    </div>
+</div>
+
 <div id="app">
     <div id="panel">
         <header>
@@ -737,6 +886,14 @@
                         <button type="button" role="radio" aria-checked="false"
                                 data-export-format="citygml">CityGML 2.0 <span>· SIG</span></button>
                     </div>
+                    <div class="sous-titre">Nom du fichier IFC</div>
+                    <label class="zone">
+                        <input type="text" id="export-nom-fichier" style="width:100%; background:#161a1e; color:#e8eaed; border:1px solid #3a4148; border-radius:4px; padding:4px 6px; font-size:12px;" />
+                    </label>
+                    <div class="sous-titre">Dossier Trimble Connect</div>
+                    <label class="zone">
+                        <input type="text" id="export-dossier" style="width:100%; background:#161a1e; color:#e8eaed; border:1px solid #3a4148; border-radius:4px; padding:4px 6px; font-size:12px;" />
+                    </label>
                     <div class="sous-titre">Projection</div>
                     <label class="zone" title="Le repère des coordonnées écrites, et celui que le fichier
 déclare. Lambert-93 est celui de la BD TOPO et de la vue ; les CC servent aux grands
@@ -754,7 +911,7 @@ la géométrie y est à 600 km de l'origine. Sans effet sur le CityGML, toujours
 coordonnées absolues.">
                         <select id="export-ancrage">
                             <option value="origine">Origine locale · Revit, ArchiCAD, Bonsai</option>
-                            <option value="site">Coordonnées absolues · Trimble Connect, SIG</option>
+                            <option value="site" selected>Coordonnées absolues · Trimble Connect, SIG</option>
                         </select>
                     </label>
                     <div class="note" id="export-note">Un à quelques Mo, écrit par le
@@ -889,13 +1046,408 @@ coordonnées absolues.">
         });
     }
 
-    const params = new URLSearchParams(location.search);
-    if (lire(params, 'lat') !== null && lire(params, 'lon') !== null) {
+    // La scène n'est plus demandée au chargement : l'accueil attend le clic
+    // sur « Ouvrir la Vue 3D IGN », qui écrit le point et l'emprise dans
+    // l'URL puis appelle DEMARRER_VUE3D(). Le module, plus bas, attend PRET,
+    // et n'est lui-même appelé qu'à ce clic : three.js ne se télécharge pas
+    // avant. Un lien direct avec ?lat=…&lon=… (partage, historique) passe
+    // aussi par l'accueil, où la carte montre déjà ce point.
+    let resoudrePret;
+    window.PRET = new Promise(resoudre => { resoudrePret = resoudre; });
+    window.DEMARRER_VUE3D = () => {
         demanderScene();
         window.DEPART = Promise.resolve({});
-    } else {
-        window.DEPART = positionDeDepart().then(depart => { demanderScene(); return depart; });
+        resoudrePret();
+    };
+    // « Ma position », sur l'accueil : la demande d'autrefois, qui écrit la
+    // position dans l'URL (moi=1, pour que le repère la suive).
+    window.POSITION_DEPART = positionDeDepart;
+})();
+</script>
+<script>
+// --- L'accueil : le choix du site sur la carte ---------------------------------
+// Rien ici ne demande la scène : la recherche et les clics ne déplacent que la
+// carte. « Ouvrir la Vue 3D IGN » écrit le point et l'emprise dans l'URL, puis
+// réveille le module (DEMARRER_VUE3D + demarrerVue3d).
+(() => {
+    'use strict';
+    const $ = id => document.getElementById(id);
+    const accueil = $('accueil');
+    const PARAMS = new URLSearchParams(location.search);
+    const PROJET = PARAMS.get('projet') || 'Projet';
+    $('accueil-projet').textContent = PROJET;
+
+    const DEFAUT = { lat: 48.8583, lon: 2.2942 };     // Tour Eiffel, comme la vue
+    const COTES = [350, 500, 700, 1000];
+    const num = v => { const n = Number(String(v == null ? '' : v).replace(',', '.')); return Number.isFinite(n) ? n : null; };
+    const enFrance = (lat, lon) => lat >= 41 && lat <= 51.6 && lon >= -5.8 && lon <= 10;
+
+    /** « 43.4715, 5.4861 » (ou l'ordre inverse), sinon null. */
+    function lireCoordonnees(texte) {
+        const m = /^\s*(-?\d{1,3}[.,]\d+)\s*[,;\s]\s*(-?\d{1,3}[.,]\d+)\s*$/.exec(texte || '');
+        if (!m) return null;
+        const [a, b] = [m[1], m[2]].map(v => Number(v.replace(',', '.')));
+        if (enFrance(a, b)) return { lat: a, lon: b };
+        if (enFrance(b, a)) return { lat: b, lon: a };
+        return null;
     }
+
+    const centroide = pts => ({
+        lat: pts.reduce((s, p) => s + p[0], 0) / pts.length,
+        lon: pts.reduce((s, p) => s + p[1], 0) / pts.length,
+    });
+
+    /** Surface d'un contour, en m² : équirectangulaire autour de son centre. */
+    function surfaceM2(pts) {
+        const kx = 111320 * Math.cos(centroide(pts).lat * Math.PI / 180), ky = 110574;
+        let aire = 0;
+        for (let i = 0; i < pts.length; i++) {
+            const [la1, lo1] = pts[i], [la2, lo2] = pts[(i + 1) % pts.length];
+            aire += (lo1 * kx) * (la2 * ky) - (lo2 * kx) * (la1 * ky);
+        }
+        return Math.abs(aire) / 2;
+    }
+
+    function formaterSurface(m2) {
+        if (m2 >= 1e6) return `${(m2 / 1e6).toLocaleString('fr-FR', { maximumFractionDigits: 2 })} km²`;
+        if (m2 >= 1e4) return `${(m2 / 1e4).toLocaleString('fr-FR', { maximumFractionDigits: 2 })} ha`;
+        return `${Math.round(m2).toLocaleString('fr-FR')} m²`;
+    }
+
+    /** Le carré de `cote` mètres de côté, côté nord-sud, autour du point. */
+    function carre(lat, lon, cote) {
+        const dLat = (cote / 2) / 110574;
+        const dLon = (cote / 2) / (111320 * Math.cos(lat * Math.PI / 180));
+        return [[lat - dLat, lon - dLon], [lat + dLat, lon + dLon]];
+    }
+
+    // --- L'état : le point, l'emprise voulue, et l'emprise lue dans l'URL
+    let centre = { ...DEFAUT };
+    let cote = 1000;
+    let contour = null;      // le contour tracé ici, [[lat, lon], …]
+    let dessine = null;      // l'emprise déjà dans l'URL (poly=…)
+    let dessin = false;      // tracé en cours
+    let sommets = [];
+    let carte = null, punaise = null, zone = null, choisi = null, trace = null;
+
+    const lat0 = num(PARAMS.get('lat')), lon0 = num(PARAMS.get('lon'));
+    if (lat0 !== null && lon0 !== null && enFrance(lat0, lon0)) centre = { lat: lat0, lon: lon0 };
+    const z0 = num(PARAMS.get('zone'));
+    if (z0 !== null && COTES.includes(z0)) cote = z0;
+    const poly = PARAMS.get('poly');
+    if (poly) {
+        const pts = poly.split(';').map(p => p.split(',').map(Number))
+            .filter(p => p.length === 2 && p.every(Number.isFinite));
+        if (pts.length >= 3) { dessine = pts; centre = centroide(pts); }
+    }
+
+    const aide = texte => { $('accueil-aide').textContent = texte; };
+    const aideBase = () => (dessin
+        ? 'Cliquez sur la carte pour poser les sommets, dans l\'ordre du tour ; validez à partir de trois points.'
+        : 'Cliquez sur la carte, ou glissez le repère, pour placer le centre. Le carré fait la taille choisie.');
+
+    function maj() {
+        if (!carte) return;
+        punaise.setLatLng([centre.lat, centre.lon]);
+        if (zone) { carte.removeLayer(zone); zone = null; }
+        if (choisi) { carte.removeLayer(choisi); choisi = null; }
+        if (!dessin) {
+            if (contour) {
+                choisi = L.polygon(contour, { color: '#e07b00', weight: 2,
+                                              fillColor: '#e07b00', fillOpacity: 0.14 }).addTo(carte);
+            } else {
+                zone = L.rectangle(carre(centre.lat, centre.lon, cote),
+                                   { color: '#e07b00', weight: 2,
+                                     fillColor: '#e07b00', fillOpacity: 0.1 }).addTo(carte);
+            }
+        }
+        $('accueil-coord').textContent = `${centre.lat.toFixed(5)}, ${centre.lon.toFixed(5)}`;
+        $('accueil-surface').textContent = formaterSurface(contour ? surfaceM2(contour) : cote * cote);
+        for (const b of document.querySelectorAll('.accueil-zones button')) {
+            const v = b.dataset.zone;
+            b.classList.toggle('on', v === 'dessin' ? dessin : (!contour && !dessin && Number(v) === cote));
+        }
+        aide(aideBase() + (dessine
+            ? ` Emprise importée : ${formaterSurface(surfaceM2(dessine))} (contour bleu).` : ''));
+    }
+
+    function choisirTaille(m) {
+        dessin = false;
+        sommets = [];
+        if (trace) { carte.removeLayer(trace); trace = null; }
+        $('accueil-dessin-actions').hidden = true;
+        cote = m;
+        contour = null;
+        carte.doubleClickZoom.enable();
+        maj();
+    }
+
+    /**
+     * Le clic sur la carte : un sommet pendant le tracé, le centre sinon.
+     * Leaflet ne le reçoit pas quand on glisse la carte : `dragend` n'ajoute
+     * donc rien.
+     */
+    function clicCarte(e) {
+        if (dessin) {
+            sommets.push([e.latlng.lat, e.latlng.lng]);
+            if (!trace) trace = L.polyline(sommets, { color: '#e07b00', weight: 3, dashArray: '5 4' }).addTo(carte);
+            else trace.setLatLngs(sommets);
+            $('accueil-valider').disabled = sommets.length < 3;
+            aide(`${sommets.length} point${sommets.length > 1 ? 's' : ''} posé${sommets.length > 1 ? 's' : ''} : `
+                + 'validez à partir de trois, ou annulez par Échap.');
+            return;
+        }
+        centre = { lat: e.latlng.lat, lon: e.latlng.lng };
+        contour = null;
+        maj();
+    }
+
+    function finirDessin() {
+        if (sommets.length < 3) return;
+        contour = sommets.slice();
+        centre = centroide(contour);
+        sommets = [];
+        dessin = false;
+        if (trace) { carte.removeLayer(trace); trace = null; }
+        $('accueil-dessin-actions').hidden = true;
+        carte.doubleClickZoom.enable();
+        maj();
+        carte.fitBounds(L.latLngBounds(contour).pad(0.25));
+    }
+
+    function annulerDessin() {
+        dessin = false;
+        sommets = [];
+        if (trace) { carte.removeLayer(trace); trace = null; }
+        $('accueil-dessin-actions').hidden = true;
+        carte.doubleClickZoom.enable();
+        maj();
+    }
+
+    function demarrerDessin() {
+        dessin = true;
+        sommets = [];
+        contour = null;
+        $('accueil-dessin-actions').hidden = false;
+        $('accueil-valider').disabled = true;
+        carte.doubleClickZoom.disable();
+        maj();
+    }
+
+    // --- La carte
+    if (!window.L) {
+        aide('La carte est indisponible : Leaflet n\'a pas pu être chargé. La vue 3D s\'ouvrira sur le point par défaut.');
+    } else {
+        carte = L.map('accueil-map', { zoomControl: true, minZoom: 5, maxZoom: 18 })
+            .setView([centre.lat, centre.lon], dessine ? 15 : 16);
+        // Le même fond que la vue 3D, servi par le serveur (api/tuile/plan) :
+        // pas de clé, pas de CORS, et un cache déjà chaud s'il l'a été.
+        L.tileLayer('api/tuile/plan/{z}/{x}/{y}', {
+            maxZoom: 18, attribution: 'Fond de plan &copy; IGN · Géoplateforme',
+        }).addTo(carte);
+        if (dessine) {
+            L.polygon(dessine, { color: '#4da3ff', weight: 2, dashArray: '7 5',
+                                 fillColor: '#4da3ff', fillOpacity: 0.08 })
+                .addTo(carte).bindTooltip('Emprise importée');
+            carte.fitBounds(L.latLngBounds(dessine).pad(0.2));
+        }
+        punaise = L.marker([centre.lat, centre.lon], {
+            draggable: true, keyboard: false,
+            icon: L.divIcon({
+                className: 'accueil-punaise',
+                html: '<svg width="30" height="42" viewBox="0 0 30 42" aria-hidden="true">'
+                    + '<path d="M15 41s13-14.5 13-25A13 13 0 1 0 2 16c0 10.5 13 25 13 25z" '
+                    + 'fill="#e07b00" stroke="#fff" stroke-width="2"/>'
+                    + '<circle cx="15" cy="16" r="4.5" fill="#fff"/></svg>',
+                iconSize: [30, 42], iconAnchor: [15, 40],
+            }),
+        }).addTo(carte);
+        punaise.on('dragend', () => {
+            centre = punaise.getLatLng();
+            contour = null;
+            maj();
+        });
+        carte.on('click', clicCarte);
+    }
+
+    // --- La recherche : elle ne déplace que la carte
+    const champ = $('accueil-recherche');
+    const liste = $('accueil-suggestions');
+    let minuterie = null, demande = null, propositions = [];
+
+    function montrerLieux(items, message) {
+        propositions = items || [];
+        liste.innerHTML = '';
+        for (let i = 0; i < propositions.length; i++) {
+            const l = propositions[i];
+            const li = document.createElement('li');
+            li.setAttribute('role', 'option');
+            li.append(l.nom);
+            if (l.detail) {
+                const petit = document.createElement('small');
+                petit.textContent = l.detail;
+                li.append(petit);
+            }
+            li.addEventListener('mousedown', e => e.preventDefault());
+            li.addEventListener('click', () => choisirLieu(l));
+            liste.append(li);
+        }
+        if (message) {
+            const li = document.createElement('li');
+            li.className = 'accueil-message';
+            li.textContent = message;
+            liste.append(li);
+        }
+        liste.hidden = !liste.children.length;
+    }
+
+    function choisirLieu(l) {
+        centre = { lat: l.lat, lon: l.lon };
+        contour = null;
+        champ.value = l.nom;
+        montrerLieux([]);
+        if (carte) { carte.setView([l.lat, l.lon], 16); maj(); }
+    }
+
+    async function chercherLieux(texte) {
+        const coord = lireCoordonnees(texte);
+        if (coord) {
+            montrerLieux([{ nom: `${coord.lat.toFixed(5)}, ${coord.lon.toFixed(5)}`,
+                            detail: 'coordonnées', lat: coord.lat, lon: coord.lon }]);
+            return;
+        }
+        if (demande) demande.abort();
+        demande = new AbortController();
+        const lire = async index => {
+            const r = await fetch('https://data.geopf.fr/geocodage/search?'
+                + new URLSearchParams({ q: texte, autocomplete: 1, index, limit: 8 }),
+                { signal: demande.signal });
+            if (!r.ok) throw new Error(`HTTP ${r.status}`);
+            return (await r.json()).features || [];
+        };
+        const [lieux, adresses] = await Promise.allSettled([lire('poi'), lire('address')]);
+        if (demande.signal.aborted) return;
+        const out = [];
+        for (const rep of [lieux, adresses]) {
+            if (rep.status !== 'fulfilled') continue;
+            for (const f of rep.value) {
+                const [lon, lat] = (f.geometry && f.geometry.coordinates) || [];
+                const p = f.properties || {};
+                if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
+                if (p._type === 'poi' && p.territory && p.territory !== 'METROPOLE') continue;
+                const cp = Array.isArray(p.postcode) ? p.postcode[0] : p.postcode;
+                if (!p._type && /^9[78]/.test(cp || '')) continue;
+                const nom = p._type === 'poi'
+                    ? (p.toponym || (p.name || [])[0] || (p.city || [])[0])
+                    : (p.type === 'municipality' ? (p.city || p.name) : p.name);
+                if (!nom) continue;
+                const commune = Array.isArray(p.city) ? p.city[0] : p.city;
+                const detail = [commune && commune !== nom ? commune : null, cp].filter(Boolean).join(' · ');
+                if (out.some(o => o.nom === nom && o.detail === detail)) continue;
+                out.push({ nom, detail, lat, lon });
+                if (out.length >= 7) break;
+            }
+        }
+        montrerLieux(out, out.length ? '' : 'Aucun lieu trouvé en France métropolitaine.');
+    }
+
+    champ.addEventListener('input', () => {
+        clearTimeout(minuterie);
+        const texte = champ.value.trim();
+        if (texte.length < 3 && !lireCoordonnees(texte)) { montrerLieux([]); return; }
+        minuterie = setTimeout(() => {
+            chercherLieux(texte).catch(e => {
+                if (e.name !== 'AbortError') montrerLieux([], 'Recherche indisponible : le géocodage de l\'IGN ne répond pas.');
+            });
+        }, 250);
+    });
+    champ.addEventListener('keydown', e => {
+        if (e.key === 'Escape') { montrerLieux([]); return; }
+        if (e.key === 'Enter' && propositions.length) { e.preventDefault(); choisirLieu(propositions[0]); }
+    });
+    $('accueil-effacer').addEventListener('click', () => {
+        champ.value = '';
+        montrerLieux([]);
+        champ.focus();
+    });
+
+    // --- Les boutons
+    for (const b of document.querySelectorAll('.accueil-zones button')) {
+        b.addEventListener('click', () => {
+            const v = b.dataset.zone;
+            if (v === 'dessin') demarrerDessin();
+            else choisirTaille(Number(v));
+        });
+    }
+    $('accueil-valider').addEventListener('click', finirDessin);
+    $('accueil-annuler').addEventListener('click', annulerDessin);
+    document.addEventListener('keydown', e => {
+        if (!dessin) return;
+        if (e.key === 'Escape') { e.preventDefault(); annulerDessin(); }
+        if (e.key === 'Enter') { e.preventDefault(); finirDessin(); }
+    });
+
+    $('accueil-position').addEventListener('click', async () => {
+        const b = $('accueil-position');
+        if (!window.POSITION_DEPART) return;
+        b.disabled = true;
+        b.textContent = 'Localisation…';
+        try {
+            const depart = await window.POSITION_DEPART();
+            if (depart && depart.raison) {
+                aide({
+                    refusee: 'Position refusée : cherchez une adresse, ou cliquez sur la carte.',
+                    indisponible: 'Position indisponible : cherchez une adresse, ou cliquez sur la carte.',
+                    'sans-reponse': 'Pas de réponse du GPS : cherchez une adresse, ou cliquez sur la carte.',
+                    'hors-emprise': 'Vous êtes hors de France métropolitaine : la carte ne couvre qu\'elle.',
+                }[depart.raison] || 'Position indisponible : cherchez une adresse, ou cliquez sur la carte.');
+            } else {
+                const p = new URLSearchParams(location.search);
+                const lat = num(p.get('lat')), lon = num(p.get('lon'));
+                if (lat !== null && lon !== null) {
+                    centre = { lat, lon };
+                    contour = null;
+                    if (carte) { carte.setView([lat, lon], 16); maj(); }
+                }
+            }
+        } finally {
+            b.disabled = false;
+            b.textContent = 'Ma position';
+        }
+    });
+
+    $('accueil-ouvrir').addEventListener('click', () => {
+        const bouton = $('accueil-ouvrir');
+        const p = new URLSearchParams(location.search);
+        p.set('lat', centre.lat.toFixed(5));
+        p.set('lon', centre.lon.toFixed(5));
+        if (contour && contour.length >= 3) {
+            p.set('poly', contour.map(([la, lo]) => `${la.toFixed(6)},${lo.toFixed(6)}`).join(';'));
+            p.delete('zone');
+        } else {
+            p.delete('poly');
+            p.set('zone', String(cote));
+        }
+        p.set('projet', PROJET);
+        history.replaceState(null, '', `?${p.toString()}`);
+        bouton.disabled = true;
+        bouton.textContent = 'Construction de la scène…';
+        if (typeof window.DEMARRER_VUE3D === 'function') window.DEMARRER_VUE3D();
+        const rouvrir = err => {
+            console.error(err);
+            accueil.hidden = false;
+            accueil.classList.remove('cache');
+            bouton.disabled = false;
+            bouton.textContent = 'Ouvrir la Vue 3D IGN →';
+            aide(`La vue 3D n'a pas pu démarrer : ${err.message}`);
+        };
+        if (typeof window.demarrerVue3d === 'function') window.demarrerVue3d().catch(rouvrir);
+        else rouvrir(new Error('le module de la vue n\'est pas chargé'));
+        accueil.classList.add('cache');
+        setTimeout(() => { if (accueil.classList.contains('cache')) accueil.hidden = true; }, 380);
+    });
+
+    maj();
 })();
 </script>
 <script type="importmap">
@@ -907,12 +1459,18 @@ coordonnées absolues.">
 }
 </script>
 <script type="module">
-import * as THREE from 'three';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { toCreasedNormals } from 'three/addons/utils/BufferGeometryUtils.js';
-import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
-import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
-import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
+// Rien ne s'exécute ici avant le clic sur « Ouvrir la Vue 3D IGN » de
+// l'accueil : le module pose la fonction, l'accueil l'appelle. Les imports
+// sont dynamiques pour la même raison — three.js (1 Mo) n'est pas téléchargé
+// par une page qui n'affiche qu'une carte. Le contexte du module reste le
+// même : l'importmap et import() se résolvent pareil.
+window.demarrerVue3d = async function demarrerVue3d() {
+const THREE = await import('three');
+const { OrbitControls } = await import('three/addons/controls/OrbitControls.js');
+const { toCreasedNormals } = await import('three/addons/utils/BufferGeometryUtils.js');
+const { LineSegments2 } = await import('three/addons/lines/LineSegments2.js');
+const { LineSegmentsGeometry } = await import('three/addons/lines/LineSegmentsGeometry.js');
+const { LineMaterial } = await import('three/addons/lines/LineMaterial.js');
 
 // --- Point visé ----------------------------------------------------------
 // Donné dans l'URL (?lat=…&lon=…). Sans point, la page a d'abord proposé de se
@@ -931,6 +1489,10 @@ const ACCUEIL = lireCoord('lat') === null || lireCoord('lon') === null;
 const LAT0 = ACCUEIL ? POINT_DEFAUT.lat : lireCoord('lat');
 const LON0 = ACCUEIL ? POINT_DEFAUT.lon : lireCoord('lon');
 const CENTER = [LON0, LAT0];
+
+// Nom du projet pour le nom du fichier IFC par défaut : "Nom du projet Connect + Ign3D"
+const NOM_PROJET_CONNECT = PARAMS.get('projet') || 'Projet';
+const NOM_FICHIER_IFC_DEFAUT = `${NOM_PROJET_CONNECT} + Ign3D.ifc`;
 // Côté nord-sud de la zone, en mètres (?zone=…) ; absent, 1 000 m : 4 s à
 // Gordes, 6 s à Strasbourg sur un Mac M4 (README), assez vite pour l'ouvrir
 // d'emblée. Le serveur construit jusqu'à 2 000 m, quatre fois la surface, à
@@ -10585,6 +11147,13 @@ function etatCouchesExport() {
 const fenetreExport = document.getElementById('export-dialogue');
 const boutonsFenetre = ['btn-export-telecharger', 'btn-export-enregistrer', 'btn-export-projet']
     .map(id => document.getElementById(id));
+// Les deux champs libres de l'export : le nom du fichier IFC — « <projet> +
+// Ign3D.ifc », le projet venant de ?projet= — et le dossier Trimble Connect
+// où le déposer. Le nom garde son extension : on la retire à l'usage.
+const champNomIfc = document.getElementById('export-nom-fichier');
+const champDossier = document.getElementById('export-dossier');
+champNomIfc.value = NOM_FICHIER_IFC_DEFAUT;
+champDossier.value = '/10_REFERENCES/13_DONNEES_ENTREES';
 // La fenêtre d'enregistrement du système n'existe que sur Chromium, et en
 // contexte sûr (https ou localhost) : ailleurs, « Enregistrer sous… » disparaît
 // plutôt que de promettre un choix qu'il ne fait pas — le reste y supplée.
@@ -10654,7 +11223,13 @@ function resumeExport(modele, choix) {
 /** Le nom du fichier, avant même de bâtir le modèle : la fenêtre du système
  *  doit le proposer avant le calcul. Même formule que `modeleExport().base`,
  *  que reprend outils/essai-navigateur.mjs. */
-const nomFichierExport = () => `vue3d-${LAT0}-${LON0}-z${ZONE}`;
+const nomFichierExport = () => {
+    if (formatExport === 'ifc') {
+        const voulu = champNomIfc.value.trim().replace(/\.ifc$/i, '');
+        if (voulu) return voulu;
+    }
+    return `vue3d-${LAT0}-${LON0}-z${ZONE}`;
+};
 
 /**
  * Dépose le fichier à la racine du projet Trimble Connect, par ce serveur :
@@ -10663,10 +11238,13 @@ const nomFichierExport = () => `vue3d-${LAT0}-${LON0}-z${ZONE}`;
  */
 async function envoyerAuProjet(fichier, nomFichier, modele, choix) {
     if (!tcAuth) throw new Error('Trimble Connect n’a pas donné son jeton : rouvrez cette page depuis l’extension.');
-    noterExport(`Envoi de ${nomFichier} vers Trimble Connect…`);
+    const dossier = champDossier.value.trim();
+    noterExport(`Envoi de ${nomFichier} vers Trimble Connect`
+        + (dossier ? ` (${dossier})` : '') + '…');
     await new Promise(ok => requestAnimationFrame(() => setTimeout(ok)));
     const adresse = `/api/connect/fichier?projet=${encodeURIComponent(tcAuth.projet)}`
-        + `&nom=${encodeURIComponent(nomFichier)}`;
+        + `&nom=${encodeURIComponent(nomFichier)}`
+        + (dossier ? `&dossier=${encodeURIComponent(dossier)}` : '');
     const reponse = await fetch(adresse, {
         method: 'POST',
         headers: { Authorization: `Bearer ${tcAuth.token}` },
@@ -13016,6 +13594,7 @@ function boucle(maintenant) {
     requestAnimationFrame(boucle);
 }
 requestAnimationFrame(boucle);
+};
 </script>
 </body>
 </html>

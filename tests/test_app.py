@@ -718,6 +718,65 @@ def test_le_depot_dun_fichier_passe_par_le_serveur(client, monkeypatch):
     assert vus["nom"] == "vue3d-43.9-5.2-z500.ifc" and vus["jeton"].startswith("Bearer ")
 
 
+class _Arborescence(_Session):
+    """Les dossiers du projet : 10_REFERENCES > 13_DONNEES_ENTREES."""
+
+    DOSSIERS = {
+        "racine": [{"id": "refs", "name": "10_REFERENCES", "type": "FOLDER"}],
+        "refs": [{"id": "donnees", "name": "13_DONNEES_ENTREES", "type": "FOLDER"},
+                 {"id": "autres", "name": "Autres", "type": "FOLDER"}],
+        "donnees": [{"id": "f0", "name": "modele.ifc", "type": "FILE"}],
+    }
+
+    def get(self, url, headers=None, timeout=None, params=None):
+        prefixe = self.origine + "/tc/api/2.1/folders/"
+        if url.startswith(prefixe) and url.endswith("/items"):
+            self.appels.append(("GET", url, params))
+            parent = url[len(prefixe):-len("/items")]
+            return _Reponse(200, {"items": self.DOSSIERS.get(parent, [])})
+        return super().get(url, headers=headers, timeout=timeout)
+
+
+def test_le_depot_connect_range_le_fichier_dans_le_dossier_demande():
+    session = _Arborescence()
+    depose = module_app.deposer_dans_projet_specifique(
+        "Bearer jeton", "vK4pJn9BUh4", "vue3d.ifc", b"ISO-10303-21;",
+        dossier="/10_REFERENCES/13_DONNEES_ENTREES", session=session)
+    assert depose["ok"]
+    # Deux niveaux, deux listages : chaque dossier est trouvé par son nom.
+    assert session.amorces == [{"parentId": "donnees", "parentType": "FOLDER",
+                                "name": "vue3d.ifc"}]
+    assert session.appels[1][1].endswith("/tc/api/2.1/folders/racine/items")
+    assert session.appels[2][1].endswith("/tc/api/2.1/folders/refs/items")
+
+
+def test_le_depot_connect_dit_un_dossier_introuvable_sans_rien_creer():
+    session = _Arborescence()
+    with pytest.raises(module_app.DepotRefuse) as refus:
+        module_app.deposer_dans_projet_specifique(
+            "Bearer jeton", "vK4pJn9BUh4", "vue3d.ifc", b"x",
+            dossier="/10_REFERENCES/99_INCONNU", session=session)
+    assert refus.value.code == 404
+    assert "99_INCONNU" in str(refus.value)
+    assert session.amorces == []
+
+
+def test_le_depot_du_fichier_suit_le_dossier_demande(client, monkeypatch):
+    vus = {}
+
+    def deposer(jeton, projet, nom, donnees, dossier=""):
+        vus.update(dossier=dossier, nom=nom)
+        return {"ok": True, "projet": projet, "nom": nom, "fichier": {"id": "f1"}}
+
+    monkeypatch.setattr(module_app, "deposer_dans_projet_specifique", deposer)
+    r = client.post("/api/connect/fichier?projet=vK4pJn9BUh4&nom=a.ifc"
+                    "&dossier=%2F10_REFERENCES%2F13_DONNEES_ENTREES",
+                    data=b"ISO-10303-21;",
+                    headers={"Authorization": "Bearer " + "j" * 40})
+    assert r.status_code == 200
+    assert vus == {"dossier": "/10_REFERENCES/13_DONNEES_ENTREES", "nom": "a.ifc"}
+
+
 # --- L'emprise d'un projet, lue dans sa fiche ---------------------------------
 
 class _Projet(_Session):

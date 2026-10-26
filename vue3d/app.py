@@ -51,6 +51,7 @@ import json
 import logging
 import math
 import os
+import re
 import threading
 import time
 
@@ -258,15 +259,69 @@ def deposer_dans_projet(jeton, projet, nom, donnees, session=None):
     Raises:
         DepotRefuse: Connect a refusé l'un des trois temps.
     """
+    return _deposer_dans_projet(jeton, projet, nom, donnees, "", session)
+
+
+def deposer_dans_projet_specifique(jeton, projet, nom, donnees, dossier="", session=None):
+    """Dépose `donnees` dans le dossier `dossier` du projet.
+
+    Le chemin part de la racine du projet et s'écrit comme le montre Connect :
+    « /10_REFERENCES/13_DONNEES_ENTREES ». Vide, ou « / », il dépose à la
+    racine, comme `deposer_dans_projet`. Le dossier doit exister : un segment
+    introuvable est dit, et rien n'est créé — un dépôt ne sème pas de dossiers
+    vides dans le projet.
+
+    Raises:
+        DepotRefuse: dossier introuvable, ou Connect a refusé le dépôt.
+    """
+    return _deposer_dans_projet(jeton, projet, nom, donnees, dossier, session)
+
+
+def _dossier_du_projet(session, entetes, origine, racine, dossier):
+    """L'identifiant du dossier `dossier`, depuis la racine du projet.
+
+    Chaque segment du chemin est cherché parmi les dossiers du parent, sans
+    tenir compte de la casse (Connect nomme les dossiers à la main) ni des
+    barres obliques inverses d'un chemin copié depuis Windows.
+
+    Raises:
+        DepotRefuse: un segment n'existe pas (404) ; le nom fautif est dit.
+    """
+    segments = [s for s in re.split(r"[\\/]+", dossier.strip()) if s and s != "."]
+    parent = racine
+    for segment in segments:
+        reponse = session.get(f"{origine}/tc/api/2.1/folders/{parent}/items",
+                              headers=entetes, timeout=30,
+                              params={"objectTypes": "FOLDER", "pageSize": 500})
+        if reponse.status_code != 200:
+            raise DepotRefuse(
+                f"Trimble Connect n'a pas listé le dossier « {segment} » "
+                f"({reponse.status_code}).", 502)
+        contenu = _donnees(reponse)
+        items = contenu.get("items", []) if isinstance(contenu, dict) else contenu
+        trouve = next((i for i in items or []
+                       if str(i.get("type", "")).upper() == "FOLDER"
+                       and str(i.get("name", "")).casefold() == segment.casefold()), None)
+        if trouve is None or not trouve.get("id"):
+            raise DepotRefuse(
+                f"Dossier introuvable dans le projet Trimble Connect : {dossier}", 404)
+        parent = trouve["id"]
+    return parent
+
+
+def _deposer_dans_projet(jeton, projet, nom, donnees, dossier, session):
+    """Les trois temps du dépôt, dans `dossier` (vide : la racine)."""
     session = session or requests.Session()
     entetes = {"Authorization": jeton, "Accept": "application/json"}
     origine, fiche = origine_projet(session, entetes, projet)
     api = f"{origine}/tc/api/2.0"
     racine = fiche.get("rootId") or projet
+    parent = (racine if not dossier.strip("/\\")
+              else _dossier_du_projet(session, entetes, origine, racine, dossier))
 
     amorce = session.post(f"{api}/files/fs/initiate",
                           headers={**entetes, "Content-Type": "application/json"},
-                          json={"parentId": racine, "parentType": "FOLDER", "name": nom},
+                          json={"parentId": parent, "parentType": "FOLDER", "name": nom},
                           timeout=30)
     if amorce.status_code not in (200, 201):
         raise DepotRefuse(f"Trimble Connect a refusé d'ouvrir le dépôt ({amorce.status_code}).")
@@ -852,12 +907,14 @@ def creer_app(dossier_cache=None, construire=construire_scene, lire_monuments=fe
 
     @app.post("/api/connect/fichier")
     def connect_fichier():
-        """Le fichier exporté, déposé à la racine du projet Trimble Connect.
+        """Le fichier exporté, déposé dans le projet Trimble Connect.
 
         Le panneau de l'extension confie son jeton d'accès à la page, qui le
         passe ici : l'envoi part du serveur, l'API de Connect n'ouvrant pas
         ses en-têtes CORS à l'origine de la page. Le jeton ne sert qu'à ce
-        dépôt et n'est ni gardé ni journalisé.
+        dépôt et n'est ni gardé ni journalisé. Le paramètre `dossier`
+        (« /10_REFERENCES/13_DONNEES_ENTREES ») choisit le dossier d'accueil ;
+        absent, le fichier va à la racine du projet.
         """
         jeton = (request.headers.get("Authorization") or "").strip()
         if len(jeton) < 20:
@@ -868,6 +925,10 @@ def creer_app(dossier_cache=None, construire=construire_scene, lire_monuments=fe
         if not projet or len(projet) > 64 or not all(
                 c.isalnum() or c in "-_" for c in projet):
             return erreur(400, "Projet Trimble Connect manquant ou invalide.")
+
+        dossier = request.args.get("dossier", "").strip()
+        if len(dossier) > 512 or any(c in dossier for c in "\r\n\0"):
+            return erreur(400, "Dossier Trimble Connect invalide.")
         nom = os.path.basename(request.args.get("nom", "").strip())
         if os.path.splitext(nom)[1].lower() not in EXTENSIONS_DEPOT:
             return erreur(400, "Seuls les fichiers .ifc et .gml se déposent dans le projet.")
@@ -879,7 +940,10 @@ def creer_app(dossier_cache=None, construire=construire_scene, lire_monuments=fe
         if len(donnees) > TAILLE_MAX_DEPOT:
             return erreur(413, "Fichier trop gros pour le dépôt (64 Mo au plus).")
         try:
-            depose = deposer_dans_projet(jeton, projet, nom, donnees)
+            if dossier:
+                depose = deposer_dans_projet_specifique(jeton, projet, nom, donnees, dossier)
+            else:
+                depose = deposer_dans_projet(jeton, projet, nom, donnees)
         except DepotRefuse as exc:
             app.logger.warning("Dépôt Connect refusé (%s) : %s", projet, exc)
             return erreur(exc.code, str(exc))
