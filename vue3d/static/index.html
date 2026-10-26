@@ -1526,7 +1526,7 @@ const CENTER = [LON0, LAT0];
 // vient du jeton de l'extension (`projetNom`) ; ?projet= n'est qu'un
 // identifiant, repli quand l'extension n'a pas parlé.
 const nomFichierDefaut = (nomProjet) =>
-    `${(nomProjet || PARAMS.get('projet') || 'Projet').replace(/[\/:*?"<>|]+/g, '-')}_ContexteIgn3D`;
+    `${(nomProjet || PARAMS.get('projet') || 'Projet').replace(/[\\/:*?"<>|]+/g, '-')}_ContexteIgn3D`;
 // Côté nord-sud de la zone, en mètres (?zone=…) ; absent, 1 000 m : 4 s à
 // Gordes, 6 s à Strasbourg sur un Mac M4 (README), assez vite pour l'ouvrir
 // d'emblée. Le serveur construit jusqu'à 2 000 m, quatre fois la surface, à
