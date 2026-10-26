@@ -1522,9 +1522,11 @@ const LAT0 = ACCUEIL ? POINT_DEFAUT.lat : lireCoord('lat');
 const LON0 = ACCUEIL ? POINT_DEFAUT.lon : lireCoord('lon');
 const CENTER = [LON0, LAT0];
 
-// Nom du projet pour le nom du fichier IFC par défaut : "Nom du projet Connect + Ign3D"
-const NOM_PROJET_CONNECT = PARAMS.get('projet') || 'Projet';
-const NOM_FICHIER_IFC_DEFAUT = `${NOM_PROJET_CONNECT} + Ign3D.ifc`;
+// Nom du fichier par défaut : « <nom du projet Connect>_ContexteIgn3D ». Le nom
+// vient du jeton de l'extension (`projetNom`) ; ?projet= n'est qu'un
+// identifiant, repli quand l'extension n'a pas parlé.
+const nomFichierDefaut = (nomProjet) =>
+    `${(nomProjet || PARAMS.get('projet') || 'Projet').replace(/[\/:*?"<>|]+/g, '-')}_ContexteIgn3D`;
 // Côté nord-sud de la zone, en mètres (?zone=…) ; absent, 1 000 m : 4 s à
 // Gordes, 6 s à Strasbourg sur un Mac M4 (README), assez vite pour l'ouvrir
 // d'emblée. Le serveur construit jusqu'à 2 000 m, quatre fois la surface, à
@@ -11184,7 +11186,11 @@ const boutonsFenetre = ['btn-export-telecharger', 'btn-export-enregistrer', 'btn
 // où le déposer. Le nom garde son extension : on la retire à l'usage.
 const champNomIfc = document.getElementById('export-nom-fichier');
 const champDossier = document.getElementById('export-dossier');
-champNomIfc.value = NOM_FICHIER_IFC_DEFAUT.replace(/\.ifc$/i, '');
+// Tant que l'utilisateur n'a pas tapé son propre nom, le défaut suit le projet
+// (le jeton peut n'arriver qu'après).
+let nomSaisi = false;
+champNomIfc.value = nomFichierDefaut('');
+champNomIfc.addEventListener('input', () => { nomSaisi = true; });
 champDossier.value = '/10_REFERENCES/13_DONNEES_ENTREES';
 // La fenêtre d'enregistrement du système n'existe que sur Chromium, et en
 // contexte sûr (https ou localhost) : ailleurs, « Enregistrer sous… » disparaît
@@ -11206,6 +11212,7 @@ let tcAuth = null;
 function adopterAuth() {
     if (!window.tcAuthRecu) return;
     tcAuth = window.tcAuthRecu;
+    if (!nomSaisi) champNomIfc.value = nomFichierDefaut(tcAuth.nom);
     boutonProjet.hidden = false;
     boutonParcourir.hidden = false;
     tcStatut.hidden = false;

@@ -19,6 +19,7 @@ messages de commit et dans les commentaires des modules.
   les dossiers du projet… » lit l'arborescence par `GET /api/connect/dossiers`,
   un niveau à la fois, et remplit le champ du dossier. Le nom du fichier, pris
   aussi pour le CityGML, reçoit le focus à l'ouverture de la fenêtre.
+  Par défaut il vaut « <nom du projet Connect>_ContexteIgn3D ».
 
 ## Scène v16 — 21 octobre 2026
 
