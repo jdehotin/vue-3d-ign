@@ -63,7 +63,9 @@ def test_une_tuile_relue_est_gardee_puis_servie(tmp_path):
     chemin = stock.relire("ortho", *GORDES)
     assert open(chemin, "rb").read() == JPEG and lues == [("ortho", *GORDES)]
     assert stock.present("ortho", *GORDES) == chemin
-    assert chemin.endswith(f"/ortho/{GORDES[0]}/{GORDES[1]}/{GORDES[2]}.jpg")
+    # Séparateurs normalisés : sous Windows, le chemin s'écrit avec des « \ ».
+    assert chemin.replace(os.sep, "/").endswith(
+        f"/ortho/{GORDES[0]}/{GORDES[1]}/{GORDES[2]}.jpg")
     # Rien d'autre dans le dossier : le fichier temporaire est renommé.
     assert os.listdir(os.path.dirname(chemin)) == [os.path.basename(chemin)]
 
