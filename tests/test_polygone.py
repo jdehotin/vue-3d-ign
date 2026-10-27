@@ -92,6 +92,28 @@ def test_les_quatre_coins_d_une_boite_en_zigzag_redeviennent_le_tour():
         Polygone(analyser("43.90,5.19;43.92,5.21;43.92,5.19;43.905,5.21"))
 
 
+def test_l_aire_maximale_se_regle_par_l_environnement(monkeypatch):
+    """Sans variable, la borne est celle d'origine ; VUE3D_AIRE_MAX_KM2 la
+    baisse pour un service à la mémoire juste, pour un contour comme pour un
+    carré, avec un message qui dit quoi faire."""
+    boite = "43.900,5.190;43.900,5.215;43.910,5.215;43.910,5.190"    # ≈ 2,0 km²
+    monkeypatch.delenv("VUE3D_AIRE_MAX_KM2", raising=False)
+    assert zone_normalisee(None, polygone=boite) is not None
+    assert zone_normalisee(2000) == 2000
+    monkeypatch.setenv("VUE3D_AIRE_MAX_KM2", "1.5")
+    with pytest.raises(ValueError, match="Réduisez le contour"):
+        zone_normalisee(None, polygone=boite)
+    with pytest.raises(ValueError, match="zone plus petite"):
+        zone_normalisee(2000)
+    assert zone_normalisee(1000) == 1000            # 1 km² : sous la borne
+    monkeypatch.setenv("VUE3D_AIRE_MAX_KM2", "abc")  # illisible : ignorée
+    assert zone_normalisee(2000) == 2000
+
+
+def test_rendre_la_memoire_ne_leve_jamais():
+    scene.rendre_la_memoire()
+
+
 def test_l_aire_du_contour_est_celle_de_shapely():
     """L'aire du lacet sur les sommets projetés vaut celle du polygone en
     mètres : c'est elle qui est annoncée à l'utilisateur (10 km² conseillés)."""

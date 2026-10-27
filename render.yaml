@@ -48,6 +48,15 @@ services:
       # Un seul processus : la scène se construit, un peu plus lentement.
       - key: VUE3D_TOITS_PROCESSUS
         value: "1"
+      # La libc garde la mémoire libérée d'un thread à l'autre : deux zones
+      # d'allocation au plus, pour que le service revienne vers ses 0,5 Go de
+      # repos après une grande scène (avec malloc_trim, scene.rendre_la_memoire).
+      - key: MALLOC_ARENA_MAX
+        value: "2"
+      # Aire de boîte maximale d'une zone ou d'un contour, en km² : au-delà, un
+      # refus clair plutôt qu'un processus tué par les 2 Go du plan (scene.py).
+      - key: VUE3D_AIRE_MAX_KM2
+        value: "2.5"
     disk:
       # Un disque ne se partage pas entre deux services : le nom est donc
       # propre à ce service. Celui de l'ancien service (`vue3d-ign-jdehotin-

@@ -13,6 +13,12 @@ messages de commit et dans les commentaires des modules.
 
 ## Scène v16 — 26 octobre 2026
 
+- **Mémoire du service** : `VUE3D_AIRE_MAX_KM2` borne l'aire de boîte d'un
+  contour ou d'un carré, avec un refus clair (render.yaml : 2,5 km² pour les
+  2 Go du plan Standard) au lieu d'un processus tué par manque de mémoire ;
+  `malloc_trim` rend la mémoire après chaque construction, et
+  `MALLOC_ARENA_MAX=2` limite ce que la libc garde. `ProcessPoolExecutor` est
+  importé au démarrage (import circulaire entre fils vu sur Render).
 - **Export vers Trimble Connect** : le jeton envoyé par l'extension est capté
   dès le chargement de la page (le module de la scène, lancé au clic, le
   manquait et « Enregistrer dans le projet » restait caché). Un bouton « Parcourir

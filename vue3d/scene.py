@@ -52,7 +52,9 @@ demande suivante réessaie.
 import concurrent.futures
 import contextlib
 import copy
+import ctypes
 import functools
+import gc
 import gzip
 import json
 import logging
@@ -163,6 +165,42 @@ SCENE_COTE_M = 2 * SCENE_DELTA * 111320
 # publierait une scène que l'utilisateur n'a pas demandée.
 POLY_AIRE_AVERTISSEMENT_M2 = 10_000_000.0
 POLY_AIRE_BOITE_MAX_M2 = 20_000_000.0
+# Cette borne est celle d'une machine à 24 Go. Un service à la mémoire plus
+# juste la baisse par VUE3D_AIRE_MAX_KM2 (km², de la boîte d'un contour ou du
+# carré d'une zone) : render.yaml la pose à 2,5 pour les 2 Go du plan Standard,
+# d'après le relevé du service (contour de 2,1 km² de boîte : pic de 1,5 Go,
+# avec 0,5 Go au repos) — un pic plus haut tuerait le processus (« Ran out of
+# memory », 502 pour tous), quand un refus clair ne coûte qu'une scène.
+
+
+def aire_max_m2():
+    """L'aire de boîte (m²) au-delà de laquelle une zone est refusée :
+    VUE3D_AIRE_MAX_KM2 s'il est donné, sinon POLY_AIRE_BOITE_MAX_M2."""
+    valeur = os.environ.get("VUE3D_AIRE_MAX_KM2", "").strip()
+    if valeur:
+        try:
+            km2 = float(valeur)
+            if km2 > 0:
+                return km2 * 1e6
+        except ValueError:
+            pass
+        journal.warning("VUE3D_AIRE_MAX_KM2=%r n'est pas un nombre positif : ignoré", valeur)
+    return POLY_AIRE_BOITE_MAX_M2
+
+
+def rendre_la_memoire():
+    """Rend au système la mémoire qu'une construction vient de libérer.
+
+    Python et numpy rendent leurs blocs à l'allocateur de la libc, qui les
+    garde : après une grande scène, le service restait à 1 Go au lieu de 0,5
+    (relevé Render). `malloc_trim` la rend ; sans glibc (macOS, Windows), rien
+    à faire.
+    """
+    gc.collect()
+    try:
+        ctypes.CDLL("libc.so.6").malloc_trim(0)
+    except (OSError, AttributeError):
+        pass
 # Étapes d'une construction, que la page affiche pendant l'attente : les
 # seize lectures de construire(), puis les toitures et les houppiers
 # d'assembler(). Un compteur plutôt qu'un pourcentage : les étapes sont très
@@ -342,7 +380,13 @@ def zone_normalisee(zone, polygone=None):
     if cote != cote:
         raise ValueError("zone n'est pas un nombre")
     cote = int(round(cote / ZONE_PAS_M) * ZONE_PAS_M)
-    return min(max(cote, ZONE_MIN_M), ZONE_MAX_M)
+    cote = min(max(cote, ZONE_MIN_M), ZONE_MAX_M)
+    if cote * cote > aire_max_m2():
+        raise ValueError(
+            f"zone trop étendue : {cote} m de côté font {cote * cote / 1e6:g} km², "
+            f"au-delà des {aire_max_m2() / 1e6:g} km² que ce service peut construire. "
+            "Choisissez une zone plus petite.")
+    return cote
 
 
 def polygone_normalisee(valeur):
@@ -366,11 +410,11 @@ def polygone_normalisee(valeur):
     polygone = Polygone(sommets)
     aire = (polygone.nord - polygone.sud) * (polygone.est - polygone.ouest) \
         * M_PAR_DEGRE_LAT ** 2 * math.cos(math.radians((polygone.sud + polygone.nord) / 2))
-    if aire > POLY_AIRE_BOITE_MAX_M2:
+    if aire > aire_max_m2():
         raise ValueError(
-            f"contour trop étendu : sa boîte fait {aire / 1e6:.1f} km², au-delà de "
-            f"{POLY_AIRE_BOITE_MAX_M2 / 1e6:.0f} km² — c'est elle qui est lue, "
-            "et la scène coûte comme elle.")
+            f"contour trop étendu : sa boîte fait {aire / 1e6:.1f} km², au-delà des "
+            f"{aire_max_m2() / 1e6:g} km² que ce service peut construire — c'est elle "
+            "qui est lue, et la scène coûte comme elle. Réduisez le contour.")
     return polygone
 
 
@@ -1079,6 +1123,7 @@ class Cache:
                 # détections reprennent.
                 self._construction(-1)
                 self._avancements.pop(cle, None)
+                rendre_la_memoire()
 
     def reconstruire(self, lat, lon, zone=None):
         """Met de côté la scène du point et toutes ses couches : la demande
