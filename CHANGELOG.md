@@ -26,6 +26,9 @@ messages de commit et dans les commentaires des modules.
   un niveau à la fois, et remplit le champ du dossier. Le nom du fichier, pris
   aussi pour le CityGML, reçoit le focus à l'ouverture de la fenêtre.
   Par défaut il vaut « <nom du projet Connect>_ContexteIgn3D ».
+  Sans jeton (page ouverte à la main, hors extension), ces deux boutons
+  restent visibles mais éteints, et la note dit pourquoi : un bouton qui
+  disparaît se lit comme une régression.
 
 ## Scène v16 — 21 octobre 2026
 

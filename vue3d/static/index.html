@@ -923,7 +923,7 @@
                     <label class="zone">
                         <input type="text" id="export-dossier" style="width:100%; background:#161a1e; color:#e8eaed; border:1px solid #3a4148; border-radius:4px; padding:4px 6px; font-size:12px;" />
                     </label>
-                    <button type="button" class="lien-ext" id="export-parcourir" hidden
+                    <button type="button" class="lien-ext" id="export-parcourir" disabled
                             title="Lire l'arborescence des dossiers du projet Trimble Connect et y choisir celui qui recevra le fichier.">📁 Parcourir les dossiers du projet…</button>
                     <div id="export-arbo" hidden></div>
                     <div class="sous-titre">Projection</div>
@@ -954,8 +954,8 @@ coordonnées absolues.">
                     <button type="button" id="btn-export-telecharger">Télécharger</button>
                     <button type="button" class="principal" id="btn-export-enregistrer"
                             title="La fenêtre du système, pour choisir le dossier et le nom — Chromium seulement.">Enregistrer sous…</button>
-                    <button type="button" class="principal" id="btn-export-projet" hidden
-                            title="Déposer le fichier à la racine du projet Trimble Connect ouvert.">Enregistrer dans le projet</button>
+                    <button type="button" class="principal" id="btn-export-projet" disabled
+                            title="Déposer le fichier dans le projet Trimble Connect ouvert.">Enregistrer dans le projet</button>
                 </footer>
             </form>
         </dialog>
@@ -11209,14 +11209,33 @@ let tcAuth = null;
 
 // Le jeton est capté par le script de l'en-tête, avant le module : ici on le
 // relit s'il est déjà là, et on écoute l'événement s'il vient après.
+// Sans jeton (page ouverte à la main, hors extension), les deux gestes qui
+// passent par Connect — choisir un dossier, y déposer le fichier — restent
+// visibles mais éteints, et la note dit pourquoi : un bouton qui disparaît se
+// lit comme une régression.
+function majBoutonsConnect() {
+    const pret = Boolean(tcAuth);
+    boutonParcourir.disabled = !pret;
+    boutonProjet.disabled = !pret;
+    boutonParcourir.title = pret
+        ? "Lire l'arborescence des dossiers du projet Trimble Connect et y choisir celui qui recevra le fichier."
+        : "Connectez la page au projet en l'ouvrant depuis l'extension Trimble Connect.";
+    boutonProjet.title = pret
+        ? `Déposer le fichier dans ${champDossier.value.trim() || 'la racine'} du projet Trimble Connect.`
+        : "Connectez la page au projet en l'ouvrant depuis l'extension Trimble Connect.";
+}
+
 function adopterAuth() {
-    if (!window.tcAuthRecu) return;
-    tcAuth = window.tcAuthRecu;
-    if (!nomSaisi) champNomIfc.value = nomFichierDefaut(tcAuth.nom);
-    boutonProjet.hidden = false;
-    boutonParcourir.hidden = false;
+    tcAuth = window.tcAuthRecu || null;
     tcStatut.hidden = false;
-    tcStatut.textContent = `Trimble Connect : connecté${tcAuth.nom ? ' au projet ' + tcAuth.nom : ''}.`;
+    if (tcAuth) {
+        if (!nomSaisi) champNomIfc.value = nomFichierDefaut(tcAuth.nom);
+        tcStatut.textContent = `Trimble Connect : connecté${tcAuth.nom ? ' au projet ' + tcAuth.nom : ''}.`;
+    } else {
+        tcStatut.textContent = 'Trimble Connect : non connecté — ouvrez cette page depuis '
+            + "l'extension Trimble Connect pour choisir un dossier ou déposer le fichier.";
+    }
+    majBoutonsConnect();
 }
 window.addEventListener('vue3d-auth', adopterAuth);
 adopterAuth();
@@ -11493,6 +11512,9 @@ async function exporter(format, mode = 'telecharger') {
         console.error(err);
     } finally {
         for (const b of boutons) b.disabled = false;
+        // La boucle vient de rallumer tout le monde : les deux gestes de
+        // Connect ne se rallument qu'avec le jeton.
+        majBoutonsConnect();
     }
 }
 for (const b of boutonsExport) b.addEventListener('click', () => exporter(b.dataset.format));
