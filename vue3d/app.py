@@ -67,6 +67,7 @@ from .monuments import fetch_monuments
 from .nuage import fetch_nuage
 from .ouvrages import fetch_ouvrages
 from .panneaux import REGISTRE_LICENCE
+from .polygone import Polygone
 from .panneaux import lecteur as lecteur_panneaux
 from .scene import (NOM_BORNES, NOM_DPE, NOM_DVF, NOM_EMPRISES, NOM_MONUMENTS, NOM_NUAGE,
                     NOM_NUAGE_PROCHE, NOM_ORTHO,
@@ -200,7 +201,7 @@ MESSAGE_EMPRISE = ("L'emprise du projet n'est pas définie dans Trimble Connect 
                    "la scène.")
 
 
-def obtenir_emprise_projet(session, entetes, projet):
+def obtenir_emprise_projet(session, entetes, projet, avec_contour=False):
     """L'emprise d'un projet Connect : les bords min et max de son contour.
 
     Connect range le contour du projet dans `address.geometry` de sa fiche,
@@ -209,7 +210,10 @@ def obtenir_emprise_projet(session, entetes, projet):
     l'utilisateur doit tracer la limite dans les paramètres du projet.
 
     Returns:
-        {"minLat": …, "maxLat": …, "minLon": …, "maxLon": …}, en degrés.
+        {"minLat": …, "maxLat": …, "minLon": …, "maxLon": …}, en degrés ; avec
+        `avec_contour`, aussi "contour" : [[lat, lon], …], le tour du projet tel
+        que la page le dessine sur la carte. Absent quand ce tour est croisé ou
+        d'aire nulle : la page n'a alors que la boîte, qui est une zone valide.
 
     Raises:
         DepotRefuse: projet introuvable pour ce jeton, ou emprise non définie —
@@ -227,6 +231,11 @@ def obtenir_emprise_projet(session, entetes, projet):
                "minLon": min(lons), "maxLon": max(lons)}
     if emprise["minLat"] == emprise["maxLat"] or emprise["minLon"] == emprise["maxLon"]:
         raise DepotRefuse(MESSAGE_EMPRISE, 404)
+    if avec_contour:
+        try:
+            emprise["contour"] = [list(s) for s in Polygone(sommets).sommets]
+        except ValueError:
+            pass
     return emprise
 
 
@@ -749,7 +758,7 @@ def creer_app(dossier_cache=None, construire=construire_scene, lire_monuments=fe
         try:
             session = requests.Session()
             entetes = {"Authorization": jeton, "Accept": "application/json"}
-            emprise = obtenir_emprise_projet(session, entetes, projet)
+            emprise = obtenir_emprise_projet(session, entetes, projet, avec_contour=True)
             return jsonify(emprise)
         except DepotRefuse as exc:
             return erreur(exc.code, str(exc))

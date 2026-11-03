@@ -881,3 +881,18 @@ def test_lemprise_ne_souvre_pas_a_une_autre_origine(client):
     r = client.get("/api/connect/emprise?projet=vK4pJn9BUh4",
                    headers={"Origin": "https://exemple.test"})
     assert "Access-Control-Allow-Origin" not in r.headers
+
+
+def test_l_emprise_rend_aussi_le_contour_pour_la_carte_quand_il_est_valide():
+    carre = {"type": "Polygon", "coordinates": [[[5.4, 43.5], [5.5, 43.5], [5.5, 43.6],
+                                                 [5.4, 43.6], [5.4, 43.5]]]}
+    emprise = module_app.obtenir_emprise_projet(
+        _Projet({"geometry": carre}), {}, "vK4pJn9BUh4", avec_contour=True)
+    assert emprise["minLat"] == 43.5 and len(emprise["contour"]) == 4
+    assert emprise["contour"][0] == [43.5, 5.4]
+    # Un tour croisé : la boîte reste, sans contour.
+    huit = {"type": "Polygon", "coordinates": [[[5.19, 43.90], [5.21, 43.92], [5.19, 43.92],
+                                                [5.21, 43.905], [5.19, 43.90]]]}
+    emprise = module_app.obtenir_emprise_projet(
+        _Projet({"geometry": huit}), {}, "vK4pJn9BUh4", avec_contour=True)
+    assert "contour" not in emprise and emprise["maxLon"] == 5.21

@@ -69,6 +69,7 @@
         .accueil-alerte[hidden] { display:none; }
         .accueil-aide { margin:8px 0 0; font-size:12px; line-height:1.45; color:var(--muted, #9aa0a6); }
         .accueil-dessin { display:flex; gap:6px; }
+        .accueil-dessin[hidden] { display:none; }
         .accueil-dessin button { flex:1; padding:8px 10px; border-radius:8px; font-size:12px; cursor:pointer;
                                  border:1px solid var(--accent, #e07b00); color:#ffcf8a;
                                  background:rgba(224,123,0,.16); }
@@ -1167,6 +1168,13 @@ coordonnées absolues.">
     let dessin = false;      // tracé en cours
     let sommets = [];
     let carte = null, punaise = null, zone = null, choisi = null, trace = null;
+    // L'emprise du projet Trimble Connect : [[lat, lon], …], ou null. Elle est la
+    // zone par défaut tant que l'utilisateur n'a rien choisi (`choixFait`) ; trop
+    // grande pour le serveur, elle reste affichée et il lui est demandé de
+    // saisir une zone plus petite.
+    let emprise = null, coucheEmprise = null, empriseLue = null, noteEmprise = '';
+    let choixFait = false;
+    const ORIGINE_TC = (PARAMS.get('origine') || '').toLowerCase() === 'tc';
 
     const lat0 = num(PARAMS.get('lat')), lon0 = num(PARAMS.get('lon'));
     if (lat0 !== null && lon0 !== null && enFrance(lat0, lon0)) centre = { lat: lat0, lon: lon0 };
@@ -1176,7 +1184,7 @@ coordonnées absolues.">
     if (poly) {
         const pts = poly.split(';').map(p => p.split(',').map(Number))
             .filter(p => p.length === 2 && p.every(Number.isFinite));
-        if (pts.length >= 3) { dessine = pts; centre = centroide(pts); }
+        if (pts.length >= 3) { dessine = pts; emprise = pts; centre = centroide(pts); }
     }
 
     const aide = texte => { $('accueil-aide').textContent = texte; };
@@ -1189,7 +1197,7 @@ coordonnées absolues.">
         if (!s || !s.limites) return;
         window.limitesService = { max_m2: s.limites.aire_max_km2 * 1e6,
                                   avert_m2: s.limites.aire_avertissement_km2 * 1e6 };
-        maj();
+        if (emprise && !choixFait) utiliserEmprise(); else maj();
     }).catch(() => { /* le serveur ne répond pas : bornes d'origine */ });
 
     /** Aire de la boîte d'un contour, en m² (la même formule que le serveur). */
@@ -1202,10 +1210,22 @@ coordonnées absolues.">
 
     /** Prévient avant le refus : trop grande, la scène n'est pas construite ; grande, elle est longue. */
     function alerteTaille() {
-        const pts = contour || dessine;
+        const pts = contour || null;
         const aire = pts ? boiteM2(pts) : cote * cote;
         const { max_m2: max, avert_m2: avert } = window.limitesService;
         const alerte = $('accueil-alerte');
+        // L'emprise du projet dépasse ce que le serveur construit : rien n'est
+        // ouvert avant que l'utilisateur ait saisi une zone plus petite.
+        if (emprise && !choixFait && boiteM2(emprise) > max) {
+            alerte.hidden = false;
+            alerte.classList.add('refus');
+            alerte.textContent = `L'emprise du projet Trimble Connect est trop grande : sa boîte fait `
+                + `${formaterSurface(boiteM2(emprise))}, le serveur n'en construit pas au-delà de `
+                + `${formaterSurface(max)}. Saisissez une zone plus petite : dessinez un contour dans l'emprise `
+                + '(✎ Dessiner), ou choisissez la taille d\'un carré et placez-le sur la carte.';
+            $('accueil-ouvrir').disabled = true;
+            return;
+        }
         const trop = aire > max;
         alerte.hidden = !(trop || aire > avert);
         alerte.classList.toggle('refus', trop);
@@ -1241,12 +1261,79 @@ coordonnées absolues.">
             const v = b.dataset.zone;
             b.classList.toggle('on', v === 'dessin' ? dessin : (!contour && !dessin && Number(v) === cote));
         }
-        aide(aideBase() + (dessine
-            ? ` Emprise importée : ${formaterSurface(surfaceM2(dessine))} (contour bleu).` : ''));
+        for (const b of document.querySelectorAll('.accueil-zones button')) {
+            if (b.dataset.zone === 'projet') b.classList.toggle('on', !!emprise && contour === emprise);
+        }
+        aide(aideBase() + (emprise
+            ? ` ${ORIGINE_TC || empriseLue ? 'Emprise du projet Trimble Connect' : 'Emprise importée'} : `
+              + `${formaterSurface(surfaceM2(emprise))} (contour vert).` : '') + noteEmprise);
         alerteTaille();
     }
 
+    // --- L'emprise du projet Trimble Connect sur la carte ------------------------
+    const boutonEmprise = document.createElement('button');
+    boutonEmprise.type = 'button';
+    boutonEmprise.dataset.zone = 'projet';
+    boutonEmprise.textContent = '▣ Emprise du projet';
+    boutonEmprise.title = 'La zone du projet Trimble Connect, tracée sur la carte.';
+    boutonEmprise.hidden = true;
+    document.querySelector('.accueil-zones').append(boutonEmprise);
+
+    /** Prend l'emprise pour zone : son contour, ou — trop grande — le centre
+     *  posé dessus, l'alerte demandant alors une zone plus petite. */
+    function utiliserEmprise() {
+        if (!emprise) return;
+        dessin = false;
+        sommets = [];
+        if (trace && carte) { carte.removeLayer(trace); trace = null; }
+        $('accueil-dessin-actions').hidden = true;
+        if (carte) carte.doubleClickZoom.enable();
+        centre = centroide(emprise);
+        contour = boiteM2(emprise) > window.limitesService.max_m2 ? null : emprise;
+        if (carte) maj();
+    }
+
+    /** Trace l'emprise (en vert, pointillée) et cadre la carte dessus. */
+    function afficherEmprise() {
+        boutonEmprise.hidden = !emprise;
+        if (!carte || !emprise) return;
+        if (coucheEmprise) carte.removeLayer(coucheEmprise);
+        coucheEmprise = L.polygon(emprise, { color: '#35c28a', weight: 2, dashArray: '7 5',
+                                             fillColor: '#35c28a', fillOpacity: 0.08 })
+            .addTo(carte).bindTooltip(ORIGINE_TC || empriseLue ? 'Emprise du projet Trimble Connect' : 'Emprise importée');
+        carte.fitBounds(L.latLngBounds(emprise).pad(0.2));
+    }
+
+    /** Lit l'emprise du projet auprès du serveur, avec le jeton que l'extension a confié. */
+    async function lireEmpriseProjet() {
+        const auth = window.tcAuthRecu;
+        if (!auth || empriseLue === auth.projet || (emprise && ORIGINE_TC)) return;
+        empriseLue = auth.projet;
+        try {
+            const r = await fetch(`api/connect/emprise?projet=${encodeURIComponent(auth.projet)}`,
+                                  { headers: { Authorization: `Bearer ${auth.token}` } });
+            const j = await r.json().catch(() => ({}));
+            if (!r.ok) {
+                // « L'emprise du projet n'est pas définie… » : le serveur le dit en clair.
+                noteEmprise = ` ${j.erreur || `Emprise du projet illisible (${r.status}).`}`;
+                empriseLue = null;
+                maj();
+                return;
+            }
+            emprise = j.contour || [[j.minLat, j.minLon], [j.minLat, j.maxLon],
+                                    [j.maxLat, j.maxLon], [j.maxLat, j.minLon]];
+            noteEmprise = '';
+            afficherEmprise();
+            if (!choixFait) utiliserEmprise(); else maj();
+        } catch (e) {
+            empriseLue = null;
+            noteEmprise = ' L\'emprise du projet n\'a pas pu être lue : réessayez en rouvrant la page.';
+            maj();
+        }
+    }
+
     function choisirTaille(m) {
+        choixFait = true;
         dessin = false;
         sommets = [];
         if (trace) { carte.removeLayer(trace); trace = null; }
@@ -1272,6 +1359,7 @@ coordonnées absolues.">
                 + 'validez à partir de trois, ou annulez par Échap.');
             return;
         }
+        choixFait = true;
         centre = { lat: e.latlng.lat, lon: e.latlng.lng };
         contour = null;
         maj();
@@ -1279,6 +1367,7 @@ coordonnées absolues.">
 
     function finirDessin() {
         if (sommets.length < 3) return;
+        choixFait = true;
         contour = sommets.slice();
         centre = centroide(contour);
         sommets = [];
@@ -1300,6 +1389,7 @@ coordonnées absolues.">
     }
 
     function demarrerDessin() {
+        choixFait = true;
         dessin = true;
         sommets = [];
         contour = null;
@@ -1320,12 +1410,7 @@ coordonnées absolues.">
         L.tileLayer('api/tuile/plan/{z}/{x}/{y}', {
             maxZoom: 18, attribution: 'Fond de plan &copy; IGN · Géoplateforme',
         }).addTo(carte);
-        if (dessine) {
-            L.polygon(dessine, { color: '#4da3ff', weight: 2, dashArray: '7 5',
-                                 fillColor: '#4da3ff', fillOpacity: 0.08 })
-                .addTo(carte).bindTooltip('Emprise importée');
-            carte.fitBounds(L.latLngBounds(dessine).pad(0.2));
-        }
+        if (emprise) afficherEmprise();
         punaise = L.marker([centre.lat, centre.lon], {
             draggable: true, keyboard: false,
             icon: L.divIcon({
@@ -1338,11 +1423,14 @@ coordonnées absolues.">
             }),
         }).addTo(carte);
         punaise.on('dragend', () => {
+            choixFait = true;
             centre = punaise.getLatLng();
             contour = null;
             maj();
         });
         carte.on('click', clicCarte);
+        // Après la punaise : l'emprise devient la zone, et maj() la dessine.
+        if (emprise) utiliserEmprise(); else maj();
     }
 
     // --- La recherche : elle ne déplace que la carte
@@ -1377,6 +1465,7 @@ coordonnées absolues.">
     }
 
     function choisirLieu(l) {
+        choixFait = true;
         centre = { lat: l.lat, lon: l.lon };
         contour = null;
         champ.value = l.nom;
@@ -1451,9 +1540,12 @@ coordonnées absolues.">
         b.addEventListener('click', () => {
             const v = b.dataset.zone;
             if (v === 'dessin') demarrerDessin();
+            else if (v === 'projet') { choixFait = true; utiliserEmprise(); }
             else choisirTaille(Number(v));
         });
     }
+    window.addEventListener('vue3d-auth', lireEmpriseProjet);
+    lireEmpriseProjet();
     $('accueil-valider').addEventListener('click', finirDessin);
     $('accueil-annuler').addEventListener('click', annulerDessin);
     document.addEventListener('keydown', e => {
@@ -1480,6 +1572,7 @@ coordonnées absolues.">
                 const p = new URLSearchParams(location.search);
                 const lat = num(p.get('lat')), lon = num(p.get('lon'));
                 if (lat !== null && lon !== null) {
+                    choixFait = true;
                     centre = { lat, lon };
                     contour = null;
                     if (carte) { carte.setView([lat, lon], 16); maj(); }

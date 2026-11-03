@@ -13,6 +13,14 @@ messages de commit et dans les commentaires des modules.
 
 ## Scène v16 — 26 octobre 2026
 
+- **Emprise du projet Trimble Connect sur la carte** : l'accueil la trace en
+  vert (par `?poly=…&origine=tc`, ou lue avec le jeton de l'extension par
+  `/api/connect/emprise`, qui rend désormais aussi le `contour` du projet quand
+  il est valide) et la prend pour zone par défaut, tant que rien d'autre n'est
+  choisi ; le bouton « ▣ Emprise du projet » la reprend. Trop grande pour le
+  serveur, elle reste tracée, l'ouverture est bloquée et l'utilisateur est
+  invité à saisir une zone plus petite (✎ Dessiner, ou un carré). Le bloc
+  « Valider / Annuler » du tracé ne s'affiche plus hors du tracé.
 - **Export des ouvrages BD TOPO** : murs, ponts, voies ferrées et terrains de
   sport s'exportent en IFC et en CityGML (interrupteur « Ouvrages » de la
   fenêtre d'export), relus dans la scène comme les autres couches : murs et
