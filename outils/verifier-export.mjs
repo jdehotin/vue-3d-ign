@@ -520,6 +520,31 @@ const classerMurs = nz => nz < -0.5 ? 'GroundSurface' : nz <= 0.5 ? 'WallSurface
         proprietes: { nom: 'VueIGN_LigneHT', valeurs: [['Tension', 'IFCLABEL', '225 kV'],
                                                        ['NombreDeSupports', 'IFCINTEGER', 4]] },
         maillages: [{ style: 'cable', facettes: facettesIfc(tubeCable([-20, 30, -5, 20, 28, -5], 0.2, IFC)) }] },
+      // Les ouvrages BD TOPO : un mur et un pont, volumes fermés, un terrain de
+      // sport drapé, les voies ferrées en ballast et files de rail.
+      { cle: 'mur|Mur', genre: 'mur', nom: 'Mur',
+        description: 'Mur, haut de 2.0 m (BD TOPO)',
+        proprietes: { nom: 'VueIGN_Mur', valeurs: [['Nature', 'IFCLABEL', 'Mur'],
+                                                   ['Hauteur', 'IFCLENGTHMEASURE', 2],
+                                                   ['SourceEpaisseur', 'IFCLABEL', 'convention']] },
+        maillages: [{ style: 'mur', facettes: pavePylone }] },
+      { cle: 'pont|Pont', genre: 'pont', nom: 'Pont',
+        description: "Pont, tablier jusqu'à 6.0 m (BD TOPO), piles et arches non décrites",
+        proprietes: { nom: 'VueIGN_Pont', valeurs: [['Nature', 'IFCLABEL', 'Pont'],
+                                                    ['HauteurTablier', 'IFCLENGTHMEASURE', 6]] },
+        maillages: [{ style: 'pont', facettes: pavePylone }] },
+      { cle: 'terrain_sport|Terrain de tennis', genre: 'terrain_sport', nom: 'Terrain de tennis',
+        description: 'Terrain de tennis (BD TOPO)',
+        proprietes: { nom: 'VueIGN_TerrainSport', valeurs: [['Nature', 'IFCLABEL', 'Terrain de tennis']] },
+        maillages: [{ style: 'tennis', facettes: facettesIfc([0, 0.1, 6, 4, 0.1, 6, 4, 0.1, 10,
+                                                            0, 0.1, 6, 4, 0.1, 10, 0, 0.1, 10]) }] },
+      { cle: 'voie_ferree|scene', genre: 'voie_ferree', nom: 'Voies ferrées',
+        description: 'Ballast et files de rail de 1 tronçon(s) (BD TOPO)',
+        proprietes: { nom: 'VueIGN_VoieFerree', valeurs: [['NombreDeTroncons', 'IFCINTEGER', 1]] },
+        maillages: [{ style: 'ballast', facettes: facettesIfc([-6, 0.1, 6, -2, 0.1, 6, -2, 0.1, 10,
+                                                              -6, 0.1, 6, -2, 0.1, 10, -6, 0.1, 10]) },
+                    { style: 'rail', facettes: facettesIfc([-5, 0.15, 6, -4.9, 0.15, 6, -4.9, 0.15, 10,
+                                                           -5, 0.15, 6, -4.9, 0.15, 10, -5, 0.15, 10]) }] },
       { cle: 'terrain', genre: 'terrain', nom: 'Terrain naturel',
         proprietes: { nom: 'VueIGN_Terrain', valeurs: [['Source', 'IFCLABEL', 'RGE ALTI (IGN)']] },
         maillages: [{ style: 'terrain', facettes: terrain }] },
@@ -532,18 +557,20 @@ const classerMurs = nz => nz < -0.5 ? 'GroundSurface' : nz <= 0.5 ? 'WallSurface
   const manquants = [...references].filter(r => !definis.has(r));
   verifier(!manquants.length, `IFC : ${definis.size} entités, toute référence définie${manquants.length ? ' — manquent ' + manquants.join(', ') : ''}`);
   const guids = [...texte.matchAll(/^#\d+=IFC\w+\('([0-9A-Za-z_$]{22})'/gm)].map(m => m[1]);
-  verifier(guids.length === 31 && new Set(guids).size === guids.length, `IFC : ${guids.length} GlobalId, tous distincts`);
+  verifier(guids.length === 43 && new Set(guids).size === guids.length, `IFC : ${guids.length} GlobalId, tous distincts`);
   verifier(!/Vide/.test(texte), 'IFC : un élément sans triangle est omis');
   verifier(texte.startsWith('ISO-10303-21;\nHEADER;') && texte.endsWith('END-ISO-10303-21;\n'), 'IFC : en-tête et fin ISO 10303-21');
   verifier(/IFCTRIANGULATEDFACESET\(#\d+,\$,\.T\./.test(texte) && /IFCTRIANGULATEDFACESET\(#\d+,\$,\.F\./.test(texte),
            'IFC : murs fermés, toit et terrain ouverts');
   verifier(/IFCGEOGRAPHICELEMENT\('[^']+',\$,'Arbre',\$,'Arbre',.*\.USERDEFINED\.\)/.test(texte)
            && /IFCGEOGRAPHICELEMENT\([^;]*\.TERRAIN\.\)/.test(texte), 'IFC : arbre et terrain en éléments géographiques');
-  for (const type of ['Tronçon de route', "Cours d'eau", 'Pylône électrique', 'Ligne à haute tension']) {
+  for (const type of ['Tronçon de route', "Cours d'eau", 'Pylône électrique', 'Ligne à haute tension',
+                      'Mur', 'Pont', 'Voie ferrée', 'Terrain de sport']) {
     // Le type d'objet, échappé comme l'écrit le fichier (accents à part).
     verifier(texte.includes(`,${chaineIfc(type)},#`), `IFC : « ${type} » en élément géographique`);
   }
-  verifier(['route', 'chemin', 'eau', 'eauIntermittente', 'pylone', 'cable']
+  verifier(['route', 'chemin', 'eau', 'eauIntermittente', 'pylone', 'cable',
+    'mur', 'pont', 'ballast', 'rail', 'tennis', 'terrainSport', 'petitTerrain', 'pisteSport', 'bassin']
     .every(s => (STYLES_IFC[s] || []).length === 3), 'IFC : chaque style des réseaux a sa teinte');
   // Le CRS écrit est celui du modèle : une autre projection se lit dans
   // IFCPROJECTEDCRS et dans l'IFCMAPCONVERSION, sans altitude NGF déclarée
@@ -591,10 +618,10 @@ const classerMurs = nz => nz < -0.5 ? 'GroundSurface' : nz <= 0.5 ? 'WallSurface
   const compte = nom => (gml.match(new RegExp(`<${nom}[ >]`, 'g')) || []).length;
   verifier(compte('bldg:Building') === 2 && compte('bldg:RoofSurface') === 4 && compte('bldg:WallSurface') === 14
            && compte('bldg:GroundSurface') === 3 && compte('veg:SolitaryVegetationObject') === 1
-           && compte('gen:GenericCityObject') === 5 && compte('gml:Triangle') === 32,
+           && compte('gen:GenericCityObject') === 9 && compte('gml:Triangle') === 32,
            `CityGML : 2 bâtiments (${compte('bldg:RoofSurface')} toits, ${compte('bldg:WallSurface')} murs dont 2 pignons, `
            + `${compte('bldg:GroundSurface')} sols, dessus des murs omis sous un toit), 1 arbre, `
-           + `${compte('gen:GenericCityObject')} objets génériques (masse, route, cours d'eau, pylône, ligne), `
+           + `${compte('gen:GenericCityObject')} objets génériques (masse, route, cours d'eau, pylône, ligne, mur, pont, terrain, voies), `
            + `${compte('gml:Triangle')} triangles de relief`);
   verifier(compte('bldg:BuildingPart') === 2 && /<bldg:BuildingPart gml:id="PARTIES_p1"><gml:name>Nef<\/gml:name><bldg:measuredHeight uom="m">3\.000</.test(gml)
            && /<bldg:BuildingPart gml:id="PARTIES_p2"><gml:name>Tour<\/gml:name><bldg:measuredHeight uom="m">5\.000</.test(gml),

@@ -13,6 +13,18 @@ messages de commit et dans les commentaires des modules.
 
 ## Scène v16 — 26 octobre 2026
 
+- **Export des ouvrages BD TOPO** : murs, ponts, voies ferrées et terrains de
+  sport s'exportent en IFC et en CityGML (interrupteur « Ouvrages » de la
+  fenêtre d'export), relus dans la scène comme les autres couches : murs et
+  tabliers en volumes, voies (ballast et rails) et terrains drapés. Essayé à
+  Vers-Pont-du-Gard : l'aqueduc (tablier à 47,8 m) et un second pont, dans les
+  deux formats.
+- **Alertes de taille** : l'accueil prévient avant « Ouvrir » quand la boîte
+  de l'emprise dépasse l'avertissement du service, et bloque l'ouverture
+  au-delà de sa borne ; `/api/sante` donne ces bornes (`limites`), l'outil de
+  tracé de la vue les suit. L'export prévient d'un fichier de plus de 64 Mo
+  (limite du dépôt dans le projet) et le refuse avant l'envoi, avec le conseil
+  de décocher les couches lourdes.
 - **Mémoire du service** : `VUE3D_AIRE_MAX_KM2` borne l'aire de boîte d'un
   contour ou d'un carré, avec un refus clair (render.yaml : 2,5 km² pour les
   2 Go du plan Standard) au lieu d'un processus tué par manque de mémoire ;

@@ -79,6 +79,7 @@ from .scene import (NOM_BORNES, NOM_DPE, NOM_DVF, NOM_EMPRISES, NOM_MONUMENTS, N
                     VehiculesDesactives, VehiculesIndisponibles, point_normalise,
                     zone_normalisee)
 
+from .scene import aire_avertissement_m2, aire_max_m2
 from .scene import construire as construire_scene
 from .toits import autoriser_bassin
 from .tuiles import (COUCHES, TUILES_RELECTURES_PAR_HEURE, Stock, TuileAbsente, TuileIllisible,
@@ -1083,7 +1084,10 @@ def creer_app(dossier_cache=None, construire=construire_scene, lire_monuments=fe
             "mode": lecteur.mode if lecteur else MODE_PAR_DEFAUT,
             "detecteurs": list(lecteur.detecteurs) if lecteur else []},
             "panneaux": {"actif": bool(cache.lire_panneaux),
-                         "source": REGISTRE_LICENCE if cache.lire_panneaux else None}})
+                         "source": REGISTRE_LICENCE if cache.lire_panneaux else None},
+            # Ce que le service construit : la page prévient avant le refus.
+            "limites": {"aire_max_km2": aire_max_m2() / 1e6,
+                        "aire_avertissement_km2": aire_avertissement_m2() / 1e6}})
         reponse.headers["Cache-Control"] = "no-store"
         return reponse
 

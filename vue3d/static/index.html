@@ -63,6 +63,10 @@
         .accueil-zones button:hover { border-color:#4d5866; }
         .accueil-zones button.on { background:rgba(224,123,0,.16); border-color:var(--accent, #e07b00);
                                    color:#ffcf8a; }
+        .accueil-alerte { margin:8px 0 0; padding:7px 9px; border-radius:8px; font-size:12px; line-height:1.45;
+                          background:rgba(240,194,123,.12); border:1px solid #f0c27b; color:#f0c27b; }
+        .accueil-alerte.refus { background:rgba(231,91,91,.12); border-color:#e75b5b; color:#f09a9a; }
+        .accueil-alerte[hidden] { display:none; }
         .accueil-aide { margin:8px 0 0; font-size:12px; line-height:1.45; color:var(--muted, #9aa0a6); }
         .accueil-dessin { display:flex; gap:6px; }
         .accueil-dessin button { flex:1; padding:8px 10px; border-radius:8px; font-size:12px; cursor:pointer;
@@ -524,6 +528,7 @@
                         <button type="button" data-zone="dessin" id="accueil-dessiner">✎ Dessiner</button>
                     </div>
                     <p class="accueil-aide" id="accueil-aide"></p>
+                    <p class="accueil-alerte" id="accueil-alerte" role="alert" hidden></p>
                     <div class="accueil-dessin" id="accueil-dessin-actions" hidden>
                         <button type="button" id="accueil-valider" disabled>Valider le contour</button>
                         <button type="button" id="accueil-annuler">Annuler</button>
@@ -906,6 +911,7 @@
                         <button type="button" class="toggle on" id="x-haies" title="Haies de la BD TOPO, dressées : 2 m de haut et 1,5 m d'épaisseur de convention, la donnée les taisant.">Haies</button>
                         <button type="button" class="toggle on" id="x-routes" title="Tronçons de route, chemins et sentiers de la BD TOPO, drapés sur le relief.">Routes et chemins</button>
                         <button type="button" class="toggle on" id="x-eau" title="Étendues et cours d'eau de la BD TOPO, drapés sur le relief.">Hydrographie</button>
+                        <button type="button" class="toggle on" id="x-ouvrages" title="Murs, ponts, voies ferrées et terrains de sport de la BD TOPO : murs et tabliers en volumes, voies et terrains drapés sur le relief.">Ouvrages</button>
                         <button type="button" class="toggle on" id="x-lignes" title="Lignes à haute tension de la BD TOPO : pylônes dressés et conducteurs tendus.">Lignes HT</button>
                     </div>
                     <div class="sous-titre">Format</div>
@@ -1174,6 +1180,42 @@ coordonnées absolues.">
     }
 
     const aide = texte => { $('accueil-aide').textContent = texte; };
+
+    // Ce que le serveur construit (/api/sante, `limites`) : sans réponse, les
+    // bornes d'origine du serveur. Le service borne l'aire de la BOÎTE du
+    // contour — c'est elle qui est lue —, pas celle du contour.
+    window.limitesService = { max_m2: 20e6, avert_m2: 10e6 };
+    fetch('api/sante', { cache: 'no-store' }).then(r => r.ok ? r.json() : null).then(s => {
+        if (!s || !s.limites) return;
+        window.limitesService = { max_m2: s.limites.aire_max_km2 * 1e6,
+                                  avert_m2: s.limites.aire_avertissement_km2 * 1e6 };
+        maj();
+    }).catch(() => { /* le serveur ne répond pas : bornes d'origine */ });
+
+    /** Aire de la boîte d'un contour, en m² (la même formule que le serveur). */
+    function boiteM2(pts) {
+        const las = pts.map(p => p[0]), los = pts.map(p => p[1]);
+        const lat0 = (Math.max(...las) + Math.min(...las)) / 2;
+        return (Math.max(...las) - Math.min(...las)) * 111320
+             * (Math.max(...los) - Math.min(...los)) * 111320 * Math.cos(lat0 * Math.PI / 180);
+    }
+
+    /** Prévient avant le refus : trop grande, la scène n'est pas construite ; grande, elle est longue. */
+    function alerteTaille() {
+        const pts = contour || dessine;
+        const aire = pts ? boiteM2(pts) : cote * cote;
+        const { max_m2: max, avert_m2: avert } = window.limitesService;
+        const alerte = $('accueil-alerte');
+        const trop = aire > max;
+        alerte.hidden = !(trop || aire > avert);
+        alerte.classList.toggle('refus', trop);
+        alerte.textContent = trop
+            ? `Scène trop grande : sa boîte fait ${formaterSurface(aire)}, le serveur n'en construit pas `
+              + `au-delà de ${formaterSurface(max)}. Réduisez le contour ou la taille de l'emprise.`
+            : `Grande scène : sa boîte fait ${formaterSurface(aire)}. Elle sera longue à construire et lourde `
+              + `à afficher, et le serveur refuse au-delà de ${formaterSurface(max)}.`;
+        $('accueil-ouvrir').disabled = trop;
+    }
     const aideBase = () => (dessin
         ? 'Cliquez sur la carte pour poser les sommets, dans l\'ordre du tour ; validez à partir de trois points.'
         : 'Cliquez sur la carte, ou glissez le repère, pour placer le centre. Le carré fait la taille choisie.');
@@ -1201,6 +1243,7 @@ coordonnées absolues.">
         }
         aide(aideBase() + (dessine
             ? ` Emprise importée : ${formaterSurface(surfaceM2(dessine))} (contour bleu).` : ''));
+        alerteTaille();
     }
 
     function choisirTaille(m) {
@@ -6632,8 +6675,14 @@ function construireOuvrages() {
             rails.push(...trianglesRuban(ligneDecalee(v.ligne, cote * RAIL_ECART), RAIL_LARGEUR));
         }
     }
-    if (ballast.length) maillageDrape(ballast, MAT_BALLAST, groupeVoies, VOIE_DECALAGE);
-    if (rails.length) maillageDrape(rails, MAT_RAIL, groupeVoies, VOIE_DECALAGE + 0.03);
+    // `userData.ouvrage` : ce que l'export relit (elementOuvrage), comme
+    // `emprise` pour les emprises — le même maillage, sans le reconstruire.
+    if (ballast.length) {
+        maillageDrape(ballast, MAT_BALLAST, groupeVoies, VOIE_DECALAGE).userData.ouvrage = { genre: 'voie', style: 'ballast' };
+    }
+    if (rails.length) {
+        maillageDrape(rails, MAT_RAIL, groupeVoies, VOIE_DECALAGE + 0.03).userData.ouvrage = { genre: 'voie', style: 'rail' };
+    }
     const parNature = new Map();
     for (const t of OUVRAGES.terrains) {
         if (!parNature.has(t.nature)) parNature.set(t.nature, []);
@@ -6643,9 +6692,11 @@ function construireOuvrages() {
         somme + Math.abs((b[0] - a[0]) * (c[1] - a[1]) - (c[0] - a[0]) * (b[1] - a[1])) / 2, 0);
     [...parNature].filter(([, tris]) => tris.length)
         .sort((u, v) => aire(v[1]) - aire(u[1]))
-        .forEach(([nature, tris], rang) => maillageDrape(
-            tris, materiauTerrain(nature), groupeOuvrages,
-            TERRAIN_SPORT_DECALAGE + TERRAIN_SPORT_ETAGE * rang));
+        .forEach(([nature, tris], rang) => {
+            maillageDrape(tris, materiauTerrain(nature), groupeOuvrages,
+                TERRAIN_SPORT_DECALAGE + TERRAIN_SPORT_ETAGE * rang)
+                .userData.ouvrage = { genre: 'terrain_sport', nature };
+        });
     placerDrapes();
 
     // Les volumes se comptent depuis le relief : sans lui, ni mur ni pont.
@@ -6656,7 +6707,8 @@ function construireOuvrages() {
             const stations = stationsLeLong(m.ligne, OUVRAGE_PAS);
             if (stations.length < 2) continue;
             const mesh = maillagePose(prismeLeLong(stations, MUR_EPAISSEUR, sommet(0), auSol), MAT_MUR, 0);
-            mesh.userData = { infobulle: `<b>${m.nom || m.detail || m.nature}</b>`
+            mesh.userData = { ouvrage: { genre: 'mur', donnees: m },
+                infobulle: `<b>${m.nom || m.detail || m.nature}</b>`
                 + `<br>haut de ${enMetres(m.h)} <i>(altitude BD TOPO de son sommet, moins le relief)</i>` };
             ouvragesSurvol.push(mesh);
         }
@@ -6670,7 +6722,8 @@ function construireOuvrages() {
                 tris = dalle(p.contour, p.trous || [], TABLIER_EPAISSEUR);
             }
             const mesh = maillagePose(tris, MAT_TABLIER, TABLIER_PLANCHER);
-            mesh.userData = { infobulle: `<b>${p.nom || p.detail || p.nature}</b>`
+            mesh.userData = { ouvrage: { genre: 'pont', donnees: p },
+                infobulle: `<b>${p.nom || p.detail || p.nature}</b>`
                 + ((p.nom || p.detail) ? `<br>${p.nature}` : '')
                 + `<br>tablier jusqu'à ${enMetres(p.h)} du sol <i>(altitude BD TOPO, moins le relief)</i>`
                 + (p.ligne ? `<br>large de ${enMetres(p.largeur_m)} `
@@ -6694,8 +6747,14 @@ function construireOuvrages() {
                 }
             }
         }
-        if (ballastHaut.length) maillagePose(ballastHaut, MAT_BALLAST_VOLUME, TABLIER_PLANCHER, groupeVoies, voiesPoses);
-        if (railsHaut.length) maillagePose(railsHaut, MAT_RAIL, TABLIER_PLANCHER, groupeVoies, voiesPoses);
+        if (ballastHaut.length) {
+            maillagePose(ballastHaut, MAT_BALLAST_VOLUME, TABLIER_PLANCHER, groupeVoies, voiesPoses)
+                .userData.ouvrage = { genre: 'voie', style: 'ballast' };
+        }
+        if (railsHaut.length) {
+            maillagePose(railsHaut, MAT_RAIL, TABLIER_PLANCHER, groupeVoies, voiesPoses)
+                .userData.ouvrage = { genre: 'voie', style: 'rail' };
+        }
         ouvragesEnVolume = ouvragesSurvol.length > 0;
         placerOuvrages();
     }
@@ -10140,6 +10199,12 @@ const ENTITES_IFC = {
     cours_d_eau: ['IFCGEOGRAPHICELEMENT', 'USERDEFINED', "Cours d'eau"],
     pylone: ['IFCGEOGRAPHICELEMENT', 'USERDEFINED', 'Pylône électrique'],
     ligne_ht: ['IFCGEOGRAPHICELEMENT', 'USERDEFINED', 'Ligne à haute tension'],
+    // Les ouvrages de la BD TOPO : murs et tabliers en volumes fermés, voies
+    // ferrées et terrains de sport en surfaces drapées.
+    mur: ['IFCGEOGRAPHICELEMENT', 'USERDEFINED', 'Mur'],
+    pont: ['IFCGEOGRAPHICELEMENT', 'USERDEFINED', 'Pont'],
+    voie_ferree: ['IFCGEOGRAPHICELEMENT', 'USERDEFINED', 'Voie ferrée'],
+    terrain_sport: ['IFCGEOGRAPHICELEMENT', 'USERDEFINED', 'Terrain de sport'],
 };
 
 /**
@@ -10600,6 +10665,12 @@ const STYLES_IFC = {
     route: [0.37, 0.39, 0.42], chemin: [0.61, 0.54, 0.43],
     eau: [0.18, 0.44, 0.62], eauIntermittente: [0.34, 0.55, 0.68],
     pylone: [0.60, 0.63, 0.65], cable: [0.14, 0.15, 0.17],
+    // Les ouvrages, aux teintes de la vue (MAT_MUR, MAT_TABLIER, MAT_BALLAST,
+    // MAT_RAIL, COULEURS_TERRAIN) rendues opaques.
+    mur: [0.65, 0.62, 0.56], pont: [0.55, 0.56, 0.58],
+    ballast: [0.42, 0.37, 0.34], rail: [0.73, 0.75, 0.77],
+    terrainSport: [0.31, 0.56, 0.29], petitTerrain: [0.36, 0.56, 0.47],
+    tennis: [0.71, 0.40, 0.25], pisteSport: [0.66, 0.31, 0.24], bassin: [0.25, 0.56, 0.75],
 };
 // Mailles du relief exporté, par côté, au plus : 178 dans l'emprise par
 // défaut, la maille de la vue (2 m) ; en zone de 1 000 m, 500 mailles
@@ -10627,7 +10698,7 @@ function toitDessine(ud) {
  * par entité ; les tronçons de route et les étendues d'eau, drapés comme eux ;
  * les pylônes et les conducteurs des lignes à haute tension ; le relief de
  * l'emprise. `options` : { relief, batiments, arbres, masses, routes, eau,
- * lignes, cimetieres, aerodromes, postes, haies }.
+ * lignes, ouvrages, cimetieres, aerodromes, postes, haies }.
  */
 
 /** Le libellé et le jeu de propriétés de chaque sous-couche d'emprises. */
@@ -10793,6 +10864,64 @@ function elementLigne(l, facettes) {
     };
 }
 
+/** Le style de chaque nature de terrain de sport (COULEURS_TERRAIN). */
+const STYLE_TERRAIN_SPORT = { 'Petit terrain multi-sports': 'petitTerrain', 'Terrain de tennis': 'tennis',
+                              'Piste de sport': 'pisteSport', 'Bassin de natation': 'bassin' };
+
+/**
+ * Un ouvrage BD TOPO (construireOuvrages), tel que la vue le dessine : un mur
+ * ou un pont, volume fermé posé sur le relief, ou les terrains de sport d'une
+ * nature, aplat drapé. Épaisseur d'un mur et d'un tablier, absentes de la
+ * BD TOPO, sont celles de la convention de la vue (MUR_EPAISSEUR,
+ * TABLIER_EPAISSEUR) ; la hauteur est celle de l'altitude BD TOPO du sommet,
+ * moins le relief.
+ */
+function elementOuvrage(meta, facettes, i) {
+    const d = meta.donnees || {};
+    const genre = meta.genre;
+    if (genre === 'terrain_sport') {
+        return {
+            cle: `terrain_sport|${meta.nature}|${i}`, genre, nom: meta.nature,
+            description: `${meta.nature} (BD TOPO)`, tag: null,
+            proprietes: { nom: 'VueIGN_TerrainSport', valeurs: [['Nature', 'IFCLABEL', meta.nature]] },
+            maillages: [{ style: STYLE_TERRAIN_SPORT[meta.nature] || 'terrainSport', facettes }],
+        };
+    }
+    const pont = genre === 'pont';
+    const nom = d.nom || d.detail || d.nature || (pont ? 'Pont' : 'Mur');
+    const valeurs = [['Nature', 'IFCLABEL', d.nature], ['NatureDetaillee', 'IFCLABEL', d.detail],
+                     ['Nom', 'IFCLABEL', d.nom],
+                     [pont ? 'HauteurTablier' : 'Hauteur', 'IFCLENGTHMEASURE', d.h],
+                     [pont ? 'EpaisseurTablier' : 'Epaisseur', 'IFCLENGTHMEASURE',
+                      pont ? TABLIER_EPAISSEUR : MUR_EPAISSEUR],
+                     ['SourceEpaisseur', 'IFCLABEL', 'convention']];
+    if (pont && d.ligne) {
+        valeurs.push(['Largeur', 'IFCLENGTHMEASURE', d.largeur_m],
+                     ['SourceLargeur', 'IFCLABEL', d.largeur_mesuree ? 'BD TOPO' : 'convention']);
+    }
+    return {
+        cle: `${genre}|${d.nom || d.nature || ''}|${i}`, genre, nom,
+        description: `${d.nature || (pont ? 'Pont' : 'Mur')}, ${pont ? 'tablier jusqu\'à' : 'haut de'} `
+            + `${d.h.toFixed(1)} m (BD TOPO)` + (pont ? ', piles et arches non décrites' : ''),
+        tag: null,
+        proprietes: { nom: pont ? 'VueIGN_Pont' : 'VueIGN_Mur', valeurs },
+        maillages: [{ style: genre, facettes }],
+    };
+}
+
+/** Les voies ferrées d'une scène en un élément : le ballast et les deux files de rail. */
+function elementVoies(maillages, troncons) {
+    return {
+        cle: 'voie_ferree|scene', genre: 'voie_ferree', nom: 'Voies ferrées',
+        description: `Ballast et files de rail de ${troncons} tronçon(s) (BD TOPO)`, tag: null,
+        proprietes: { nom: 'VueIGN_VoieFerree', valeurs: [
+            ['NombreDeTroncons', 'IFCINTEGER', troncons],
+            ['EcartementRails', 'IFCLENGTHMEASURE', 2 * RAIL_ECART],
+            ['SourceEcartement', 'IFCLABEL', 'convention (voie normale)']] },
+        maillages,
+    };
+}
+
 function modeleExport(options) {
     const proj = projectionExport;
     const [lx, ly] = proj.vers(CENTER[0], CENTER[1]);
@@ -10807,7 +10936,8 @@ function modeleExport(options) {
     const elements = [];
     const compte = { batiments: 0, arbres: 0, masses: 0, maille: null, osm: false,
                      routes: 0, surfacesEau: 0, coursEau: 0, pylones: 0, lignes: 0,
-                     cimetieres: 0, aerodromes: 0, postes: 0, haies: 0 };
+                     cimetieres: 0, aerodromes: 0, postes: 0, haies: 0,
+                     murs: 0, ponts: 0, voies: 0, terrainsSport: 0 };
 
     if (options.batiments) {
         // Remis sans exagération le temps de la lecture : rebaserBatiments ne
@@ -10949,15 +11079,18 @@ function modeleExport(options) {
     // maillages sont replacés le temps de la lecture, puis remis : un aplat
     // suit la pente du sol, un toit ne l'a jamais suivie.
     if (options.cimetieres || options.aerodromes || options.postes || options.haies
-        || options.routes || options.eau || options.lignes) {
+        || options.routes || options.eau || options.lignes || options.ouvrages) {
         const exagEmp = exagVert, reliefEmp = relief;
         exagVert = 1; relief = true;
         try {
             placerDrapes();
             placerEmprises();
             placerLignes();
+            placerOuvrages();
             groupeEmprises.updateMatrixWorld(true);
             groupeLignes.updateMatrixWorld(true);
+            groupeOuvrages.updateMatrixWorld(true);
+            groupeVoies.updateMatrixWorld(true);
             const v = new THREE.Vector3();
             for (const groupe of [groupeCimetieres, groupeAerodromes, groupePostes, groupeHaies]) {
                 for (const o of groupe.children) {
@@ -10990,6 +11123,34 @@ function modeleExport(options) {
                     if (!facettes.faces.length) continue;
                     elements.push(elementEau(couche, donnees, facettes, elements.length));
                     if (couche === 'surface') compte.surfacesEau++; else compte.coursEau++;
+                }
+            }
+            if (options.ouvrages) {
+                const lire = o => {
+                    const pos = o.geometry.attributes.position, idx = o.geometry.index;
+                    const nb = idx ? idx.count : pos.count;
+                    const tri = [];
+                    for (let i = 0; i < nb; i++) {
+                        v.fromBufferAttribute(pos, idx ? idx.getX(i) : i).applyMatrix4(o.matrixWorld);
+                        tri.push(...versIfc(v.x, v.y, v.z));
+                    }
+                    return facettesIfc(tri);
+                };
+                const voies = [];
+                for (const groupe of [groupeOuvrages, groupeVoies]) {
+                    for (const o of groupe.children) {
+                        const meta = o.userData.ouvrage;
+                        if (!meta || !o.isMesh) continue;
+                        const facettes = lire(o);
+                        if (!facettes.faces.length) continue;
+                        if (meta.genre === 'voie') { voies.push({ style: meta.style, facettes }); continue; }
+                        elements.push(elementOuvrage(meta, facettes, elements.length));
+                        compte[meta.genre === 'mur' ? 'murs' : meta.genre === 'pont' ? 'ponts' : 'terrainsSport']++;
+                    }
+                }
+                if (voies.length) {
+                    elements.push(elementVoies(voies, OUVRAGES.voies.length));
+                    compte.voies = OUVRAGES.voies.length;
                 }
             }
             if (options.lignes) {
@@ -11027,8 +11188,11 @@ function modeleExport(options) {
             placerDrapes();
             placerEmprises();
             placerLignes();
+            placerOuvrages();
             groupeEmprises.updateMatrixWorld(true);
             groupeLignes.updateMatrixWorld(true);
+            groupeOuvrages.updateMatrixWorld(true);
+            groupeVoies.updateMatrixWorld(true);
         }
     }
 
@@ -11089,11 +11253,11 @@ function modeleExport(options) {
 // cochent à part des quatre autres. Les réseaux, légers, sont cochés d'office ;
 // les masses pèsent lourd (11 000 éléments au Trocadéro).
 const optionsExport = { relief: true, batiments: true, arbres: true, masses: false,
-                        routes: true, eau: true, lignes: true,
+                        routes: true, eau: true, lignes: true, ouvrages: true,
                         cimetieres: true, aerodromes: true, postes: true, haies: true };
 const COUCHES_EXPORT = [['relief', 'x-relief'], ['batiments', 'x-batiments'],
                         ['arbres', 'x-arbres'], ['masses', 'x-masses'],
-                        ['routes', 'x-routes'], ['eau', 'x-eau'], ['lignes', 'x-lignes'],
+                        ['routes', 'x-routes'], ['eau', 'x-eau'], ['ouvrages', 'x-ouvrages'], ['lignes', 'x-lignes'],
                         ['cimetieres', 'x-cimetieres'], ['aerodromes', 'x-aerodromes'],
                         ['postes', 'x-postes'], ['haies', 'x-haies']];
 for (const [cle, id] of COUCHES_EXPORT) {
@@ -11160,6 +11324,7 @@ const COUCHES_PRESENTES = {
     routes: () => routesPosees.length > 0,
     eau: () => eauPosee.length > 0,
     lignes: () => lignesElec.length > 0,
+    ouvrages: () => groupeOuvrages.children.length + groupeVoies.children.length > 0,
     cimetieres: () => groupeCimetieres.children.length > 0,
     aerodromes: () => groupeAerodromes.children.length > 0,
     postes: () => groupePostes.children.length > 0,
@@ -11358,6 +11523,10 @@ function resumeExport(modele, choix) {
             choix.aerodromes && `${c.aerodromes.toLocaleString('fr-FR')} aérodrome(s) ou piste(s)`,
             choix.postes && nombre(c.postes, 'poste'),
             choix.haies && nombre(c.haies, 'haie'),
+            choix.ouvrages && c.murs > 0 && nombre(c.murs, 'mur'),
+            choix.ouvrages && c.ponts > 0 && nombre(c.ponts, 'pont'),
+            choix.ouvrages && c.voies > 0 && nombreDe(c.voies, 'tronçon(s) de voie ferrée'),
+            choix.ouvrages && c.terrainsSport > 0 && nombreDe(c.terrainsSport, 'nature(s) de terrain de sport'),
             choix.lignes && nombre(c.pylones, 'pylône'),
             choix.lignes && nombreDe(c.lignes, 'ligne'),
             c.maille && `relief à ${c.maille.toFixed(1).replace('.', ',')} m`].filter(Boolean).join(', ');
@@ -11377,7 +11546,18 @@ const nomFichierExport = () => {
  * l'API de Connect n'ouvre pas ses en-têtes CORS à cette origine, l'envoi ne
  * peut donc pas partir du navigateur. Le jeton ne fait que passer ici.
  */
+// Le dépôt dans le projet est borné à 64 Mo par le serveur (TAILLE_MAX_DEPOT) : on
+// le dit avant d'envoyer, pas après des dizaines de secondes de transfert.
+const TAILLE_MAX_DEPOT = 64 * 1024 * 1024;
+const enMo = octets => (octets / 1e6).toFixed(1).replace('.', ',');
+const CONSEIL_TAILLE = 'Décochez les couches lourdes (arbres, masses, relief), choisissez le format IFC, '
+    + 'plus compact que le CityGML, ou réduisez la zone.';
+
 async function envoyerAuProjet(fichier, nomFichier, modele, choix) {
+    if (fichier.size > TAILLE_MAX_DEPOT) {
+        throw new Error(`le fichier fait ${enMo(fichier.size)} Mo : le dépôt dans le projet n'en accepte `
+            + `pas plus de ${enMo(TAILLE_MAX_DEPOT)}. ${CONSEIL_TAILLE} « Télécharger » reste possible.`);
+    }
     if (!tcAuth) throw new Error('Trimble Connect n’a pas donné son jeton : rouvrez cette page depuis l’extension.');
     const dossier = champDossier.value.trim();
     noterExport(`Envoi de ${nomFichier} vers Trimble Connect`
@@ -11505,7 +11685,12 @@ async function exporter(format, mode = 'telecharger') {
         }
         noterExport((repli ? 'Écriture directe refusée, fichier téléchargé : ' : '')
             + `${ecrit} : ${(fichier.size / 1e6).toFixed(1).replace('.', ',')} Mo, `
-            + resumeExport(modele, choix) + '. ' + reperes(modele));
+            + resumeExport(modele, choix) + '. ' + reperes(modele)
+            // Un fichier plus lourd que le dépôt n'ira pas au projet, et pèse
+            // lourd à l'ouverture dans un logiciel de conception.
+            + (fichier.size > TAILLE_MAX_DEPOT
+                ? ` ⚠ Fichier volumineux : le dépôt dans le projet est limité à ${enMo(TAILLE_MAX_DEPOT)} Mo. `
+                    + CONSEIL_TAILLE : ''));
     } catch (err) {
         await abandonner();
         noterExport('Export impossible : ' + err.message);
@@ -12988,8 +13173,10 @@ window.addEventListener('wheel', e => {
 // elle est longue à venir et lourde à dessiner. Ce sont la végétation et le
 // nuage LiDAR qui pèsent — 81 875 houppiers pour un seul carré de 2 km à
 // Gordes —, et le panneau propose de les éteindre d'un clic.
-const POLY_AIRE_AVERTISSEMENT_M2 = 10000 * 1000;    // 10 km², comme le serveur
-const POLY_AIRE_MAX_M2 = 20000 * 1000;              // 20 km² : le serveur refuse
+// Les bornes viennent du serveur (/api/sante, lues par l'accueil) : un service
+// à la mémoire juste refuse plus tôt que les 20 km² d'origine.
+const limitesAire = () => ({ avert: (window.limitesService || {}).avert_m2 ?? 10e6,
+                             max: (window.limitesService || {}).max_m2 ?? 20e6 });
 const DESSIN_COULEUR = 0xffc247;
 let dessin = null;                                  // { sommets: [[lat, lon], …] }
 const groupeDessin = new THREE.Group();
@@ -13077,14 +13264,15 @@ const enSurface = m2 => (m2 >= 1000000 ? `${(m2 / 1000000).toFixed(2).replace('.
 function majNoteDessin() {
     const n = dessin ? dessin.sommets.length : 0;
     const aire = n >= 3 ? aireDessin(dessin.sommets) : 0;
+    const { avert: POLY_AIRE_AVERTISSEMENT_M2, max: POLY_AIRE_MAX_M2 } = limitesAire();
     let texte;
     if (n === 0) texte = 'Cliquez sur la vue pour poser le premier sommet du contour.';
     else if (n < 3) texte = `${n} sommet${n > 1 ? 's' : ''} posé${n > 1 ? 's' : ''} — il en faut trois au moins.`;
     else texte = `Contour de ${n} sommets, ${enSurface(aire)}.`;
     if (aire > POLY_AIRE_MAX_M2) {
-        texte += ' Au-delà de 20 km², le serveur refuse le contour : resserrez-le.';
+        texte += ` Au-delà de ${enSurface(POLY_AIRE_MAX_M2)}, le serveur refuse le contour : resserrez-le.`;
     } else if (aire > POLY_AIRE_AVERTISSEMENT_M2) {
-        texte += ' Au-delà de 10 km², la scène est longue à construire et la vue peut ramer :'
+        texte += ` Au-delà de ${enSurface(POLY_AIRE_AVERTISSEMENT_M2)}, la scène est longue à construire et la vue peut ramer :`
                + ' éteignez les données les plus lourdes ci-dessous, ou validez quand même.';
     }
     noteDessin.textContent = texte;

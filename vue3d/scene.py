@@ -188,6 +188,14 @@ def aire_max_m2():
     return POLY_AIRE_BOITE_MAX_M2
 
 
+def aire_avertissement_m2():
+    """L'aire de boîte (m²) dès laquelle la page prévient que la scène sera
+    longue ou lourde : 10 km² (POLY_AIRE_AVERTISSEMENT_M2), ou 60 % de la borne
+    quand le service en a une plus basse — le pic de mémoire croît avec
+    l'aire, et l'utilisateur doit être prévenu avant de se voir refuser."""
+    return min(POLY_AIRE_AVERTISSEMENT_M2, 0.6 * aire_max_m2())
+
+
 def rendre_la_memoire():
     """Rend au système la mémoire qu'une construction vient de libérer.
 

@@ -346,10 +346,20 @@ def test_une_panne_des_vehicules_rend_503_sans_toucher_la_scene(client_vehicules
     assert client_vehicules.get("/api/scene?lat=45.5&lon=2").status_code == 200
 
 
-def test_sante(client):
+def test_sante(client, monkeypatch):
+    monkeypatch.delenv("VUE3D_AIRE_MAX_KM2", raising=False)
     assert client.get("/api/sante").get_json() == {
         "ok": True, "vehicules": {"mode": "aucun", "detecteurs": []},
-        "panneaux": {"actif": False, "source": None}}
+        "panneaux": {"actif": False, "source": None},
+        "limites": {"aire_max_km2": 20.0, "aire_avertissement_km2": 10.0}}
+
+
+def test_sante_dit_les_limites_du_service_a_la_page(client, monkeypatch):
+    """La page prévient avant le refus : elle lit la borne que le service s'est
+    donnée, et avertit à 60 % d'elle quand elle est sous 10 km²."""
+    monkeypatch.setenv("VUE3D_AIRE_MAX_KM2", "2.5")
+    limites = client.get("/api/sante").get_json()["limites"]
+    assert limites == {"aire_max_km2": 2.5, "aire_avertissement_km2": 1.5}
 
 
 def test_sans_registre_la_couche_des_panneaux_le_dit(client):
