@@ -132,12 +132,14 @@ def test_un_contour_hors_de_france_est_refuse():
 
 
 def test_un_contour_plus_grand_que_la_boite_du_service_est_refuse():
-    """La boîte est ce qui est lu : au-delà du double des 10 km² conseillés, la
+    """La boîte est ce qui est lu : au-delà de la borne (50 km² en local), la
     construction ne tiendrait pas en mémoire."""
-    trop = _contour(48.80, 2.10, 0.05, 0.07)          # ~5,4 × 5,1 km, ~27 km²
+    monte = _contour(48.80, 2.10, 0.05, 0.07)         # ~5,4 × 5,1 km, ~27 km² : accepté
+    assert zone_normalisee(None, polygone=monte) is not None
+    trop = _contour(48.80, 2.10, 0.09, 0.11)          # ~10 × 8 km, ~80 km²
     with pytest.raises(ValueError) as refus:
         zone_normalisee(None, polygone=trop)
-    assert "km²" in str(refus.value)
+    assert "50 km²" in str(refus.value)
 
 
 def test_le_contour_est_prefere_a_la_zone():

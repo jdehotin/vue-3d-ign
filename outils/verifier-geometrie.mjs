@@ -729,7 +729,7 @@ tout = tout && ok;
 // 10 km², et masque le terrain au-delà du contour. La surface doit valoir celle
 // du serveur (polygone.Polygone.aire_m2, formule du lacet sur les sommets
 // projetés en mètres) : c'est elle qui décide de l'avertissement, et le serveur
-// refuse au-delà de 20 km².
+// refuse au-delà de sa borne (50 km² en local).
 {
 const sommets = lirePolygone('43.910000,5.190000;43.910000,5.192500;\n43.912600,5.192500; 43.912600,5.190000');
 const trois = lirePolygone('43.9,5.2;43.91,5.21;43.92,5.19');

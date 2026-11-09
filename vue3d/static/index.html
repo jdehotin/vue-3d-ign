@@ -1192,7 +1192,7 @@ coordonnées absolues.">
     // Ce que le serveur construit (/api/sante, `limites`) : sans réponse, les
     // bornes d'origine du serveur. Le service borne l'aire de la BOÎTE du
     // contour — c'est elle qui est lue —, pas celle du contour.
-    window.limitesService = { max_m2: 20e6, avert_m2: 10e6 };
+    window.limitesService = { max_m2: 50e6, avert_m2: 10e6 };
     fetch('api/sante', { cache: 'no-store' }).then(r => r.ok ? r.json() : null).then(s => {
         if (!s || !s.limites) return;
         window.limitesService = { max_m2: s.limites.aire_max_km2 * 1e6,
@@ -1680,7 +1680,7 @@ const EMPRISE_REFERENCE_M = 2 * 0.0016 * 111320;
 // point ; c'est le plus grand côté de sa boîte qui sert d'échelle — distances
 // de vue, brouillard, ombres, anneau — comme `scene.cote_zone`. Le contour part
 // tel quel au serveur, qui le lit, le refuse (moins de trois sommets, contour
-// croisé, hors de France, au-delà de 20 km²) ou le borne, et découpe la scène à
+// croisé, hors de France, au-delà de la borne du serveur, 50 km² en local) ou le borne, et découpe la scène à
 // son bord. La page, elle, avertit au-delà de 10 km² sans refuser : la scène se
 // construit quand même, plus lentement.
 function lirePolygone(texte) {
@@ -13260,16 +13260,16 @@ window.addEventListener('wheel', e => {
 // (`poly=…`) — la page se recharge, le serveur construit la scène sur ce
 // contour, et la vue masque alors le terrain au-delà (ARTEFACT.polygone). Le
 // contour part au serveur, qui le valide (vue3d/polygone.py) : trois sommets au
-// moins, aire non nulle, contour non croisé, boîte sous 20 km².
+// moins, aire non nulle, contour non croisé, boîte sous 50 km² en local.
 //
 // Au-delà de 10 km², un avertissement : la scène se construit quand même, mais
 // elle est longue à venir et lourde à dessiner. Ce sont la végétation et le
 // nuage LiDAR qui pèsent — 81 875 houppiers pour un seul carré de 2 km à
 // Gordes —, et le panneau propose de les éteindre d'un clic.
 // Les bornes viennent du serveur (/api/sante, lues par l'accueil) : un service
-// à la mémoire juste refuse plus tôt que les 20 km² d'origine.
+// à la mémoire juste refuse plus tôt que les 50 km² d'origine.
 const limitesAire = () => ({ avert: (window.limitesService || {}).avert_m2 ?? 10e6,
-                             max: (window.limitesService || {}).max_m2 ?? 20e6 });
+                             max: (window.limitesService || {}).max_m2 ?? 50e6 });
 const DESSIN_COULEUR = 0xffc247;
 let dessin = null;                                  // { sommets: [[lat, lon], …] }
 const groupeDessin = new THREE.Group();
@@ -13334,7 +13334,7 @@ function majDessin() {
  * L'aire du contour en m², comme le serveur : formule du lacet sur les sommets
  * projetés en mètres (polygone.Polygone.aire_m2). C'est elle qui décide de
  * l'avertissement, pas d'un refus — le serveur, lui, n'accepte pas au-delà de
- * 20 km².
+ * 50 km² en local.
  */
 function aireDessin(sommets) {
     const lats = sommets.map(p => p[0]), lons = sommets.map(p => p[1]);

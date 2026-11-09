@@ -159,13 +159,15 @@ SCENE_COTE_M = 2 * SCENE_DELTA * 111320
 # qui pèse — la grille MNH à 0,5 m, les houppiers, la scène elle-même — croît
 # comme sa surface. Une aire de 10 km² est l'ordre de grandeur annoncé à
 # l'utilisateur : la page la mesure et l'avertit (ramage, couches lourdes à
-# éteindre) sans refuser, comme demandé. Au-delà du double, la construction
+# éteindre) sans refuser, comme demandé. Au-delà de la borne, la construction
 # dépasserait la mémoire du service — une zone de 2 000 m (4 km²) tient déjà
 # 3,2 Go au pic — : la boîte est alors refusée, jamais rognée, car rogner
-# publierait une scène que l'utilisateur n'a pas demandée.
+# publierait une scène que l'utilisateur n'a pas demandée. 50 km² en local,
+# où la machine a la mémoire pour une grande emprise de projet (relevé de
+# l'auteur : à lui d'en répondre) ; un service plus juste la baisse (ci-dessous).
 POLY_AIRE_AVERTISSEMENT_M2 = 10_000_000.0
-POLY_AIRE_BOITE_MAX_M2 = 20_000_000.0
-# Cette borne est celle d'une machine à 24 Go. Un service à la mémoire plus
+POLY_AIRE_BOITE_MAX_M2 = 50_000_000.0
+# Cette borne est celle d'une machine locale. Un service à la mémoire plus
 # juste la baisse par VUE3D_AIRE_MAX_KM2 (km², de la boîte d'un contour ou du
 # carré d'une zone) : render.yaml la pose à 2,5 pour les 2 Go du plan Standard,
 # d'après le relevé du service (contour de 2,1 km² de boîte : pic de 1,5 Go,

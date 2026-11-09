@@ -13,6 +13,8 @@ messages de commit et dans les commentaires des modules.
 
 ## Scène v16 — 26 octobre 2026
 
+- **Borne d'aire de l'emprise à 50 km² en local** (20 km² avant) : `VUE3D_AIRE_MAX_KM2`
+  la baisse pour un service à la mémoire juste, comme Render (2,5 km²).
 - **Emprise du projet Trimble Connect sur la carte** : l'accueil la trace en
   vert (par `?poly=…&origine=tc`, ou lue avec le jeton de l'extension par
   `/api/connect/emprise`, qui rend désormais aussi le `contour` du projet quand

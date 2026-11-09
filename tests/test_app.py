@@ -351,7 +351,7 @@ def test_sante(client, monkeypatch):
     assert client.get("/api/sante").get_json() == {
         "ok": True, "vehicules": {"mode": "aucun", "detecteurs": []},
         "panneaux": {"actif": False, "source": None},
-        "limites": {"aire_max_km2": 20.0, "aire_avertissement_km2": 10.0}}
+        "limites": {"aire_max_km2": 50.0, "aire_avertissement_km2": 10.0}}
 
 
 def test_sante_dit_les_limites_du_service_a_la_page(client, monkeypatch):
