@@ -423,7 +423,10 @@ s'éteint d'elle-même dans la fenêtre.
   FZKViewer : bâtiments en LOD2, une surface de toit, de mur ou de sol par
   face plane, une partie par emprise ; arbres en objets de végétation ;
   relief en TIN ; coordonnées absolues. Plus lourd : 47 Mo à Gordes, jusqu'à
-  170 Mo en zone de 1 000 m avec les masses.
+  170 Mo en zone de 1 000 m avec les masses. Avec « Orthophoto sur le
+  terrain », le relief porte la photo aérienne (texture `app:Appearance`) et
+  le fichier devient une archive zip : le `.gml`, compressé, et l'image qu'il
+  désigne.
 - **Orthophoto**, pour les SIG et la CAO — QGIS, ArcGIS, Civil 3D : la photo
   aérienne de la scène (la mosaïque que la vue drape, à 0,4 m par pixel au
   mieux), rééchantillonnée dans la projection choisie et rendue en archive

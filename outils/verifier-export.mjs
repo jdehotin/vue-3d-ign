@@ -59,7 +59,7 @@ function extraire(nom) {
   let n = 0;
   for (let j = src.indexOf('{', src.indexOf(')', i)); j < src.length; j++) {
     if (src[j] === '{') n++;
-    else if (src[j] === '}' && --n === 0) return src.slice(i, j + 1);
+    else if (src[j] === '}' && --n === 0) return (src.slice(i - 6, i) === 'async ' ? 'async ' : '') + src.slice(i, j + 1);
   }
 }
 function extraireConst(nom) {
@@ -77,13 +77,13 @@ const NOMS = ['etendre', 'coniqueConforme', 'versLambert93', 'versUtm', 'versMer
               'trianglesRelief', 'trianglesTronc', 'tubeCable', 'ecrireIfc', 'alea', 'portDe', 'portMesure',
               'aUnTronc', 'gabaritTronc', 'gabaritHouppier', 'ajouterHouppierSimple', 'polygonesPlans',
               'contoursRegion', 'solsOuverts', 'ecrireCityGml', 'inverseProjection', 'planOrtho',
-              'reechantillonnerOrtho', 'fichierJgw', 'wktProjection', 'crc32', 'archiveZip'];
+              'reechantillonnerOrtho', 'fichierJgw', 'wktProjection', 'crc32', 'archiveZip', 'compresserDeflate'];
 const CONSTS = ['GRS80', 'WGS84', 'PROJECTIONS', 'ALPHABET_IFC', 'ENTITES_IFC', 'reelIfc', 'STYLES_IFC', 'PORTS', 'EMPRISE_HOUPPIER', 'ENFONCEMENT',
                 'HAUTEUR_MIN_TRONC', 'SEGMENTS_SIMPLE', 'PLAN_COS', 'PLAN_ECART_M', 'texteXml', 'ESPACES_CITYGML', 'ORTHO_NOEUDS', 'TABLE_CRC32'];
 const { etendre, versLambert93, PROJECTIONS, guidIfc, idGml, chaineIfc, angleIfc, facettesIfc, trianglesRelief, trianglesTronc,
         tubeCable, ecrireIfc, aUnTronc, portDe, ajouterHouppierSimple, polygonesPlans, solsOuverts, ecrireCityGml,
         ALPHABET_IFC, STYLES_IFC, ENFONCEMENT, inverseProjection, planOrtho, reechantillonnerOrtho,
-        fichierJgw, wktProjection, crc32, archiveZip } =
+        fichierJgw, wktProjection, crc32, archiveZip, compresserDeflate } =
   new Function('THREE', CONSTS.map(extraireConst).join('\n') + '\n' + NOMS.map(extraire).join('\n')
     + `\nreturn { ${[...NOMS, ...CONSTS].join(', ')} };`)(THREE);
 
@@ -645,6 +645,46 @@ const classerMurs = nz => nz < -0.5 ? 'GroundSurface' : nz <= 0.5 ? 'WallSurface
   verifier(/srsName="urn:ogc:def:crs:EPSG::32631"/.test(gmlUtm)
            && !/crs:EPSG::5720/.test(gmlUtm),
            'CityGML : autre projection déclarée (EPSG:32631), pas d’altitude NGF composée');
+  // Le relief texturé : chaque triangle porte un anneau identifié, désigné par
+  // une liste (s, t) de quatre paires, et `app:target` désigne la surface.
+  verifier(!/app:Appearance|app:textureCoordinates/.test(gml) && !/<gml:TriangulatedSurface gml:id/.test(gml),
+           'CityGML : sans texture demandée, ni Appearance ni identifiant de surface');
+  const tex = { image: 'essai.jpg', minX: 876729 - 20, minY: 6314973 - 20, largeurM: 40, hauteurM: 40 };
+  const gmlTex = ecrireCityGml({ ...modele, texture: tex }).join('');
+  const surface = (gmlTex.match(/<gml:TriangulatedSurface gml:id="([^"]+)"/) || [])[1];
+  const anneauxTex = new Map([...gmlTex.matchAll(/<gml:LinearRing gml:id="([^"]+)"><gml:posList srsDimension="3">([^<]*)</g)]
+    .map(([, rid, pos]) => [rid, pos.split(' ').map(Number)]));
+  const listes = new Map([...gmlTex.matchAll(/<app:textureCoordinates ring="#([^"]+)">([^<]*)</g)]
+    .map(([, rid, st]) => [rid, st.split(' ').map(Number)]));
+  let pireTex = 0, completes = listes.size === 32 && anneauxTex.size === 32;
+  for (const [rid, st] of listes) {
+    const pos = anneauxTex.get(rid);
+    if (!pos || st.length !== 8) { completes = false; continue; }
+    for (let k = 0; k < 4; k++) {
+      const s = (pos[3 * k] - tex.minX) / tex.largeurM, t = (pos[3 * k + 1] - tex.minY) / tex.hauteurM;
+      pireTex = Math.max(pireTex, Math.abs(st[2 * k] - s), Math.abs(st[2 * k + 1] - t));
+    }
+  }
+  verifier(completes && pireTex < 1e-6, `CityGML texturé : 32 anneaux, chacun avec ses 4 paires (s, t), à ${pireTex.toExponential(1)} de la position`);
+  verifier(surface && gmlTex.includes(`<app:target uri="#${surface}">`) && gmlTex.includes('<app:imageURI>essai.jpg</app:imageURI>')
+           && gmlTex.includes('<app:mimeType>image/jpeg</app:mimeType>') && /xmlns:app="http:\/\/www\.opengis\.net\/citygml\/appearance\/2\.0"/.test(gmlTex)
+           && gmlTex.lastIndexOf('</core:cityObjectMember>') < gmlTex.indexOf('<app:appearanceMember>'),
+           'CityGML texturé : la cible est la surface, image et type MIME déclarés, apparence après les objets');
+  const idsTex = [...gmlTex.matchAll(/gml:id="([^"]+)"/g)].map(m => m[1]);
+  const pilesTex = []; let okTex = true;
+  for (const [, fin, nom, , vide] of gmlTex.matchAll(/<(\/?)([A-Za-z][\w:.-]*)((?:"[^"]*"|[^>"])*?)(\/?)>/g)) {
+    if (vide) continue;
+    if (!fin) pilesTex.push(nom); else if (pilesTex.pop() !== nom) { okTex = false; break; }
+  }
+  verifier(okTex && !pilesTex.length && new Set(idsTex).size === idsTex.length,
+           `CityGML texturé : balises équilibrées, ${idsTex.length} gml:id distincts`);
+  // Le CityGML texturé du modèle d'essai, à valider avec les schémas comme le
+  // précédent (troisième fichier donné).
+  if (process.argv[4]) fs.writeFileSync(process.argv[4], gmlTex);
+  // Une coordonnée hors de l'image (le plan d'orthophoto un peu plus petit que le relief) est ramenée au bord.
+  const gmlBord = ecrireCityGml({ ...modele, texture: { ...tex, minX: tex.minX + 15, largeurM: 10 } }).join('');
+  const hors = [...gmlBord.matchAll(/<app:textureCoordinates ring="[^"]*">([^<]*)</g)].flatMap(m => m[1].split(' ').map(Number));
+  verifier(hors.length > 0 && hors.every(v => v >= 0 && v <= 1), 'CityGML texturé : (s, t) bornées à [0, 1] hors de l’image');
   if (process.argv[3]) {
     fs.writeFileSync(process.argv[3], gml);
     console.log(`écrit : ${process.argv[3]} (${gml.length} octets)`);
@@ -753,7 +793,9 @@ const classerMurs = nz => nz < -0.5 ? 'GroundSurface' : nz <= 0.5 ? 'WallSurface
   // 5) L'archive zip, relue par zipfile : CRC, contenus, dates, noms UTF-8.
   const octets = new TextEncoder().encode('héllo\n'.repeat(1000));
   const date = new Date(2026, 9, 26, 12, 30, 10);
-  const zip = Buffer.concat(archiveZip([{ nom: 'a.jgw', octets }, { nom: 'é.txt', octets: new Uint8Array(0) },
+  const deflate = await compresserDeflate(octets);
+  verifier(deflate && deflate.length < octets.length / 10, `zip : deflate brut, ${octets.length} octets en ${deflate && deflate.length}`);
+  const zip = Buffer.concat(archiveZip([{ nom: 'a.jgw', octets, deflate }, { nom: 'é.txt', octets: new Uint8Array(0) },
                                         { nom: 'b.bin', octets: Uint8Array.from({ length: 70000 }, (_, i) => i * 7) }], date));
   verifier(crc32(new TextEncoder().encode('123456789')) === 0xCBF43926, 'zip : CRC-32 de « 123456789 » = CBF43926');
   const fichierZip = path.join(os.tmpdir(), 'verifier-ortho.zip');

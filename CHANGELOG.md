@@ -13,6 +13,17 @@ messages de commit et dans les commentaires des modules.
 
 ## Scène v16 — 26 octobre 2026
 
+- **Orthophoto collée sur le relief du CityGML** (interrupteur « Orthophoto sur le
+  terrain », sous le format CityGML de la fenêtre d'export) : le TIN reçoit un
+  `app:Appearance` / `ParameterizedTexture` dont la cible est la surface
+  triangulée, avec une liste de coordonnées (s, t) par triangle — chaque
+  anneau a son `gml:id`. L'image est celle de l'export « Orthophoto », dans la
+  projection du fichier. Le livrable devient une archive zip : le `.gml`,
+  compressé (deflate, `CompressionStream` : 55 Mo en clair à Gordes, 3,7 Mo
+  dans l'archive, sous la limite de 64 Mo du dépôt Connect), et le `.jpg` qu'il
+  désigne. Éteint par défaut, puisqu'il change le livrable. Validé contre les
+  schémas CityGML 2.0 de l'OGC (lxml) ; `outils/verifier-export.mjs` relit les
+  coordonnées de chaque triangle et le zip avec `zipfile`.
 - **Export de l'orthophoto** (`⬇ Orthophoto (zip)` au panneau, « Orthophoto · image »
   dans la fenêtre d'export) : la mosaïque de la scène, lue en EPSG:4326, est
   rééchantillonnée dans la projection choisie (la même liste que l'IFC et le

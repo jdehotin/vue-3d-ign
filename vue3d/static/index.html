@@ -927,6 +927,10 @@
                         <button type="button" role="radio" aria-checked="false"
                                 data-export-format="ortho" title="La photo aérienne de la scène, géoréférencée : JPEG, .jgw et .prj en archive zip. Les couches ne s'appliquent pas.">Orthophoto <span>· image</span></button>
                     </div>
+                    <div class="toggles" id="export-texture-bloc" hidden>
+                        <button type="button" class="toggle" id="x-texture"
+                                title="Colle la photo aérienne sur le relief du CityGML (Appearance et coordonnées de texture). Le fichier devient une archive zip : le .gml et l'image .jpg qu'il désigne. Il faut le relief.">Orthophoto sur le terrain</button>
+                    </div>
                     <div class="sous-titre">Nom du fichier</div>
                     <label class="zone">
                         <input type="text" id="export-nom-fichier" style="width:100%; background:#161a1e; color:#e8eaed; border:1px solid #3a4148; border-radius:4px; padding:4px 6px; font-size:12px;" />
@@ -10302,9 +10306,18 @@ function crc32(octets) {
     return (c ^ 0xFFFFFFFF) >>> 0;
 }
 
+/** Les octets en deflate brut (celui d'un ZIP), ou null quand le navigateur n'a
+ *  pas CompressionStream : l'archive stocke alors le fichier tel quel. */
+async function compresserDeflate(octets) {
+    if (typeof CompressionStream === 'undefined') return null;
+    const flux = new Blob([octets]).stream().pipeThrough(new CompressionStream('deflate-raw'));
+    return new Uint8Array(await new Response(flux).arrayBuffer());
+}
+
 /**
- * Une archive ZIP sans compression (le JPEG ne se comprime plus), noms en
- * UTF-8, rendue en morceaux pour un Blob. `fichiers` : [{ nom, octets }].
+ * Une archive ZIP, noms en UTF-8, rendue en morceaux pour un Blob. Sans
+ * compression par défaut (le JPEG ne se comprime plus) ; un fichier qui porte
+ * `deflate` est stocké compressé. `fichiers` : [{ nom, octets, deflate? }].
  */
 function archiveZip(fichiers, date = new Date()) {
     const encodeur = new TextEncoder();
@@ -10312,33 +10325,38 @@ function archiveZip(fichiers, date = new Date()) {
     const jour = ((date.getFullYear() - 1980) << 9) | ((date.getMonth() + 1) << 5) | date.getDate();
     const parties = [], centrale = [];
     let decalage = 0, tailleCentrale = 0;
-    for (const { nom, octets } of fichiers) {
-        const n = encodeur.encode(nom), crc = crc32(octets), l = octets.length;
+    for (const { nom, octets, deflate } of fichiers) {
+        // `deflate` : les mêmes octets compressés (deflate brut), quand l'appelant
+        // les a — un CityGML de 50 Mo en tient dans cinq ; sinon, stockés tels quels.
+        const donnees = deflate || octets, methode = deflate ? 8 : 0;
+        const n = encodeur.encode(nom), crc = crc32(octets), l = octets.length, z = donnees.length;
         const local = new DataView(new ArrayBuffer(30));
         local.setUint32(0, 0x04034b50, true);
         local.setUint16(4, 20, true);
         local.setUint16(6, 0x0800, true);              // noms en UTF-8
+        local.setUint16(8, methode, true);
         local.setUint16(10, heure, true);
         local.setUint16(12, jour, true);
         local.setUint32(14, crc, true);
-        local.setUint32(18, l, true);
+        local.setUint32(18, z, true);
         local.setUint32(22, l, true);
         local.setUint16(26, n.length, true);
-        parties.push(new Uint8Array(local.buffer), n, octets);
+        parties.push(new Uint8Array(local.buffer), n, donnees);
         const c = new DataView(new ArrayBuffer(46));
         c.setUint32(0, 0x02014b50, true);
         c.setUint16(4, 20, true);
         c.setUint16(6, 20, true);
         c.setUint16(8, 0x0800, true);
+        c.setUint16(10, methode, true);
         c.setUint16(12, heure, true);
         c.setUint16(14, jour, true);
         c.setUint32(16, crc, true);
-        c.setUint32(20, l, true);
+        c.setUint32(20, z, true);
         c.setUint32(24, l, true);
         c.setUint16(28, n.length, true);
         c.setUint32(42, decalage, true);
         centrale.push(new Uint8Array(c.buffer), n);
-        decalage += 30 + n.length + l;
+        decalage += 30 + n.length + z;
         tailleCentrale += 46 + n.length;
     }
     const fin = new DataView(new ArrayBuffer(22));
@@ -10871,9 +10889,10 @@ const ESPACES_CITYGML = [
     'xmlns:veg="http://www.opengis.net/citygml/vegetation/2.0"',
     'xmlns:dem="http://www.opengis.net/citygml/relief/2.0"',
     'xmlns:gen="http://www.opengis.net/citygml/generics/2.0"',
+    'xmlns:app="http://www.opengis.net/citygml/appearance/2.0"',
     'xmlns:gml="http://www.opengis.net/gml"',
     'xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"',
-    'xsi:schemaLocation="' + ['building', 'vegetation', 'relief', 'generics'].map(m =>
+    'xsi:schemaLocation="' + ['building', 'vegetation', 'relief', 'generics', 'appearance'].map(m =>
         `http://www.opengis.net/citygml/${m}/2.0 http://schemas.opengis.net/citygml/${m}/2.0/${m}.xsd`).join(' ') + '"',
 ].join(' ');
 
@@ -10889,7 +10908,8 @@ const ESPACES_CITYGML = [
 function ecrireCityGml(m) {
     const O = m.origine;
     const pos = (P, i) => `${(P[3 * i] + O.x).toFixed(3)} ${(P[3 * i + 1] + O.y).toFixed(3)} ${(P[3 * i + 2] + O.z).toFixed(3)}`;
-    const anneau = (P, a) => '<gml:LinearRing><gml:posList srsDimension="3">'
+    // `rid` : l'identifiant du anneau, que les coordonnées de texture désignent.
+    const anneau = (P, a, rid = '') => `<gml:LinearRing${rid ? ` gml:id="${rid}"` : ''}><gml:posList srsDimension="3">`
         + [...a, a[0]].map(i => pos(P, i)).join(' ') + '</gml:posList></gml:LinearRing>';
     const surfaces = polys => '<gml:MultiSurface>' + polys.map(({ P, anneaux: [ext, ...cours] }) =>
         `<gml:surfaceMember><gml:Polygon><gml:exterior>${anneau(P, ext)}</gml:exterior>`
@@ -10925,7 +10945,7 @@ function ecrireCityGml(m) {
         return i;
     };
     const min = [Infinity, Infinity, Infinity], max = [-Infinity, -Infinity, -Infinity];
-    const membres = [];
+    const membres = [], apparences = [];
     for (const el of m.elements) {
         const maillages = el.maillages.filter(({ facettes: f }) => f.faces.length);
         if (!maillages.length) continue;
@@ -10959,13 +10979,35 @@ function ecrireCityGml(m) {
                 + '</bldg:Building></core:cityObjectMember>\n');
         } else if (el.genre === 'terrain') {
             const gid = id(el.cle);
+            // Texturé : la surface porte un identifiant, chaque anneau le sien,
+            // et `app:target` désigne la surface avec une liste de coordonnées
+            // (s, t) par anneau — la forme qu'écrit et que relit 3DCityDB pour un TIN.
+            const tex = m.texture, coordonnees = [];
             membres.push(`<core:cityObjectMember><dem:ReliefFeature gml:id="${gid}">${nomme(el)}${attributs(el)}`
                 + `<dem:lod>2</dem:lod><dem:reliefComponent><dem:TINRelief gml:id="${gid}_tin"><dem:lod>2</dem:lod>`
-                + '<dem:tin><gml:TriangulatedSurface><gml:trianglePatches>');
+                + `<dem:tin><gml:TriangulatedSurface${tex ? ` gml:id="${gid}_surface"` : ''}><gml:trianglePatches>`);
             for (const { facettes: { points: P, faces: F } } of maillages) {
                 for (let t = 0; t < F.length; t += 3) {
-                    membres.push(`<gml:Triangle><gml:exterior>${anneau(P, [F[t], F[t + 1], F[t + 2]])}</gml:exterior></gml:Triangle>`);
+                    const tri = [F[t], F[t + 1], F[t + 2]];
+                    if (!tex) {
+                        membres.push(`<gml:Triangle><gml:exterior>${anneau(P, tri)}</gml:exterior></gml:Triangle>`);
+                        continue;
+                    }
+                    const rid = `${gid}_r${coordonnees.length + 1}`;
+                    membres.push(`<gml:Triangle><gml:exterior>${anneau(P, tri, rid)}</gml:exterior></gml:Triangle>`);
+                    // (s, t) de l'image, origine en bas à gauche, de 0 à 1 : l'anneau se referme sur son premier sommet.
+                    const st = [...tri, tri[0]].map(i => [(P[3 * i] + O.x - tex.minX) / tex.largeurM,
+                                                          (P[3 * i + 1] + O.y - tex.minY) / tex.hauteurM]
+                        .map(v => Math.min(Math.max(v, 0), 1).toFixed(6)).join(' ')).join(' ');
+                    coordonnees.push(`<app:textureCoordinates ring="#${rid}">${st}</app:textureCoordinates>`);
                 }
+            }
+            if (tex) {
+                apparences.push('<app:appearanceMember><app:Appearance><app:theme>orthophoto</app:theme>'
+                    + '<app:surfaceDataMember><app:ParameterizedTexture>'
+                    + `<app:imageURI>${texteXml(tex.image)}</app:imageURI><app:mimeType>image/jpeg</app:mimeType>`
+                    + `<app:target uri="#${gid}_surface"><app:TexCoordList>${coordonnees.join('')}</app:TexCoordList></app:target>`
+                    + '</app:ParameterizedTexture></app:surfaceDataMember></app:Appearance></app:appearanceMember>\n');
             }
             membres.push('</gml:trianglePatches></gml:TriangulatedSurface></dem:tin></dem:TINRelief>'
                 + '</dem:reliefComponent></dem:ReliefFeature></core:cityObjectMember>\n');
@@ -10992,7 +11034,8 @@ function ecrireCityGml(m) {
             + `<gml:description>${texteXml(m.description)}</gml:description><gml:name>${texteXml(m.nom)}</gml:name>\n`
             + `<gml:boundedBy><gml:Envelope srsName="${srs}" srsDimension="3"><gml:lowerCorner>${coin(min)}</gml:lowerCorner>`
             + `<gml:upperCorner>${coin(max)}</gml:upperCorner></gml:Envelope></gml:boundedBy>\n`,
-            ...membres, '</core:CityModel>\n'];
+            // Après les objets : l'ordre du schéma (cityObjectMember, puis appearanceMember).
+            ...membres, ...apparences, '</core:CityModel>\n'];
 }
 
 // Couleurs des maillages exportés : un contexte en volumes clairs, comme une
@@ -11638,7 +11681,7 @@ const FORMATS_EXPORT = {
  * avec la scène (celle que la vue drape), pas le fond affiché, qui peut être
  * le plan IGN. Hors du contour dessiné, le blanc : rien n'est exporté au-delà.
  */
-async function modeleOrtho() {
+async function imageOrtho() {
     await chargementArtefact;
     if (!ARTEFACT) throw new Error("la scène n'est pas encore prête");
     const proj = projectionExport;
@@ -11679,6 +11722,12 @@ async function modeleOrtho() {
     }
     const jpeg = await new Promise(ok => sortie.toBlob(ok, 'image/jpeg', 0.92));
     if (!jpeg) throw new Error("l'image n'a pas pu être encodée en JPEG");
+    return { proj, plan, jpeg: new Uint8Array(await jpeg.arrayBuffer()) };
+}
+
+/** Le modèle de l'export « Orthophoto » : l'image, son world file, son .prj, en zip. */
+async function modeleOrtho() {
+    const { proj, plan, jpeg } = await imageOrtho();
     const encodeur = new TextEncoder();
     const base = nomFichierExport();
     const pas = ((plan.pasX + plan.pasY) / 2).toFixed(2).replace('.', ',');
@@ -11689,7 +11738,7 @@ async function modeleOrtho() {
     return {
         ortho: true,
         blobs: archiveZip([
-            { nom: `${base}.jpg`, octets: new Uint8Array(await jpeg.arrayBuffer()) },
+            { nom: `${base}.jpg`, octets: jpeg },
             { nom: `${base}.jgw`, octets: encodeur.encode(fichierJgw(plan)) },
             { nom: `${base}.prj`, octets: encodeur.encode(wktProjection(proj)) },
             { nom: `${base}_licence.txt`, octets: encodeur.encode(licence) },
@@ -11723,6 +11772,15 @@ choixProjection.title = `${projectionExport.description} (EPSG:${projectionExpor
 const choixAncrage = document.getElementById('export-ancrage');
 let ancrageExport = choixAncrage.value;
 choixAncrage.addEventListener('change', () => { ancrageExport = choixAncrage.value; });
+
+// L'orthophoto collée sur le relief du CityGML : éteinte par défaut, puisqu'elle
+// change le livrable (un zip, et non plus un seul .gml).
+let textureCityGml = false;
+const boutonTexture = document.getElementById('x-texture');
+boutonTexture.addEventListener('click', () => {
+    textureCityGml = !textureCityGml;
+    boutonTexture.classList.toggle('on', textureCityGml);
+});
 
 /** La même note au panneau et dans la fenêtre : l'une se lit sans l'autre. */
 function noterExport(texte) {
@@ -11920,6 +11978,8 @@ for (const b of boutonsFormat) {
         // vaut que pour l'IFC, et le taire vaut mieux que le laisser mentir.
         choixAncrage.disabled = formatExport !== 'ifc';
         // L'orthophoto est une image : aucune couche à cocher.
+        // La texture n'existe qu'en CityGML : l'IFC n'en porte pas ici.
+        document.getElementById('export-texture-bloc').hidden = formatExport !== 'citygml';
         document.getElementById('export-couches').hidden = formatExport === 'ortho';
         document.getElementById('export-couches-titre').hidden = formatExport === 'ortho';
     });
@@ -12013,7 +12073,7 @@ async function envoyerAuProjet(fichier, nomFichier, modele, choix) {
  * fichier part au téléchargement et la note le dit.
  */
 async function exporter(format, mode = 'telecharger') {
-    const { nom, ecrire, extension, type, reperes } = FORMATS_EXPORT[format];
+    let { nom, ecrire, extension, type, reperes } = FORMATS_EXPORT[format];
     // L'orthophoto est une image : ni relief ni couche à cocher, seulement la
     // mosaïque publiée avec la scène (`modeleOrtho` la lit et le dit si elle manque).
     const estOrtho = format === 'ortho';
@@ -12036,6 +12096,10 @@ async function exporter(format, mode = 'telecharger') {
         noterExport('Aucune couche cochée : rien à écrire.');
         return;
     }
+    // Le CityGML texturé n'est plus un fichier seul : le .gml et l'image qu'il
+    // désigne, en archive zip. Sans relief, il n'y a rien à texturer.
+    const avecTexture = format === 'citygml' && textureCityGml && choix.relief;
+    if (avecTexture) { extension = 'zip'; type = 'application/zip'; }
     const nomFichier = `${nomFichierExport()}.${extension}`;
     // Le flux d'écriture s'ouvre tout de suite, avant le calcul. Deux raisons :
     // Chromium exige une activation utilisateur pour la fenêtre — appelée après
@@ -12083,7 +12147,22 @@ async function exporter(format, mode = 'telecharger') {
             noterExport('Rien à écrire : les couches cochées sont vides dans cette scène.');
             return;
         }
-        const texte = estOrtho ? modele.blobs : ecrire(modele);
+        let texte;
+        if (avecTexture) {
+            // L'image est celle de l'export « Orthophoto » ; le relief la désigne
+            // par son nom, rangée à côté du .gml dans l'archive.
+            const base = nomFichierExport();
+            const { plan, jpeg } = await imageOrtho();
+            modele.texture = { image: `${base}.jpg`, minX: plan.minX, minY: plan.maxY - plan.hauteur * plan.pasY,
+                               largeurM: plan.largeur * plan.pasX, hauteurM: plan.hauteur * plan.pasY };
+            // Le .gml compressé : 55 Mo en clair à Gordes, où le dépôt dans le
+            // projet n'en accepte que 64 ; le JPEG, lui, est stocké tel quel.
+            const gml = new TextEncoder().encode(ecrire(modele).join(''));
+            texte = archiveZip([{ nom: `${base}.gml`, octets: gml, deflate: await compresserDeflate(gml) },
+                                { nom: `${base}.jpg`, octets: jpeg }]);
+        } else {
+            texte = estOrtho ? modele.blobs : ecrire(modele);
+        }
         const fichier = new Blob(Array.isArray(texte) ? texte : [texte], { type });
         if (mode === 'projet') {
             await envoyerAuProjet(fichier, nomFichier, modele, choix);
@@ -12115,6 +12194,7 @@ async function exporter(format, mode = 'telecharger') {
         noterExport((repli ? 'Écriture directe refusée, fichier téléchargé : ' : '')
             + `${ecrit} : ${(fichier.size / 1e6).toFixed(1).replace('.', ',')} Mo, `
             + resumeDe(modele, choix) + '. ' + reperes(modele)
+            + (modele.texture ? " Orthophoto collée sur le relief ; l'image .jpg est dans l'archive, à côté du .gml." : '')
             // Un fichier plus lourd que le dépôt n'ira pas au projet, et pèse
             // lourd à l'ouverture dans un logiciel de conception.
             + (fichier.size > TAILLE_MAX_DEPOT
