@@ -13,6 +13,15 @@ messages de commit et dans les commentaires des modules.
 
 ## Scène v16 — 26 octobre 2026
 
+- **Orthophoto collée sur le relief de l'IFC** : le même interrupteur « Orthophoto
+  sur le terrain » vaut désormais pour l'IFC. Le maillage du terrain reçoit une
+  `IfcImageTexture` (image désignée par son nom), un `IfcSurfaceStyleWithTextures`
+  sur fond blanc et une `IfcIndexedTriangleTextureMap` à un (s, t) par sommet,
+  à six décimales (`reelIfc` n'en garde que trois : un pixel sur 1 000). Le
+  fichier devient, comme en CityGML, une archive zip : le `.ifc` compressé et
+  le `.jpg`. Validé par ifcopenshell (schéma et règles EXPRESS), qui relit la
+  carte ; beaucoup de logiciels de conception (Revit, ArchiCAD, Trimble
+  Connect) ignorent les textures IFC, et n'en montreront que le fond blanc.
 - **Orthophoto collée sur le relief du CityGML** (interrupteur « Orthophoto sur le
   terrain », sous le format CityGML de la fenêtre d'export) : le TIN reçoit un
   `app:Appearance` / `ParameterizedTexture` dont la cible est la surface

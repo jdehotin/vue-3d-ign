@@ -603,6 +603,37 @@ const classerMurs = nz => nz < -0.5 ? 'GroundSurface' : nz <= 0.5 ? 'WallSurface
            && /IFCMAPCONVERSION\(#\d+,#\d+,0\.000,0\.000,0\.000,1\.,0\.,\$\)/.test(texteSite)
            && /IFCSITE\([^;]*,#\d+,\$,\$,\.ELEMENT\.,\(43,54,41,760000\),\(5,12,1,80000\),312\.000,\$,\$\)/.test(texteSite),
            'IFC : ancrage absolu — site posé à ses coordonnées, conversion à zéro, réf. géographique inchangée');
+  // L'orthophoto sur le terrain : une IfcImageTexture, un style qui la porte, et
+  // une carte de texture à un (s, t) par sommet du maillage, un triangle par
+  // triangle. Le style plein du terrain n'y est plus appliqué.
+  verifier(!/IFCIMAGETEXTURE|IFCINDEXEDTRIANGLETEXTUREMAP|IFCTEXTUREVERTEXLIST/.test(texte),
+           'IFC : sans texture demandée, aucune entité de texture');
+  const texTerrain = { image: 'essai.jpg', minX: 876729 - 20, minY: 6314973 - 20, largeurM: 40, hauteurM: 40 };
+  const texteTex = ecrireIfc({ ...modele, texture: texTerrain });
+  const definisTex = new Set([...texteTex.matchAll(/^#(\d+)=/gm)].map(m => m[1]));
+  const manquantsTex = [...new Set([...texteTex.matchAll(/#(\d+)(?!\d|=)/g)].map(m => m[1]))].filter(r => !definisTex.has(r));
+  const carte = texteTex.match(/^#\d+=IFCINDEXEDTRIANGLETEXTUREMAP\(\((#\d+)\),(#\d+),(#\d+),\(([^;]*)\)\);$/m);
+  const listeTex = carte && texteTex.match(new RegExp(`^${carte[3]}=IFCTEXTUREVERTEXLIST\\(\\((.*)\\)\\);$`, 'm'));
+  const jeu = carte && texteTex.match(new RegExp(`^${carte[2]}=IFCTRIANGULATEDFACESET\\((#\\d+),\\$,\\.F\\.,\\(([^;]*)\\),\\$\\);$`, 'm'));
+  const sommetsTex = jeu && texteTex.match(new RegExp(`^${jeu[1]}=IFCCARTESIANPOINTLIST3D\\(\\((.*)\\)\\);$`, 'm'));
+  const nombres = t => [...t.matchAll(/-?\d+\.\d+/g)].map(x => Number(x[0]));
+  const st = listeTex ? nombres(listeTex[1]) : [], xyz = sommetsTex ? nombres(sommetsTex[1]) : [];
+  let pireIfc = Infinity;
+  if (st.length && st.length / 2 === xyz.length / 3) {
+    pireIfc = 0;
+    for (let i = 0; i < st.length / 2; i++) {
+      pireIfc = Math.max(pireIfc, Math.abs(st[2 * i] - (xyz[3 * i] + 20) / 40), Math.abs(st[2 * i + 1] - (xyz[3 * i + 1] + 20) / 40));
+    }
+  }
+  verifier(!manquantsTex.length && (texteTex.match(/IFCIMAGETEXTURE\(\.F\.,\.F\.,'DIFFUSE',\$,\$,'essai\.jpg'\)/g) || []).length === 1
+           && (texteTex.match(/IFCSURFACESTYLEWITHTEXTURES/g) || []).length === 1,
+           `IFC texturé : une seule IfcImageTexture et un seul style, toute référence définie${manquantsTex.length ? ' — manquent ' + manquantsTex.join(', ') : ''}`);
+  verifier(carte && jeu && carte[4] === jeu[2] && pireIfc < 1e-6 && st.length / 2 === 25,
+           `IFC texturé : 25 (s, t), un par sommet, à ${pireIfc.toExponential(1)} de la position ; indices de la carte = ceux du maillage`);
+  verifier(new RegExp(`IFCSTYLEDITEM\\(${carte && carte[2]},\\(#\\d+\\),\\$\\)`).test(texteTex)
+           && (texteTex.match(/IFCSTYLEDITEM\(/g) || []).length === (texte.match(/IFCSTYLEDITEM\(/g) || []).length,
+           'IFC texturé : le terrain porte le style de texture, autant de styles posés que sans texture');
+  if (process.argv[5]) fs.writeFileSync(process.argv[5], texteTex);
   if (process.argv[2]) {
     fs.writeFileSync(process.argv[2], texte);
     console.log(`écrit : ${process.argv[2]} (${texte.length} octets)`);

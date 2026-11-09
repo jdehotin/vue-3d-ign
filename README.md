@@ -418,7 +418,9 @@ s'éteint d'elle-même dans la fenêtre.
 - **IFC 4**, pour un logiciel de conception — Revit, ArchiCAD, Vectorworks,
   Allplan, Bonsai : des maillages, autour d'une origine au point visé. 5 à
   9 Mo dans l'emprise de 356 m, environ 25 Mo en zone de 1 000 m, 35 avec
-  les masses.
+  les masses. « Orthophoto sur le terrain » y pose la photo aérienne sur le
+  relief (`IfcImageTexture`), dans une archive zip avec l'image ; les logiciels
+  qui ignorent les textures IFC n'en montrent que le terrain uni.
 - **CityGML 2.0**, pour les SIG et les maquettes urbaines — FME, 3DCityDB,
   FZKViewer : bâtiments en LOD2, une surface de toit, de mur ou de sol par
   face plane, une partie par emprise ; arbres en objets de végétation ;

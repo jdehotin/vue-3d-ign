@@ -929,7 +929,7 @@
                     </div>
                     <div class="toggles" id="export-texture-bloc" hidden>
                         <button type="button" class="toggle" id="x-texture"
-                                title="Colle la photo aérienne sur le relief du CityGML (Appearance et coordonnées de texture). Le fichier devient une archive zip : le .gml et l'image .jpg qu'il désigne. Il faut le relief.">Orthophoto sur le terrain</button>
+                                title="Colle la photo aérienne sur le relief, en IFC (IfcImageTexture) comme en CityGML (Appearance). Le fichier devient une archive zip : le modèle et l'image .jpg qu'il désigne. Il faut le relief. Beaucoup de logiciels IFC (Revit, ArchiCAD, Trimble Connect) ignorent les textures IFC.">Orthophoto sur le terrain</button>
                     </div>
                     <div class="sous-titre">Nom du fichier</div>
                     <label class="zone">
@@ -10647,6 +10647,21 @@ function ecrireIfc(m) {
         styles[nom] = ent(`IFCSURFACESTYLE(${chaineIfc(nom)},.BOTH.,(${ent(`IFCSURFACESTYLESHADING(${couleur},$)`)}))`);
     }
 
+    // L'orthophoto sur le terrain : une IfcImageTexture, qui désigne l'image par
+    // son nom — rangée à côté du .ifc dans l'archive —, et un style de surface
+    // qui la porte, sur un fond blanc pour que la couleur ne la teinte pas.
+    // Créés à la première maille de terrain, puis partagés.
+    let styleTexture = null, imageTexture = null;
+    const texturer = () => {
+        if (!styleTexture) {
+            imageTexture = ent(`IFCIMAGETEXTURE(.F.,.F.,'DIFFUSE',$,$,${chaineIfc(m.texture.image)})`);
+            const blanc = ent('IFCCOLOURRGB($,1.,1.,1.)');
+            styleTexture = ent(`IFCSURFACESTYLE('orthophoto',.BOTH.,(${ent(`IFCSURFACESTYLESHADING(${blanc},$)`)},`
+                + `${ent(`IFCSURFACESTYLEWITHTEXTURES((${imageTexture}))`)}))`);
+        }
+        return styleTexture;
+    };
+
     const contenus = [];
     for (const el of m.elements) {
         const items = [];
@@ -10659,7 +10674,20 @@ function ecrireIfc(m) {
             for (let i = 0; i < tri.length; i++) tri[i] = `(${f.faces[3 * i] + 1},${f.faces[3 * i + 1] + 1},${f.faces[3 * i + 2] + 1})`;
             const liste = ent(`IFCCARTESIANPOINTLIST3D((${pts.join(',')}))`);
             const item = ent(`IFCTRIANGULATEDFACESET(${liste},$,${f.ferme ? '.T.' : '.F.'},(${tri.join(',')}),$)`);
-            if (styles[style]) ent(`IFCSTYLEDITEM(${item},(${styles[style]}),$)`);
+            if (m.texture && el.genre === 'terrain') {
+                ent(`IFCSTYLEDITEM(${item},(${texturer()}),$)`);
+                // Un (s, t) par sommet, de 0 à 1, origine en bas à gauche de l'image ;
+                // chaque triangle reprend les indices de ses sommets.
+                const t = m.texture, st = new Array(pts.length);
+                for (let i = 0; i < pts.length; i++) {
+                    const s = (f.points[3 * i] + m.origine.x - t.minX) / t.largeurM;
+                    const v = (f.points[3 * i + 1] + m.origine.y - t.minY) / t.hauteurM;
+                    // Six décimales : reelIfc n'en garde que trois, un pixel sur 1 000.
+                    st[i] = `(${Math.min(Math.max(s, 0), 1).toFixed(6)},${Math.min(Math.max(v, 0), 1).toFixed(6)})`;
+                }
+                const sommets = ent(`IFCTEXTUREVERTEXLIST((${st.join(',')}))`);
+                ent(`IFCINDEXEDTRIANGLETEXTUREMAP((${imageTexture}),${item},${sommets},(${tri.join(',')}))`);
+            } else if (styles[style]) ent(`IFCSTYLEDITEM(${item},(${styles[style]}),$)`);
             items.push(item);
         }
         if (!items.length) continue;
@@ -11775,11 +11803,11 @@ choixAncrage.addEventListener('change', () => { ancrageExport = choixAncrage.val
 
 // L'orthophoto collée sur le relief du CityGML : éteinte par défaut, puisqu'elle
 // change le livrable (un zip, et non plus un seul .gml).
-let textureCityGml = false;
+let textureTerrain = false;
 const boutonTexture = document.getElementById('x-texture');
 boutonTexture.addEventListener('click', () => {
-    textureCityGml = !textureCityGml;
-    boutonTexture.classList.toggle('on', textureCityGml);
+    textureTerrain = !textureTerrain;
+    boutonTexture.classList.toggle('on', textureTerrain);
 });
 
 /** La même note au panneau et dans la fenêtre : l'une se lit sans l'autre. */
@@ -11978,8 +12006,8 @@ for (const b of boutonsFormat) {
         // vaut que pour l'IFC, et le taire vaut mieux que le laisser mentir.
         choixAncrage.disabled = formatExport !== 'ifc';
         // L'orthophoto est une image : aucune couche à cocher.
-        // La texture n'existe qu'en CityGML : l'IFC n'en porte pas ici.
-        document.getElementById('export-texture-bloc').hidden = formatExport !== 'citygml';
+        // La texture du terrain : l'IFC et le CityGML la portent, pas l'image seule.
+        document.getElementById('export-texture-bloc').hidden = formatExport === 'ortho';
         document.getElementById('export-couches').hidden = formatExport === 'ortho';
         document.getElementById('export-couches-titre').hidden = formatExport === 'ortho';
     });
@@ -12096,9 +12124,10 @@ async function exporter(format, mode = 'telecharger') {
         noterExport('Aucune couche cochée : rien à écrire.');
         return;
     }
-    // Le CityGML texturé n'est plus un fichier seul : le .gml et l'image qu'il
-    // désigne, en archive zip. Sans relief, il n'y a rien à texturer.
-    const avecTexture = format === 'citygml' && textureCityGml && choix.relief;
+    // Un IFC ou un CityGML texturé n'est plus un fichier seul : le modèle et
+    // l'image qu'il désigne, en archive zip. Sans relief, rien à texturer.
+    const avecTexture = !estOrtho && textureTerrain && choix.relief;
+    const extensionModele = extension;
     if (avecTexture) { extension = 'zip'; type = 'application/zip'; }
     const nomFichier = `${nomFichierExport()}.${extension}`;
     // Le flux d'écriture s'ouvre tout de suite, avant le calcul. Deux raisons :
@@ -12150,15 +12179,15 @@ async function exporter(format, mode = 'telecharger') {
         let texte;
         if (avecTexture) {
             // L'image est celle de l'export « Orthophoto » ; le relief la désigne
-            // par son nom, rangée à côté du .gml dans l'archive.
+            // par son nom, rangée à côté du modèle dans l'archive.
             const base = nomFichierExport();
             const { plan, jpeg } = await imageOrtho();
             modele.texture = { image: `${base}.jpg`, minX: plan.minX, minY: plan.maxY - plan.hauteur * plan.pasY,
                                largeurM: plan.largeur * plan.pasX, hauteurM: plan.hauteur * plan.pasY };
-            // Le .gml compressé : 55 Mo en clair à Gordes, où le dépôt dans le
-            // projet n'en accepte que 64 ; le JPEG, lui, est stocké tel quel.
-            const gml = new TextEncoder().encode(ecrire(modele).join(''));
-            texte = archiveZip([{ nom: `${base}.gml`, octets: gml, deflate: await compresserDeflate(gml) },
+            // Le modèle compressé : 55 Mo de CityGML en clair à Gordes, où le dépôt
+            // dans le projet n'en accepte que 64 ; le JPEG, lui, est stocké tel quel.
+            const gml = new TextEncoder().encode([].concat(ecrire(modele)).join(''));
+            texte = archiveZip([{ nom: `${base}.${extensionModele}`, octets: gml, deflate: await compresserDeflate(gml) },
                                 { nom: `${base}.jpg`, octets: jpeg }]);
         } else {
             texte = estOrtho ? modele.blobs : ecrire(modele);
@@ -12194,7 +12223,7 @@ async function exporter(format, mode = 'telecharger') {
         noterExport((repli ? 'Écriture directe refusée, fichier téléchargé : ' : '')
             + `${ecrit} : ${(fichier.size / 1e6).toFixed(1).replace('.', ',')} Mo, `
             + resumeDe(modele, choix) + '. ' + reperes(modele)
-            + (modele.texture ? " Orthophoto collée sur le relief ; l'image .jpg est dans l'archive, à côté du .gml." : '')
+            + (modele.texture ? " Orthophoto collée sur le relief ; l'image .jpg est dans l'archive, à côté du ." + extensionModele + '.' : '')
             // Un fichier plus lourd que le dépôt n'ira pas au projet, et pèse
             // lourd à l'ouverture dans un logiciel de conception.
             + (fichier.size > TAILLE_MAX_DEPOT
