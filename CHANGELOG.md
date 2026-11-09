@@ -13,6 +13,18 @@ messages de commit et dans les commentaires des modules.
 
 ## Scène v16 — 26 octobre 2026
 
+- **Export de l'orthophoto** (`⬇ Orthophoto (zip)` au panneau, « Orthophoto · image »
+  dans la fenêtre d'export) : la mosaïque de la scène, lue en EPSG:4326, est
+  rééchantillonnée dans la projection choisie (la même liste que l'IFC et le
+  CityGML) et rendue en archive zip avec son world file `.jgw`, son `.prj` et
+  la mention de licence — un SIG la pose sans autre réglage, et le dépôt dans le
+  projet Trimble Connect reste un seul fichier. Le plan de sortie est le plus
+  grand rectangle d'axes que l'image couvre en entier ; l'inverse de la
+  projection est calculé en 33 × 33 nœuds et interpolé (0,0002 px d'écart à
+  l'inverse exact sur 5 km à Brest ; un dégradé de position restitué à 0,7/255). Hors du
+  contour dessiné, l'image est blanche. `outils/verifier-export.mjs` relit les
+  `.prj` des quatorze projections avec pyproj (position à 1e-8°) et le zip avec
+  `zipfile`.
 - **Contour croisé détecté avant l'envoi** : un contour reçu par `?poly=` dont deux côtés se
   coupent est remplacé par sa boîte, avec un message ; le tracé (accueil et vue)
   refuse de valider un « huit » au lieu de laisser le serveur répondre « contour

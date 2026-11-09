@@ -424,8 +424,14 @@ s'éteint d'elle-même dans la fenêtre.
   face plane, une partie par emprise ; arbres en objets de végétation ;
   relief en TIN ; coordonnées absolues. Plus lourd : 47 Mo à Gordes, jusqu'à
   170 Mo en zone de 1 000 m avec les masses.
+- **Orthophoto**, pour les SIG et la CAO — QGIS, ArcGIS, Civil 3D : la photo
+  aérienne de la scène (la mosaïque que la vue drape, à 0,4 m par pixel au
+  mieux), rééchantillonnée dans la projection choisie et rendue en archive
+  zip : l'image JPEG, son world file `.jgw`, sa projection `.prj` et la
+  mention de licence. Hors du contour dessiné, l'image est blanche. Les
+  couches ne s'y appliquent pas.
 
-Pour l'un comme pour l'autre :
+Pour l'IFC et le CityGML :
 
 - **Les bâtiments tels qu'affichés** : les boutons « Toits en pente »,
   « Toits mesurés » et « Monuments OSM » décident de ce qui part, mais sans

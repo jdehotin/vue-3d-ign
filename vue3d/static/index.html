@@ -387,6 +387,7 @@
         #export-dialogue .fermer { width:36px; height:36px; margin:-6px -8px 0 0; border:0; background:none; color:var(--muted);
                         font-size:26px; line-height:1; cursor:pointer; }
         #export-dialogue .sous-titre { margin:12px 0 6px; }
+        #export-dialogue [hidden] { display:none !important; }   /* .toggles, .sous-titre : leur display l'emporterait */
         #export-dialogue .choix-format { display:flex; gap:6px; }
         #export-dialogue .choix-format button { flex:1; padding:8px 6px; border:1px solid var(--line); border-radius:6px;
                 background:var(--panel-soft); color:var(--text); font:inherit; font-size:12px; cursor:pointer; }
@@ -689,6 +690,8 @@
                     title="Pour Revit, ArchiCAD, Vectorworks, Allplan… Écrit tout de suite, avec les couches cochées.">⬇ IFC 4</button>
             <button type="button" class="lien-ext" id="btn-citygml" data-format="citygml"
                     title="Pour les SIG et les maquettes urbaines : FME, 3DCityDB, FZKViewer… Écrit tout de suite, avec les couches cochées.">⬇ CityGML 2.0</button>
+            <button type="button" class="lien-ext" id="btn-ortho" data-format="ortho"
+                    title="La photo aérienne de la scène, géoréférencée : une archive zip avec l'image JPEG, son world file (.jgw) et sa projection (.prj), dans la projection choisie (Lambert-93 par défaut). Pour QGIS, ArcGIS, Civil 3D…">⬇ Orthophoto (zip)</button>
             <div class="note" id="note-export">
                 IFC pour la conception (Revit, ArchiCAD…), CityGML pour les SIG.
                 Les bâtiments tels qu'affichés (toits en pente, mesurés, monuments
@@ -900,8 +903,8 @@
                 <div class="corps">
                     <p class="note">Le relief porte les altitudes : sans lui, plus rien
                         n'est posé. Une couche que la scène ne porte pas s'éteint ici.</p>
-                    <div class="sous-titre">Couches</div>
-                    <div class="toggles">
+                    <div class="sous-titre" id="export-couches-titre">Couches</div>
+                    <div class="toggles" id="export-couches">
                         <button type="button" class="toggle on" id="x-relief">Relief</button>
                         <button type="button" class="toggle on" id="x-batiments">Bâtiments</button>
                         <button type="button" class="toggle on" id="x-arbres">Arbres</button>
@@ -921,6 +924,8 @@
                                 data-export-format="ifc">IFC 4 <span>· conception</span></button>
                         <button type="button" role="radio" aria-checked="false"
                                 data-export-format="citygml">CityGML 2.0 <span>· SIG</span></button>
+                        <button type="button" role="radio" aria-checked="false"
+                                data-export-format="ortho" title="La photo aérienne de la scène, géoréférencée : JPEG, .jgw et .prj en archive zip. Les couches ne s'appliquent pas.">Orthophoto <span>· image</span></button>
                     </div>
                     <div class="sous-titre">Nom du fichier</div>
                     <label class="zone">
@@ -10140,6 +10145,211 @@ const PROJECTIONS = [
       datum: 'WGS 84', projection: 'Mercator sphérique', vers: versMercator },
 ];
 
+// --- L'orthophoto exportée : image géoréférencée ----------------------------------
+// La mosaïque est lue en EPSG:4326, un repère où un pixel n'est pas un carré de
+// terrain : un SIG qui la poserait telle quelle la placerait en degrés. On la
+// rééchantillonne donc dans le repère choisi à l'export, et on l'accompagne de
+// son world file (.jgw) et de sa projection (.prj), dans une archive : un seul
+// fichier à télécharger ou à déposer dans le projet.
+
+/** [lon, lat] dont `vers` fait (x, y) : Newton, jacobienne par différences
+ *  finies (1e-6° vaut 0,1 m). Quatre pas suffisent sur quelques kilomètres. */
+function inverseProjection(vers, x, y, lon, lat) {
+    const h = 1e-6;
+    for (let i = 0; i < 8; i++) {
+        const [x0, y0] = vers(lon, lat);
+        const [x1, y1] = vers(lon + h, lat);
+        const [x2, y2] = vers(lon, lat + h);
+        const a = (x1 - x0) / h, b = (x2 - x0) / h, c = (y1 - y0) / h, d = (y2 - y0) / h;
+        const det = a * d - b * c;
+        const ex = x - x0, ey = y - y0;
+        if (Math.hypot(ex, ey) < 1e-5) break;
+        lon += (d * ex - b * ey) / det;
+        lat += (a * ey - c * ex) / det;
+    }
+    return [lon, lat];
+}
+
+// Nœuds du maillage (par côté) qui donne, pour un pixel de sortie, sa position
+// dans l'image source : l'inverse de la projection n'est calculé qu'en
+// (32 + 1)² points, et interpolé entre eux. Un nœud tous les 64 px environ,
+// sur des projections lisses : l'écart à l'inverse exact reste sous 0,01 px.
+const ORTHO_NOEUDS = 32;
+
+/**
+ * Le plan de la sortie : le plus grand rectangle aligné sur les axes du
+ * repère `vers` que l'image couvre en entier — les côtés de l'image suivent
+ * des méridiens et des parallèles, qui ne sont pas des axes en Lambert, et un
+ * rectangle englobant laisserait des coins sans image —, de même largeur en
+ * pixels que la source, et le maillage source → sortie.
+ *
+ * `bbox` : [ouest, sud, est, nord] en degrés ; `largeur`, `hauteur` : la
+ * source en pixels. Le haut de l'image est le nord.
+ */
+function planOrtho([ouest, sud, est, nord], vers, largeur, hauteur) {
+    const so = vers(ouest, sud), se = vers(est, sud), ne = vers(est, nord), no = vers(ouest, nord);
+    const minX = Math.max(so[0], no[0]), maxX = Math.min(se[0], ne[0]);
+    const minY = Math.max(so[1], se[1]), maxY = Math.min(ne[1], no[1]);
+    const n = ORTHO_NOEUDS;
+    const pasX = (maxX - minX) / largeur;
+    const sortieH = Math.max(1, Math.round((maxY - minY) / pasX));
+    const pasY = (maxY - minY) / sortieH;
+    const u = new Float64Array((n + 1) ** 2), v = new Float64Array((n + 1) ** 2);
+    for (let j = 0; j <= n; j++) {
+        for (let i = 0; i <= n; i++) {
+            const [lon, lat] = inverseProjection(vers, minX + (maxX - minX) * i / n,
+                maxY - (maxY - minY) * j / n,
+                ouest + (est - ouest) * i / n, nord - (nord - sud) * j / n);
+            u[j * (n + 1) + i] = (lon - ouest) / (est - ouest) * largeur;
+            v[j * (n + 1) + i] = (nord - lat) / (nord - sud) * hauteur;
+        }
+    }
+    return { minX, maxY, pasX, pasY, largeur, hauteur: sortieH, n, u, v };
+}
+
+/**
+ * Rééchantillonne `src` (RGBA, `sl` × `sh`) sur le plan : bilinéaire, bords
+ * prolongés — un côté de l'image est un arc en projection, de quelques
+ * décimètres à 5 km, qui peut mordre d'un pixel hors de la source. Rend un
+ * RGBA opaque de `plan.largeur` × `plan.hauteur`.
+ */
+function reechantillonnerOrtho(src, sl, sh, plan) {
+    const { largeur: W, hauteur: H, n, u, v } = plan;
+    const sortie = new Uint8ClampedArray(W * H * 4);
+    const N1 = n + 1;
+    for (let py = 0; py < H; py++) {
+        const gy = (py + 0.5) / H * n, j = Math.min(Math.floor(gy), n - 1), fy = gy - j;
+        for (let px = 0; px < W; px++) {
+            const gx = (px + 0.5) / W * n, i = Math.min(Math.floor(gx), n - 1), fx = gx - i;
+            const k = j * N1 + i;
+            const su = (u[k] * (1 - fx) + u[k + 1] * fx) * (1 - fy) + (u[k + N1] * (1 - fx) + u[k + N1 + 1] * fx) * fy;
+            const sv = (v[k] * (1 - fx) + v[k + 1] * fx) * (1 - fy) + (v[k + N1] * (1 - fx) + v[k + N1 + 1] * fx) * fy;
+            const x = Math.min(Math.max(su - 0.5, 0), sl - 1), y = Math.min(Math.max(sv - 0.5, 0), sh - 1);
+            const x0 = Math.floor(x), y0 = Math.floor(y);
+            const x1 = Math.min(x0 + 1, sl - 1), y1 = Math.min(y0 + 1, sh - 1);
+            const wx = x - x0, wy = y - y0;
+            const o = (py * W + px) * 4;
+            for (let c = 0; c < 3; c++) {
+                const haut = src[(y0 * sl + x0) * 4 + c] * (1 - wx) + src[(y0 * sl + x1) * 4 + c] * wx;
+                const bas = src[(y1 * sl + x0) * 4 + c] * (1 - wx) + src[(y1 * sl + x1) * 4 + c] * wx;
+                sortie[o + c] = haut * (1 - wy) + bas * wy;
+            }
+            sortie[o + 3] = 255;
+        }
+    }
+    return sortie;
+}
+
+/** Le world file d'une image JPEG (.jgw) : taille du pixel, deux rotations
+ *  nulles, puis le CENTRE du pixel en haut à gauche. */
+function fichierJgw(plan) {
+    return [plan.pasX, 0, 0, -plan.pasY, plan.minX + plan.pasX / 2, plan.maxY - plan.pasY / 2]
+        .map((valeur, i) => valeur.toFixed(i >= 4 ? 4 : 10)).join('\n') + '\n';
+}
+
+/** La projection au format WKT 1 que lisent QGIS, GDAL et ArcGIS (.prj),
+ *  avec son code EPSG : celui-ci l'identifie sans ambiguïté. */
+function wktProjection(proj) {
+    const geo = proj.datum === 'RGF93 v1'
+        ? 'GEOGCS["RGF93 v1",DATUM["Reseau_Geodesique_Francais_1993",SPHEROID["GRS 1980",6378137,298.257222101,'
+          + 'AUTHORITY["EPSG","7019"]],AUTHORITY["EPSG","6171"]],PRIMEM["Greenwich",0],'
+          + 'UNIT["degree",0.0174532925199433],AUTHORITY["EPSG","4171"]]'
+        : 'GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563,'
+          + 'AUTHORITY["EPSG","7030"]],AUTHORITY["EPSG","6326"]],PRIMEM["Greenwich",0],'
+          + 'UNIT["degree",0.0174532925199433],AUTHORITY["EPSG","4326"]]';
+    const metre = 'UNIT["metre",1,AUTHORITY["EPSG","9001"]]';
+    const p = (nom, valeur) => `PARAMETER["${nom}",${valeur}]`;
+    const { epsg } = proj;
+    if (epsg === 3857) {
+        return `PROJCS["WGS 84 / Pseudo-Mercator",${geo},PROJECTION["Mercator_1SP"],${p('central_meridian', 0)},`
+            + `${p('scale_factor', 1)},${p('false_easting', 0)},${p('false_northing', 0)},${metre},`
+            + 'AXIS["Easting",EAST],AXIS["Northing",NORTH],'
+            + 'EXTENSION["PROJ4","+proj=merc +a=6378137 +b=6378137 +lat_ts=0 +lon_0=0 +x_0=0 +y_0=0 +k=1 +units=m '
+            + '+nadgrids=@null +wktext +no_defs"],AUTHORITY["EPSG","3857"]]';
+    }
+    if (epsg >= 32600) {
+        const zone = epsg - 32600;
+        return `PROJCS["WGS 84 / UTM zone ${zone}N",${geo},PROJECTION["Transverse_Mercator"],`
+            + `${p('latitude_of_origin', 0)},${p('central_meridian', zone * 6 - 183)},${p('scale_factor', 0.9996)},`
+            + `${p('false_easting', 500000)},${p('false_northing', 0)},${metre},`
+            + `AXIS["Easting",EAST],AXIS["Northing",NORTH],AUTHORITY["EPSG","${epsg}"]]`;
+    }
+    // Lambert-93 : origine 46,5° et parallèles 44° et 49° ; les CC : origine et
+    // parallèles à ± 0,75°, la fausse origine montant d'un million par zone.
+    const [lat0, p1, p2, fx, fy] = epsg === 2154
+        ? [46.5, 49, 44, 700000, 6600000]
+        : (l => [l, l - 0.75, l + 0.75, 1700000, 1200000 + (l - 42) * 1e6])(epsg - 3900);
+    return `PROJCS["${proj.description}",${geo},PROJECTION["Lambert_Conformal_Conic_2SP"],`
+        + `${p('standard_parallel_1', p1)},${p('standard_parallel_2', p2)},${p('latitude_of_origin', lat0)},`
+        + `${p('central_meridian', 3)},${p('false_easting', fx)},${p('false_northing', fy)},${metre},`
+        + `AXIS["Easting",EAST],AXIS["Northing",NORTH],AUTHORITY["EPSG","${epsg}"]]`;
+}
+
+const TABLE_CRC32 = (() => {
+    const table = new Uint32Array(256);
+    for (let n = 0; n < 256; n++) {
+        let c = n;
+        for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1;
+        table[n] = c >>> 0;
+    }
+    return table;
+})();
+
+/** CRC-32 (IEEE 802.3) d'un Uint8Array, celui du format ZIP. */
+function crc32(octets) {
+    let c = 0xFFFFFFFF;
+    for (let i = 0; i < octets.length; i++) c = TABLE_CRC32[(c ^ octets[i]) & 255] ^ (c >>> 8);
+    return (c ^ 0xFFFFFFFF) >>> 0;
+}
+
+/**
+ * Une archive ZIP sans compression (le JPEG ne se comprime plus), noms en
+ * UTF-8, rendue en morceaux pour un Blob. `fichiers` : [{ nom, octets }].
+ */
+function archiveZip(fichiers, date = new Date()) {
+    const encodeur = new TextEncoder();
+    const heure = (date.getHours() << 11) | (date.getMinutes() << 5) | (date.getSeconds() >> 1);
+    const jour = ((date.getFullYear() - 1980) << 9) | ((date.getMonth() + 1) << 5) | date.getDate();
+    const parties = [], centrale = [];
+    let decalage = 0, tailleCentrale = 0;
+    for (const { nom, octets } of fichiers) {
+        const n = encodeur.encode(nom), crc = crc32(octets), l = octets.length;
+        const local = new DataView(new ArrayBuffer(30));
+        local.setUint32(0, 0x04034b50, true);
+        local.setUint16(4, 20, true);
+        local.setUint16(6, 0x0800, true);              // noms en UTF-8
+        local.setUint16(10, heure, true);
+        local.setUint16(12, jour, true);
+        local.setUint32(14, crc, true);
+        local.setUint32(18, l, true);
+        local.setUint32(22, l, true);
+        local.setUint16(26, n.length, true);
+        parties.push(new Uint8Array(local.buffer), n, octets);
+        const c = new DataView(new ArrayBuffer(46));
+        c.setUint32(0, 0x02014b50, true);
+        c.setUint16(4, 20, true);
+        c.setUint16(6, 20, true);
+        c.setUint16(8, 0x0800, true);
+        c.setUint16(12, heure, true);
+        c.setUint16(14, jour, true);
+        c.setUint32(16, crc, true);
+        c.setUint32(20, l, true);
+        c.setUint32(24, l, true);
+        c.setUint16(28, n.length, true);
+        c.setUint32(42, decalage, true);
+        centrale.push(new Uint8Array(c.buffer), n);
+        decalage += 30 + n.length + l;
+        tailleCentrale += 46 + n.length;
+    }
+    const fin = new DataView(new ArrayBuffer(22));
+    fin.setUint32(0, 0x06054b50, true);
+    fin.setUint16(8, fichiers.length, true);
+    fin.setUint16(10, fichiers.length, true);
+    fin.setUint32(12, tailleCentrale, true);
+    fin.setUint32(16, decalage, true);
+    return [...parties, ...centrale, new Uint8Array(fin.buffer)];
+}
+
 const ALPHABET_IFC = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_$';
 
 /**
@@ -11415,8 +11625,80 @@ const FORMATS_EXPORT = {
                    + ', coordonnées absolues'
                    + (m.crs.datumVertical && !m.crs.epsgVertical
                        ? `, altitudes ${m.crs.datumVertical} non déclarées dans le système` : '') + '.' },
+    // L'orthophoto n'est pas un modèle : `modeleOrtho()` rend déjà ses morceaux
+    // (`blobs`), son résumé et ses repères ; `ecrire` n'est jamais appelé.
+    ortho: { nom: 'orthophoto', ecrire: null, extension: 'zip', type: 'application/zip',
+             reperes: m => m.reperes },
 };
-const noteExport = document.getElementById('note-export');
+
+/**
+ * L'orthophoto de la scène, rééchantillonnée dans la projection choisie et
+ * rangée en archive avec son world file (.jgw) et sa projection (.prj) : un
+ * SIG la pose au bon endroit sans autre réglage. C'est la mosaïque publiée
+ * avec la scène (celle que la vue drape), pas le fond affiché, qui peut être
+ * le plan IGN. Hors du contour dessiné, le blanc : rien n'est exporté au-delà.
+ */
+async function modeleOrtho() {
+    await chargementArtefact;
+    if (!ARTEFACT) throw new Error("la scène n'est pas encore prête");
+    const proj = projectionExport;
+    const img = await chargerImage(URL_VUE3D_ORTHO, false).catch(() => {
+        throw new Error("l'orthophoto de la scène n'a pas pu être lue");
+    });
+    const lg = img.naturalWidth, ht = img.naturalHeight;
+    const source = document.createElement('canvas');
+    source.width = lg; source.height = ht;
+    const ctxSource = source.getContext('2d', { willReadFrequently: true });
+    ctxSource.drawImage(img, 0, 0);
+    const plan = planOrtho(ARTEFACT.bbox, proj.vers, lg, ht);
+    const rgba = reechantillonnerOrtho(ctxSource.getImageData(0, 0, lg, ht).data, lg, ht, plan);
+    const sortie = document.createElement('canvas');
+    sortie.width = plan.largeur; sortie.height = plan.hauteur;
+    const ctx = sortie.getContext('2d');
+    const pixels = new ImageData(rgba, plan.largeur, plan.hauteur);
+    if (POLY) {
+        // Le contour en pixels de la sortie ; le reste de l'image reste blanc.
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, plan.largeur, plan.hauteur);
+        const tampon = document.createElement('canvas');
+        tampon.width = plan.largeur; tampon.height = plan.hauteur;
+        tampon.getContext('2d').putImageData(pixels, 0, 0);
+        ctx.save();
+        ctx.beginPath();
+        POLY.forEach(([lat, lon], i) => {
+            const [x, y] = proj.vers(lon, lat);
+            const px = (x - plan.minX) / plan.pasX, py = (plan.maxY - y) / plan.pasY;
+            if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+        });
+        ctx.closePath();
+        ctx.clip();
+        ctx.drawImage(tampon, 0, 0);
+        ctx.restore();
+    } else {
+        ctx.putImageData(pixels, 0, 0);
+    }
+    const jpeg = await new Promise(ok => sortie.toBlob(ok, 'image/jpeg', 0.92));
+    if (!jpeg) throw new Error("l'image n'a pas pu être encodée en JPEG");
+    const encodeur = new TextEncoder();
+    const base = nomFichierExport();
+    const pas = ((plan.pasX + plan.pasY) / 2).toFixed(2).replace('.', ',');
+    const licence = 'Orthophotographie © IGN, Géoplateforme (data.geopf.fr), Licence Ouverte Etalab 2.0.\n'
+        + `Image JPEG de ${plan.largeur} × ${plan.hauteur} px, rééchantillonnée en ${proj.description} `
+        + `(EPSG:${proj.epsg}), ${pas} m par pixel ; géoréférencée par le world file .jgw et la projection .prj.\n`
+        + (POLY ? "Hors du contour de la scène, l'image est blanche.\n" : '');
+    return {
+        ortho: true,
+        blobs: archiveZip([
+            { nom: `${base}.jpg`, octets: new Uint8Array(await jpeg.arrayBuffer()) },
+            { nom: `${base}.jgw`, octets: encodeur.encode(fichierJgw(plan)) },
+            { nom: `${base}.prj`, octets: encodeur.encode(wktProjection(proj)) },
+            { nom: `${base}_licence.txt`, octets: encodeur.encode(licence) },
+        ]),
+        resume: `1 orthophoto de ${plan.largeur} × ${plan.hauteur} px, ${pas} m par pixel`,
+        reperes: `${proj.description} (EPSG:${proj.epsg}) : .jpg, .jgw et .prj dans une archive zip.`,
+    };
+}
+const noteExport =document.getElementById('note-export');
 const noteExportFenetre = document.getElementById('export-note');
 const boutonsExport = [...document.querySelectorAll('[data-format]')];
 
@@ -11637,6 +11919,9 @@ for (const b of boutonsFormat) {
         // Le CityGML écrit toujours des coordonnées absolues : l'ancrage ne
         // vaut que pour l'IFC, et le taire vaut mieux que le laisser mentir.
         choixAncrage.disabled = formatExport !== 'ifc';
+        // L'orthophoto est une image : aucune couche à cocher.
+        document.getElementById('export-couches').hidden = formatExport === 'ortho';
+        document.getElementById('export-couches-titre').hidden = formatExport === 'ortho';
     });
 }
 
@@ -11666,11 +11951,14 @@ function resumeExport(modele, choix) {
             c.maille && `relief à ${c.maille.toFixed(1).replace('.', ',')} m`].filter(Boolean).join(', ');
 }
 
+/** Le résumé d'un export : celui des couches, ou celui de l'image pour l'orthophoto. */
+const resumeDe = (modele, choix) => modele.ortho ? modele.resume : resumeExport(modele, choix);
+
 /** Le nom du fichier, avant même de bâtir le modèle : la fenêtre du système
  *  doit le proposer avant le calcul. Même formule que `modeleExport().base`,
  *  que reprend outils/essai-navigateur.mjs. */
 const nomFichierExport = () => {
-    const voulu = champNomIfc.value.trim().replace(/\.(ifc|gml)$/i, '');
+    const voulu = champNomIfc.value.trim().replace(/\.(ifc|gml|zip)$/i, '');
     if (voulu) return voulu;
     return `vue3d-${LAT0}-${LON0}-z${ZONE}`;
 };
@@ -11711,7 +11999,7 @@ async function envoyerAuProjet(fichier, nomFichier, modele, choix) {
     }
     noterExport(`${nomFichier} : ${(fichier.size / 1e6).toFixed(1).replace('.', ',')} Mo, `
         + `déposé dans le projet${tcAuth.nom ? ' ' + tcAuth.nom : ''}. `
-        + resumeExport(modele, choix) + '.');
+        + resumeDe(modele, choix) + '.');
 }
 
 /**
@@ -11726,18 +12014,25 @@ async function envoyerAuProjet(fichier, nomFichier, modele, choix) {
  */
 async function exporter(format, mode = 'telecharger') {
     const { nom, ecrire, extension, type, reperes } = FORMATS_EXPORT[format];
+    // L'orthophoto est une image : ni relief ni couche à cocher, seulement la
+    // mosaïque publiée avec la scène (`modeleOrtho` la lit et le dit si elle manque).
+    const estOrtho = format === 'ortho';
     // Le relief porte les altitudes : sans lui, rien n'est posé.
-    if (!terrain || !vegChargee) {
+    if (!estOrtho && (!terrain || !vegChargee)) {
         noterExport(ERREUR_SCENE ? `Scène indisponible : ${ERREUR_SCENE}`
             : !terrain && reliefRegle ? 'Relief indisponible : pas d\'altitudes à exporter.'
             : 'La scène n\'est pas encore prête.');
+        return;
+    }
+    if (estOrtho && !ARTEFACT) {
+        noterExport(ERREUR_SCENE ? `Scène indisponible : ${ERREUR_SCENE}` : 'La scène n\'est pas encore prête.');
         return;
     }
     // Les options effectives : le cochage, moins ce que la scène ne porte pas —
     // un interrupteur éteint faute de matière ne doit pas grossir la note.
     const choix = Object.fromEntries(COUCHES_EXPORT.map(([cle]) =>
         [cle, !!optionsExport[cle] && COUCHES_PRESENTES[cle]()]));
-    if (!COUCHES_EXPORT.some(([cle]) => choix[cle])) {
+    if (!estOrtho && !COUCHES_EXPORT.some(([cle]) => choix[cle])) {
         noterExport('Aucune couche cochée : rien à écrire.');
         return;
     }
@@ -11782,13 +12077,13 @@ async function exporter(format, mode = 'telecharger') {
     // La note s'affiche avant le calcul, qui tient la main une à deux secondes en zone de 1 000 m.
     await new Promise(ok => requestAnimationFrame(() => setTimeout(ok)));
     try {
-        const modele = modeleExport(choix);
-        if (!modele.elements.length) {
+        const modele = estOrtho ? await modeleOrtho() : modeleExport(choix);
+        if (!estOrtho && !modele.elements.length) {
             await abandonner();
             noterExport('Rien à écrire : les couches cochées sont vides dans cette scène.');
             return;
         }
-        const texte = ecrire(modele);
+        const texte = estOrtho ? modele.blobs : ecrire(modele);
         const fichier = new Blob(Array.isArray(texte) ? texte : [texte], { type });
         if (mode === 'projet') {
             await envoyerAuProjet(fichier, nomFichier, modele, choix);
@@ -11819,7 +12114,7 @@ async function exporter(format, mode = 'telecharger') {
         }
         noterExport((repli ? 'Écriture directe refusée, fichier téléchargé : ' : '')
             + `${ecrit} : ${(fichier.size / 1e6).toFixed(1).replace('.', ',')} Mo, `
-            + resumeExport(modele, choix) + '. ' + reperes(modele)
+            + resumeDe(modele, choix) + '. ' + reperes(modele)
             // Un fichier plus lourd que le dépôt n'ira pas au projet, et pèse
             // lourd à l'ouverture dans un logiciel de conception.
             + (fichier.size > TAILLE_MAX_DEPOT

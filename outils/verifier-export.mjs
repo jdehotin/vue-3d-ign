@@ -39,6 +39,13 @@
 //   dans le second fichier donné, il se valide ensuite contre les schémas
 //   (citygml-tools validate) et par outils/valider_citygml.py.
 //
+// - orthophoto exportée (planOrtho, reechantillonnerOrtho, fichierJgw,
+//   wktProjection, archiveZip) : l'inverse des projections, le maillage
+//   source → sortie à moins de 0,01 px de l'inverse exact, un dégradé de
+//   position retrouvé après rééchantillonnage, le world file qui replace le
+//   pixel (0, 0) au bon point, la projection .prj relue par pyproj (pip
+//   install pyproj, hors requirements) et l'archive zip relue par zipfile ;
+//
 // Sort en erreur si un contrôle est manqué, après les avoir tous faits.
 import * as THREE from 'three';
 import fs from 'fs';
@@ -69,12 +76,14 @@ const NOMS = ['etendre', 'coniqueConforme', 'versLambert93', 'versUtm', 'versMer
               'hachage128', 'guidIfc', 'idGml', 'chaineIfc', 'angleIfc', 'facettesIfc',
               'trianglesRelief', 'trianglesTronc', 'tubeCable', 'ecrireIfc', 'alea', 'portDe', 'portMesure',
               'aUnTronc', 'gabaritTronc', 'gabaritHouppier', 'ajouterHouppierSimple', 'polygonesPlans',
-              'contoursRegion', 'solsOuverts', 'ecrireCityGml'];
+              'contoursRegion', 'solsOuverts', 'ecrireCityGml', 'inverseProjection', 'planOrtho',
+              'reechantillonnerOrtho', 'fichierJgw', 'wktProjection', 'crc32', 'archiveZip'];
 const CONSTS = ['GRS80', 'WGS84', 'PROJECTIONS', 'ALPHABET_IFC', 'ENTITES_IFC', 'reelIfc', 'STYLES_IFC', 'PORTS', 'EMPRISE_HOUPPIER', 'ENFONCEMENT',
-                'HAUTEUR_MIN_TRONC', 'SEGMENTS_SIMPLE', 'PLAN_COS', 'PLAN_ECART_M', 'texteXml', 'ESPACES_CITYGML'];
+                'HAUTEUR_MIN_TRONC', 'SEGMENTS_SIMPLE', 'PLAN_COS', 'PLAN_ECART_M', 'texteXml', 'ESPACES_CITYGML', 'ORTHO_NOEUDS', 'TABLE_CRC32'];
 const { etendre, versLambert93, PROJECTIONS, guidIfc, idGml, chaineIfc, angleIfc, facettesIfc, trianglesRelief, trianglesTronc,
         tubeCable, ecrireIfc, aUnTronc, portDe, ajouterHouppierSimple, polygonesPlans, solsOuverts, ecrireCityGml,
-        ALPHABET_IFC, STYLES_IFC, ENFONCEMENT } =
+        ALPHABET_IFC, STYLES_IFC, ENFONCEMENT, inverseProjection, planOrtho, reechantillonnerOrtho,
+        fichierJgw, wktProjection, crc32, archiveZip } =
   new Function('THREE', CONSTS.map(extraireConst).join('\n') + '\n' + NOMS.map(extraire).join('\n')
     + `\nreturn { ${[...NOMS, ...CONSTS].join(', ')} };`)(THREE);
 
@@ -640,6 +649,129 @@ const classerMurs = nz => nz < -0.5 ? 'GroundSurface' : nz <= 0.5 ? 'WallSurface
     fs.writeFileSync(process.argv[3], gml);
     console.log(`écrit : ${process.argv[3]} (${gml.length} octets)`);
   }
+}
+
+// --- Orthophoto exportée ------------------------------------------------------------------
+{
+  const { spawnSync } = await import('child_process');
+  const os = await import('os');
+  const path = await import('path');
+  // 1) L'inverse des projections, depuis un départ à 0,01° du but.
+  let pireInverse = 0;
+  for (const proj of PROJECTIONS) {
+    for (const [lon, lat] of [[5.2003, 43.9116], [-4.486, 48.39], [2.2945, 48.85826]]) {
+      const [x, y] = proj.vers(lon, lat);
+      const [lo, la] = inverseProjection(proj.vers, x, y, lon + 0.01, lat - 0.01);
+      pireInverse = Math.max(pireInverse, Math.abs(lo - lon), Math.abs(la - lat));
+    }
+  }
+  verifier(pireInverse < 1e-9, `orthophoto : inverse des ${PROJECTIONS.length} projections à ${pireInverse.toExponential(1)}° (< 1e-9)`);
+
+  // 2) Le maillage et le world file : le pixel (px, py) est ramené par le world
+  // file en (x, y), par l'inverse exact en (lon, lat), puis dans la source ;
+  // le maillage interpolé doit y tomber à moins de 0,01 px.
+  for (const [lieu, lon0, lat0, cote, epsg] of [['Gordes', 5.2003, 43.9116, 1000, 2154],
+                                                 ['Brest', -4.486, 48.39, 5000, 2154],
+                                                 ['Gordes', 5.2003, 43.9116, 1000, 3943],
+                                                 ['Brest', -4.486, 48.39, 5000, 32630]]) {
+    const proj = PROJECTIONS.find(p => p.epsg === epsg);
+    const dLat = cote / 111320, dLon = cote / (111320 * Math.cos(lat0 * Math.PI / 180));
+    const bbox = [lon0 - dLon / 2, lat0 - dLat / 2, lon0 + dLon / 2, lat0 + dLat / 2];
+    const sl = 2048, sh = 2048;
+    const plan = planOrtho(bbox, proj.vers, sl, sh);
+    const jgw = fichierJgw(plan).trim().split('\n').map(Number);
+    let pire = 0;
+    for (const [px, py] of [[0, 0], [plan.largeur - 1, 0], [0, plan.hauteur - 1], [plan.largeur - 1, plan.hauteur - 1],
+                            [700, 311], [1234, 1500], [17, 903]]) {
+      const x = jgw[4] + px * jgw[0], y = jgw[5] + py * jgw[3];
+      const [lo, la] = inverseProjection(proj.vers, x, y, lon0, lat0);
+      const su = (lo - bbox[0]) / (bbox[2] - bbox[0]) * sl, sv = (bbox[3] - la) / (bbox[3] - bbox[1]) * sh;
+      const n = plan.n, N1 = n + 1;
+      const gx = (px + 0.5) / plan.largeur * n, gy = (py + 0.5) / plan.hauteur * n;
+      const i = Math.min(Math.floor(gx), n - 1), j = Math.min(Math.floor(gy), n - 1), fx = gx - i, fy = gy - j, k = j * N1 + i;
+      const bil = t => (t[k] * (1 - fx) + t[k + 1] * fx) * (1 - fy) + (t[k + N1] * (1 - fx) + t[k + N1 + 1] * fx) * fy;
+      pire = Math.max(pire, Math.hypot(bil(plan.u) - su, bil(plan.v) - sv));
+    }
+    verifier(pire < 0.01, `orthophoto ${lieu} ${cote} m EPSG:${epsg} : maillage à ${pire.toFixed(4)} px de l'inverse exact (< 0,01)`);
+    verifier(plan.largeur === sl && jgw[0] > 0 && jgw[3] < 0 && jgw[1] === 0 && jgw[2] === 0,
+             `orthophoto ${lieu} EPSG:${epsg} : ${plan.largeur} × ${plan.hauteur} px à ${jgw[0].toFixed(4)} m, world file sans rotation`);
+  }
+
+  // 3) Le rééchantillonnage : une source dont le rouge suit la colonne et le
+  // vert la ligne ; la sortie doit les restituer à la position calculée par
+  // l'inverse exact.
+  {
+    const proj = PROJECTIONS[0], [lon0, lat0] = [5.2003, 43.9116];
+    const dLat = 1000 / 111320, dLon = 1000 / (111320 * Math.cos(lat0 * Math.PI / 180));
+    const bbox = [lon0 - dLon / 2, lat0 - dLat / 2, lon0 + dLon / 2, lat0 + dLat / 2];
+    const sl = 512, sh = 512;
+    const src = new Uint8ClampedArray(sl * sh * 4);
+    for (let y = 0; y < sh; y++) for (let x = 0; x < sl; x++) {
+      const o = (y * sl + x) * 4;
+      src[o] = x * 255 / (sl - 1); src[o + 1] = y * 255 / (sh - 1); src[o + 2] = 100; src[o + 3] = 255;
+    }
+    const plan = planOrtho(bbox, proj.vers, sl, sh);
+    const sortie = reechantillonnerOrtho(src, sl, sh, plan);
+    const jgw = fichierJgw(plan).trim().split('\n').map(Number);
+    let pire = 0, opaque = true;
+    for (const [px, py] of [[3, 3], [256, 256], [500, 20], [30, 480], [511, plan.hauteur - 1]]) {
+      const x = jgw[4] + px * jgw[0], y = jgw[5] + py * jgw[3];
+      const [lo, la] = inverseProjection(proj.vers, x, y, lon0, lat0);
+      const su = (lo - bbox[0]) / (bbox[2] - bbox[0]) * sl - 0.5, sv = (bbox[3] - la) / (bbox[3] - bbox[1]) * sh - 0.5;
+      const o = (py * plan.largeur + px) * 4;
+      pire = Math.max(pire, Math.abs(sortie[o] - Math.min(Math.max(su, 0), sl - 1) * 255 / (sl - 1)),
+                      Math.abs(sortie[o + 1] - Math.min(Math.max(sv, 0), sh - 1) * 255 / (sh - 1)));
+      opaque = opaque && sortie[o + 3] === 255 && sortie[o + 2] === 100;
+    }
+    verifier(pire <= 1.01 && opaque, `orthophoto : un dégradé de position est restitué à ${pire.toFixed(2)}/255, opaque`);
+  }
+
+  // 4) Le .prj relu par pyproj : chaque projection placée par le WKT doit
+  // redonner la longitude et la latitude de nos formules, à 1e-8°.
+  const cas = PROJECTIONS.map(proj => {
+    const [x, y] = proj.vers(5.2003, 43.9116);
+    return { epsg: proj.epsg, wkt: wktProjection(proj), x, y, lon: 5.2003, lat: 43.9116 };
+  });
+  const py = spawnSync('python', ['-I', '-c', [
+    'import json, sys',
+    'from pyproj import CRS, Transformer',
+    'sortie = []',
+    'for c in json.load(sys.stdin):',
+    '    crs = CRS.from_wkt(c["wkt"])',
+    '    lon, lat = Transformer.from_crs(crs, "EPSG:4326", always_xy=True).transform(c["x"], c["y"])',
+    '    sortie.append([c["epsg"], crs.to_epsg(), max(abs(lon - c["lon"]), abs(lat - c["lat"]))])',
+    'print(json.dumps(sortie))'].join('\n')], { input: JSON.stringify(cas), encoding: 'utf8' });
+  if (py.status !== 0) {
+    console.log('ignoré : pyproj indisponible (pip install pyproj) —', (py.stderr || '').split('\n').filter(Boolean).pop());
+  } else {
+    const lu = JSON.parse(py.stdout);
+    const mauvais = lu.filter(([epsg, code, ecart]) => code !== epsg || ecart > 1e-8);
+    verifier(!mauvais.length, `orthophoto : .prj des ${lu.length} projections relus par pyproj, EPSG retrouvé, position à 1e-8°`
+             + (mauvais.length ? ' — ' + JSON.stringify(mauvais) : ''));
+  }
+
+  // 5) L'archive zip, relue par zipfile : CRC, contenus, dates, noms UTF-8.
+  const octets = new TextEncoder().encode('héllo\n'.repeat(1000));
+  const date = new Date(2026, 9, 26, 12, 30, 10);
+  const zip = Buffer.concat(archiveZip([{ nom: 'a.jgw', octets }, { nom: 'é.txt', octets: new Uint8Array(0) },
+                                        { nom: 'b.bin', octets: Uint8Array.from({ length: 70000 }, (_, i) => i * 7) }], date));
+  verifier(crc32(new TextEncoder().encode('123456789')) === 0xCBF43926, 'zip : CRC-32 de « 123456789 » = CBF43926');
+  const fichierZip = path.join(os.tmpdir(), 'verifier-ortho.zip');
+  fs.writeFileSync(fichierZip, zip);
+  const z = spawnSync('python', ['-I', '-c', [
+    'import sys, zipfile',
+    'z = zipfile.ZipFile(sys.argv[1])',
+    'assert z.testzip() is None, z.testzip()',
+    'sys.stdout.reconfigure(encoding="utf-8")',
+    'print("|".join(z.namelist()), len(z.read("a.jgw")), len(z.read("\\u00e9.txt")), len(z.read("b.bin")), z.getinfo("a.jgw").date_time)'].join('\n'),
+    fichierZip], { encoding: 'utf8' });
+  if (z.status !== 0) {
+    console.log('ignoré : Python indisponible —', (z.stderr || '').split('\n').filter(Boolean).pop());
+  } else {
+    verifier(z.stdout.trim() === 'a.jgw|é.txt|b.bin 7000 0 70000 (2026, 10, 26, 12, 30, 10)',
+             `zip : relu par zipfile, 3 entrées, CRC et dates justes (${z.stdout.trim()})`);
+  }
+  fs.rmSync(fichierZip, { force: true });
 }
 
 console.log(echecs ? `${echecs} contrôle(s) manqué(s)` : 'tous les contrôles passent');
