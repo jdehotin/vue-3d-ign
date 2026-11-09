@@ -13,6 +13,10 @@ messages de commit et dans les commentaires des modules.
 
 ## Scène v16 — 26 octobre 2026
 
+- **Contour croisé détecté avant l'envoi** : un contour reçu par `?poly=` dont deux côtés se
+  coupent est remplacé par sa boîte, avec un message ; le tracé (accueil et vue)
+  refuse de valider un « huit » au lieu de laisser le serveur répondre « contour
+  croisé » sur une scène vide.
 - **Borne d'aire de l'emprise à 50 km² en local** (20 km² avant) : `VUE3D_AIRE_MAX_KM2`
   la baisse pour un service à la mémoire juste, comme Render (2,5 km²).
 - **Emprise du projet Trimble Connect sur la carte** : l'accueil la trace en

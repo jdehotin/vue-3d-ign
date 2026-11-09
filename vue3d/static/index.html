@@ -1180,10 +1180,46 @@ coordonnées absolues.">
     if (lat0 !== null && lon0 !== null && enFrance(lat0, lon0)) centre = { lat: lat0, lon: lon0 };
     const z0 = num(PARAMS.get('zone'));
     if (z0 !== null && COTES.includes(z0)) cote = z0;
+    /**
+     * Vrai si deux côtés non voisins du contour [[lat, lon], …] se coupent ou se
+     * touchent : le serveur refuse ce « huit » (« contour croisé »), mieux vaut
+     * le dire avant de l'envoyer. Partagé avec l'outil de tracé de la vue.
+     */
+    window.contourCroise = pts => {
+        const n = pts.length;
+        const sens = (a, b, c) => Math.sign((b[1] - a[1]) * (c[0] - a[0]) - (b[0] - a[0]) * (c[1] - a[1]));
+        const dedans = (a, b, c) => Math.min(a[0], b[0]) <= c[0] && c[0] <= Math.max(a[0], b[0])
+                                 && Math.min(a[1], b[1]) <= c[1] && c[1] <= Math.max(a[1], b[1]);
+        const coupe = (a, b, c, d) => {
+            const o1 = sens(a, b, c), o2 = sens(a, b, d), o3 = sens(c, d, a), o4 = sens(c, d, b);
+            return (o1 !== o2 && o3 !== o4)
+                || (o1 === 0 && dedans(a, b, c)) || (o2 === 0 && dedans(a, b, d))
+                || (o3 === 0 && dedans(c, d, a)) || (o4 === 0 && dedans(c, d, b));
+        };
+        for (let i = 0; i < n; i++) {
+            for (let j = i + 2; j < n; j++) {
+                if (i === 0 && j === n - 1) continue;           // le dernier côté touche le premier
+                if (coupe(pts[i], pts[(i + 1) % n], pts[j], pts[(j + 1) % n])) return true;
+            }
+        }
+        return false;
+    };
+    const boiteContour = pts => {
+        const las = pts.map(p => p[0]), los = pts.map(p => p[1]);
+        const [s, n, o, e] = [Math.min(...las), Math.max(...las), Math.min(...los), Math.max(...los)];
+        return [[s, o], [s, e], [n, e], [n, o]];
+    };
+
     const poly = PARAMS.get('poly');
     if (poly) {
-        const pts = poly.split(';').map(p => p.split(',').map(Number))
+        let pts = poly.split(';').map(p => p.split(',').map(Number))
             .filter(p => p.length === 2 && p.every(Number.isFinite));
+        // Un tour croisé serait refusé par le serveur : sa boîte, elle, est une
+        // zone valide, et l'utilisateur est prévenu de ce remplacement.
+        if (pts.length >= 3 && window.contourCroise(pts)) {
+            pts = boiteContour(pts);
+            noteEmprise = ' Le contour reçu se croise (côtés qui se coupent) : sa boîte est utilisée à la place.';
+        }
         if (pts.length >= 3) { dessine = pts; emprise = pts; centre = centroide(pts); }
     }
 
@@ -1367,6 +1403,11 @@ coordonnées absolues.">
 
     function finirDessin() {
         if (sommets.length < 3) return;
+        if (window.contourCroise(sommets)) {
+            aide('Le contour se croise : deux côtés se coupent. Déplacez ou retirez un sommet (Échap annule le tracé), '
+                + 'puis validez.');
+            return;
+        }
         choixFait = true;
         contour = sommets.slice();
         centre = centroide(contour);
@@ -13370,7 +13411,13 @@ function majNoteDessin() {
     }
     noteDessin.textContent = texte;
     zoneDessin.classList.toggle('alerte', aire > POLY_AIRE_AVERTISSEMENT_M2);
-    btnDessinValider.disabled = n < 3 || aire > POLY_AIRE_MAX_M2;
+    // Un contour croisé est refusé par le serveur : on le dit au tracé, pas à la scène.
+    const croise = n >= 3 && window.contourCroise(dessin.sommets);
+    if (croise) {
+        noteDessin.textContent += ' Le contour se croise (deux côtés se coupent) : déplacez un sommet, le serveur le refuserait.';
+        zoneDessin.classList.add('alerte');
+    }
+    btnDessinValider.disabled = n < 3 || aire > POLY_AIRE_MAX_M2 || croise;
     if (allegementDessin) allegementDessin.hidden = aire <= POLY_AIRE_AVERTISSEMENT_M2;
 }
 
