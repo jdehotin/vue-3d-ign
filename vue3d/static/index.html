@@ -136,7 +136,28 @@
         #panel header .reconstruire:disabled { color:var(--muted); cursor:wait; text-decoration:none; }
         .section { padding:12px 16px; border-bottom:1px solid var(--line); }
         .section h2 { margin:0 0 8px; font-size:10px; letter-spacing:.08em;
-                      text-transform:uppercase; color:var(--muted); font-weight:600; }
+                      text-transform:uppercase; color:var(--muted); font-weight:600;
+                      display:flex; align-items:center; justify-content:space-between; }
+        /* Les sections repliables (les stats de la scène construite, fermées par
+           défaut : elles chargent le panneau sans rien montrer tant qu'on ne les
+           ouvre pas). <summary> porte le h2 ; son triangle d'origine est ôté,
+           remplacé par .chev, qui pivote à l'ouverture — le même geste que les
+           dossiers Trimble Connect (▸/▾), ici par CSS puisque <details> l'anime. */
+        details.section { padding:0; }
+        details.section > summary { padding:12px 16px; cursor:pointer; list-style:none; }
+        details.section > summary::-webkit-details-marker { display:none; }
+        details.section > summary::marker { content:''; }
+        details.section > summary:hover h2 { color:var(--text); }
+        details.section > summary h2 { margin-bottom:0; }
+        /* Ouvert, le creux entre l'en-tête et la première ligne redevient celui
+           de .section h2 (8px) — porté par le h2 seul, pas additionné au padding
+           du <summary> — pour une section ouverte identique à l'ancien bloc fixe. */
+        details.section[open] > summary { padding-bottom:0; }
+        details.section[open] > summary h2 { margin-bottom:8px; }
+        details.section > summary .chev { font-size:9px; transition:transform .15s; flex:none; margin-left:8px; }
+        details.section[open] > summary .chev { transform:rotate(90deg); }
+        details.section > :not(summary) { padding:0 16px; }
+        details.section > *:last-child { padding-bottom:12px; }
         .toggles { display:flex; flex-wrap:wrap; gap:6px; }
         .toggle { border:1px solid var(--line); background:var(--panel-soft); color:var(--text);
                   padding:5px 10px; border-radius:5px; font-size:11px; cursor:pointer; }
@@ -709,8 +730,8 @@
             <div class="note" id="m-note"></div>
         </div>
 
-        <div class="section">
-            <h2>Bâtiments</h2>
+        <details class="section">
+            <summary><h2>Bâtiments<span class="chev" aria-hidden="true">▸</span></h2></summary>
             <div class="stat"><span>chargés</span><b id="s-total">—</b></div>
             <div class="stat"><span>avec toit mesuré</span><b id="s-roof">—</b></div>
             <div class="stat"><span>toit mesuré au LiDAR</span><b id="s-lidar">—</b></div>
@@ -718,7 +739,7 @@
             <div class="stat" id="l-ecarts" hidden title="Toits dessinés comparés aux points « bâtiment » du nuage LiDAR HD qui tombent dessus"><span>vérifiés au nuage LiDAR</span><b id="s-ecarts">—</b></div>
             <div class="note legende" id="legende-ecarts" hidden>Points du nuage sur les toits, décalage ôté :<i class="sous"></i>toit au-dessus<i class="egal"></i>à ±0,25 m<i class="sur"></i>toit en dessous</div>
             <div class="note" id="note">Chargement des bâtiments…</div>
-        </div>
+        </details>
 
         <div class="section">
             <h2>Bâtiment</h2>
@@ -745,13 +766,13 @@
             <div class="note" id="bornes-note"></div>
         </div>
 
-        <div class="section">
-            <h2>Terrain</h2>
+        <details class="section">
+            <summary><h2>Terrain<span class="chev" aria-hidden="true">▸</span></h2></summary>
             <div class="stat"><span>source</span><b id="s-src">—</b></div>
             <div class="stat"><span>altitude au centre</span><b id="s-alt">—</b></div>
             <div class="stat"><span>amplitude sur l'emprise</span><b id="s-amp">—</b></div>
             <div class="note" id="note-terrain">Chargement du relief…</div>
-        </div>
+        </details>
 
         <div class="section">
             <h2>Ce que ça montre</h2>
@@ -764,13 +785,13 @@
             </div>
         </div>
 
-        <div class="section" id="sec-veg" hidden>
-            <h2>Végétation &amp; sursol</h2>
+        <details class="section" id="sec-veg" hidden>
+            <summary><h2>Végétation &amp; sursol<span class="chev" aria-hidden="true">▸</span></h2></summary>
             <div class="stat"><span>hauteur max</span><b id="v-max">—</b></div>
             <div class="stat"><span>masque au sud</span><b id="v-masque">—</b></div>
             <div class="stat"><span>obstacle dominant</span><b id="v-obstacle">—</b></div>
             <div class="note" id="v-note">Chargement…</div>
-        </div>
+        </details>
     </div>
 
     <div id="voile"></div>

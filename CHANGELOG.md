@@ -13,6 +13,14 @@ messages de commit et dans les commentaires des modules.
 
 ## Scène v16 — 26 octobre 2026
 
+- **Bâtiments, Terrain et Végétation & sursol repliés par défaut** dans le
+  panneau : ces trois sections, remplies par la construction de la scène, sont
+  maintenant des `<details>` fermés d'un clic sur leur titre — le panneau
+  n'affiche plus d'emblée leurs statistiques (toits mesurés, dénivelé médian,
+  écarts au nuage LiDAR…), qui l'allongeaient sans qu'on les ait demandées.
+  Les valeurs se chargent normalement même fermées (`textContent` par id) ;
+  seul l'affichage change.
+
 - **Export de l'orthophoto en GeoTIFF**, à la place du JPEG + `.jgw` + `.prj` :
   géoréférencée par ses propres balises (`ModelPixelScaleTag`,
   `ModelTiepointTag`, `GeoKeyDirectoryTag` — le système par son code EPSG,
