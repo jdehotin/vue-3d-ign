@@ -13,6 +13,22 @@ messages de commit et dans les commentaires des modules.
 
 ## Scène v16 — 26 octobre 2026
 
+- **Nouvelle charte graphique** : orange `#e07b00` → `#FFB100`, fond sombre
+  `#1f2328`/`#2b3138`/`#3a4149` → bleu `#264FC4` (et ses deux teintes dérivées,
+  même méthode que la luminance de `--muted`, plus bas), vert de l'emprise du
+  projet Trimble Connect sur la carte `#35c28a` → `#7AB327`. Les dégradés et
+  teintes d'alerte dérivées (badge, bouton principal de l'accueil, avertissements)
+  suivent la même transformation HSL, teinte et saturation d'origine conservées,
+  pour rester dans la même famille. `--muted` est éclairci (`#9aa0a6` →
+  `#ACB1B9`) : sur le nouveau fond, bien plus clair que l'ancien (46 % de
+  luminance contre 14 %), le texte atténué tombait sous 3:1 de contraste.
+  Le texte blanc sur un bouton plein accent devient `#111` (`--accent-text`,
+  déjà la teinte des pastilles DPE/DVF) : blanc sur `#FFB100` ne fait que
+  1,8:1, `#111` en fait plus de 10. Les couleurs qui représentent une donnée
+  réelle (essences d'arbres, matériaux des véhicules, légende de qualité du
+  MNT, voile 3D sans fond cartographique) ne sont pas concernées : ce n'est
+  pas la charte de l'application.
+
 - **Bâtiments, Terrain et Végétation & sursol repliés par défaut** dans le
   panneau : ces trois sections, remplies par la construction de la scène, sont
   maintenant des `<details>` fermés d'un clic sur leur titre — le panneau
