@@ -741,11 +741,11 @@
             <div class="note" id="note">Chargement des bâtiments…</div>
         </details>
 
-        <div class="section">
-            <h2>Bâtiment</h2>
+        <details class="section" id="sec-batiment">
+            <summary><h2>Bâtiment<span class="chev" aria-hidden="true">▸</span></h2></summary>
             <div id="fiche-batiment"></div>
             <div class="note" id="note-batiment">Chargement des bâtiments…</div>
-        </div>
+        </details>
 
         <div class="section" id="sec-dpe" hidden>
             <h2>DPE (ADEME)</h2>
@@ -12401,7 +12401,9 @@ function placerTip(e, r) {
 tip.addEventListener('click', e => {
     if (!e.target.closest('.voir-fiche')) return;
     detacherTip();
-    ouvrirTiroir(document.getElementById('fiche-batiment').closest('.section'));
+    const sec = document.getElementById('sec-batiment');
+    sec.open = true;
+    ouvrirTiroir(sec);
 });
 
 /**
@@ -14097,6 +14099,7 @@ renderer.domElement.addEventListener('pointerup', e => {
     // La végétation se survole mais ne s'ouvre pas : elle n'a pas de fiche.
     if (ud.vegetation || !ud.anneau) return;
     afficherFicheBatiment(ud);
+    document.getElementById('sec-batiment').open = true;
     epinglerTip(ud, e, r);
 });
 

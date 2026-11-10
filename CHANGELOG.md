@@ -29,13 +29,16 @@ messages de commit et dans les commentaires des modules.
   MNT, voile 3D sans fond cartographique) ne sont pas concernées : ce n'est
   pas la charte de l'application.
 
-- **Bâtiments, Terrain et Végétation & sursol repliés par défaut** dans le
-  panneau : ces trois sections, remplies par la construction de la scène, sont
-  maintenant des `<details>` fermés d'un clic sur leur titre — le panneau
-  n'affiche plus d'emblée leurs statistiques (toits mesurés, dénivelé médian,
-  écarts au nuage LiDAR…), qui l'allongeaient sans qu'on les ait demandées.
-  Les valeurs se chargent normalement même fermées (`textContent` par id) ;
-  seul l'affichage change.
+- **Bâtiments, Bâtiment, Terrain et Végétation & sursol repliés par défaut**
+  dans le panneau : ces quatre sections sont maintenant des `<details>` fermés
+  d'un clic sur leur titre — le panneau n'affiche plus d'emblée les statistiques
+  de la scène construite (toits mesurés, dénivelé médian, écarts au nuage
+  LiDAR…) ni la fiche d'un bâtiment, qui l'allongeaient sans qu'on les ait
+  demandées. La fiche d'un bâtiment (BD TOPO, mesures LiDAR) s'ouvre tout de
+  même d'elle-même quand on clique un bâtiment dans la vue ou « voir la fiche »
+  depuis une infobulle — sinon l'ouvrir manuellement resterait nécessaire après
+  chaque sélection. Les valeurs se chargent normalement même fermées
+  (`textContent` par id) ; seul l'affichage change.
 
 - **Export de l'orthophoto en GeoTIFF**, à la place du JPEG + `.jgw` + `.prj` :
   géoréférencée par ses propres balises (`ModelPixelScaleTag`,
