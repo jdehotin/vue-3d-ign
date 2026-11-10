@@ -77,13 +77,14 @@ const NOMS = ['etendre', 'coniqueConforme', 'versLambert93', 'versUtm', 'versMer
               'trianglesRelief', 'trianglesTronc', 'tubeCable', 'ecrireIfc', 'alea', 'portDe', 'portMesure',
               'aUnTronc', 'gabaritTronc', 'gabaritHouppier', 'ajouterHouppierSimple', 'polygonesPlans',
               'contoursRegion', 'solsOuverts', 'ecrireCityGml', 'inverseProjection', 'planOrtho',
-              'reechantillonnerOrtho', 'fichierJgw', 'wktProjection', 'crc32', 'archiveZip', 'compresserDeflate'];
+              'reechantillonnerOrtho', 'fichierJgw', 'wktProjection', 'crc32', 'archiveZip', 'comprimer',
+              'compresserDeflate', 'ecrireGeoTiff'];
 const CONSTS = ['GRS80', 'WGS84', 'PROJECTIONS', 'ALPHABET_IFC', 'ENTITES_IFC', 'reelIfc', 'STYLES_IFC', 'PORTS', 'EMPRISE_HOUPPIER', 'ENFONCEMENT',
                 'HAUTEUR_MIN_TRONC', 'SEGMENTS_SIMPLE', 'PLAN_COS', 'PLAN_ECART_M', 'texteXml', 'ESPACES_CITYGML', 'ORTHO_NOEUDS', 'TABLE_CRC32'];
 const { etendre, versLambert93, PROJECTIONS, guidIfc, idGml, chaineIfc, angleIfc, facettesIfc, trianglesRelief, trianglesTronc,
         tubeCable, ecrireIfc, aUnTronc, portDe, ajouterHouppierSimple, polygonesPlans, solsOuverts, ecrireCityGml,
         ALPHABET_IFC, STYLES_IFC, ENFONCEMENT, inverseProjection, planOrtho, reechantillonnerOrtho,
-        fichierJgw, wktProjection, crc32, archiveZip, compresserDeflate } =
+        fichierJgw, wktProjection, crc32, archiveZip, comprimer, compresserDeflate, ecrireGeoTiff } =
   new Function('THREE', CONSTS.map(extraireConst).join('\n') + '\n' + NOMS.map(extraire).join('\n')
     + `\nreturn { ${[...NOMS, ...CONSTS].join(', ')} };`)(THREE);
 
@@ -845,6 +846,82 @@ const classerMurs = nz => nz < -0.5 ? 'GroundSurface' : nz <= 0.5 ? 'WallSurface
              `zip : relu par zipfile, 3 entrées, CRC et dates justes (${z.stdout.trim()})`);
   }
   fs.rmSync(fichierZip, { force: true });
+}
+
+// --- Orthophoto en GeoTIFF -----------------------------------------------------------------
+{
+  const { spawnSync } = await import('child_process');
+  const os = await import('os');
+  const path = await import('path');
+  const proj = PROJECTIONS[0];   // Lambert-93
+  const plan = { minX: 876709.0, maxY: 6315008.2, pasX: 0.3853, pasY: 0.3852, largeur: 37, hauteur: 29 };
+  // Une image reconnaissable : le rouge suit la colonne, le vert la ligne, le
+  // bleu une valeur fixe ; l'alpha à 0 sur une bande du bord (un « nodata » du
+  // contour dessiné), 255 ailleurs.
+  const { largeur: L, hauteur: H } = plan;
+  const rgba = new Uint8ClampedArray(L * H * 4);
+  for (let y = 0; y < H; y++) for (let x = 0; x < L; x++) {
+    const o = (y * L + x) * 4;
+    rgba[o] = Math.round(x * 255 / (L - 1)); rgba[o + 1] = Math.round(y * 255 / (H - 1)); rgba[o + 2] = 90;
+    rgba[o + 3] = x < 3 ? 0 : 255;
+  }
+  const tif = await ecrireGeoTiff(rgba, plan, proj);
+  verifier(tif[0] === 0x49 && tif[1] === 0x49 && tif[2] === 42, 'GeoTIFF : en-tête Intel (II) et nombre magique 42');
+  const fichierTif = path.join(os.tmpdir(), 'verifier-ortho.tif');
+  fs.writeFileSync(fichierTif, tif);
+  const py = spawnSync('python', ['-I', '-c', [
+    'import json, sys',
+    'from PIL import Image',
+    'img = Image.open(sys.argv[1])',
+    'img.load()',
+    'coin = [img.getpixel((0, 0)), img.getpixel((img.width - 1, 0)),',
+    '        img.getpixel((0, img.height - 1)), img.getpixel((img.width - 1, img.height - 1))]',
+    'tags = {k: (list(v) if hasattr(v, "__len__") and not isinstance(v, str) else v) for k, v in img.tag_v2.items()',
+    '        if k in (33550, 33922, 34735, 34737, 259, 338)}',
+    'print(json.dumps({"taille": list(img.size), "mode": img.mode, "coin": coin, "tags": tags}))'].join('\n'),
+    fichierTif], { encoding: 'utf8' });
+  if (py.status !== 0) {
+    console.log('ignoré : Pillow indisponible —', (py.stderr || '').split('\n').filter(Boolean).pop());
+  } else {
+    const lu = JSON.parse(py.stdout);
+    verifier(lu.taille[0] === L && lu.taille[1] === H && lu.mode === 'RGBA',
+             `GeoTIFF : relu par Pillow, ${lu.taille.join(' × ')} px, mode ${lu.mode}`);
+    const attendu = [[0, 0, 90, 0], [255, 0, 90, 255], [0, 255, 90, 0], [255, 255, 90, 255]];
+    verifier(JSON.stringify(lu.coin) === JSON.stringify(attendu),
+             `GeoTIFF : les quatre coins (couleur et alpha « nodata ») relus justes`);
+    const pasLu = lu.tags['33550'], pointLu = lu.tags['33922'];
+    verifier(Math.abs(pasLu[0] - plan.pasX) < 1e-9 && Math.abs(pasLu[1] - plan.pasY) < 1e-9
+             && Math.abs(pointLu[3] - plan.minX) < 1e-6 && Math.abs(pointLu[4] - plan.maxY) < 1e-6,
+             `GeoTIFF : ModelPixelScaleTag et ModelTiepointTag relus justes (pixel ${pasLu[0]} × ${pasLu[1]} m)`);
+    const geoKeys = lu.tags['34735'];
+    const cle = id => { const i = geoKeys.indexOf(id); return i < 0 ? null : geoKeys.slice(i, i + 4); };
+    verifier(geoKeys[3] === 5 && JSON.stringify(cle(1024)) === JSON.stringify([1024, 0, 1, 1])
+             && JSON.stringify(cle(3072)) === JSON.stringify([3072, 0, 1, proj.epsg]),
+             `GeoTIFF : GeoKeyDirectoryTag — modèle projeté, EPSG:${proj.epsg} (ProjectedCSTypeGeoKey)`);
+    verifier(lu.tags['34737'] === `${proj.description} (EPSG:${proj.epsg})|`,
+             'GeoTIFF : GTCitationGeoKey (GeoAsciiParamsTag) relu par Pillow');
+    verifier(lu.tags['259'] === 8, 'GeoTIFF : Compression = Adobe Deflate (8)');
+  }
+  fs.rmSync(fichierTif, { force: true });
+
+  // Sans CompressionStream (simulé), la bande est stockée telle quelle : même
+  // image relue, Compression = 1 (aucune).
+  const CS = globalThis.CompressionStream;
+  globalThis.CompressionStream = undefined;
+  const tifNonComprime = await ecrireGeoTiff(rgba, plan, proj);
+  globalThis.CompressionStream = CS;
+  verifier(tifNonComprime.length > tif.length, 'GeoTIFF : sans CompressionStream, bande stockée telle quelle (plus grande)');
+  if (py.status === 0) {
+    const fichierNc = path.join(os.tmpdir(), 'verifier-ortho-nc.tif');
+    fs.writeFileSync(fichierNc, tifNonComprime);
+    const pyNc = spawnSync('python', ['-I', '-c', [
+      'import sys', 'from PIL import Image', 'img = Image.open(sys.argv[1])', 'img.load()',
+      'print(img.getpixel((img.width - 1, img.height - 1)), img.tag_v2[259])'].join('\n'),
+      fichierNc], { encoding: 'utf8' });
+    verifier(pyNc.status === 0 && pyNc.stdout.trim() === '(255, 255, 90, 255) 1',
+             `GeoTIFF non comprimé : relu par Pillow, Compression = 1 (${pyNc.stdout.trim()})`);
+    fs.rmSync(fichierNc, { force: true });
+  }
 }
 
 console.log(echecs ? `${echecs} contrôle(s) manqué(s)` : 'tous les contrôles passent');

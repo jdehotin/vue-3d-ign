@@ -431,10 +431,14 @@ s'éteint d'elle-même dans la fenêtre.
   désigne.
 - **Orthophoto**, pour les SIG et la CAO — QGIS, ArcGIS, Civil 3D : la photo
   aérienne de la scène (la mosaïque que la vue drape, à 0,4 m par pixel au
-  mieux), rééchantillonnée dans la projection choisie et rendue en archive
-  zip : l'image JPEG, son world file `.jgw`, sa projection `.prj` et la
-  mention de licence. Hors du contour dessiné, l'image est blanche. Les
-  couches ne s'y appliquent pas.
+  mieux), rééchantillonnée dans la projection choisie et rendue en GeoTIFF —
+  géoréférencé par ses propres balises (`ModelPixelScaleTag`,
+  `ModelTiepointTag`, `GeoKeyDirectoryTag` : le système par son code EPSG),
+  sans fichier à part —, dans une archive zip avec la mention de licence.
+  Hors du contour dessiné, transparente (bande alpha), au lieu du blanc opaque
+  du JPEG collé sur le relief de l'IFC ou du CityGML (plus haut), le seul
+  format que ces visionneuses chargent comme texture. Les couches ne
+  s'appliquent pas à l'orthophoto.
 
 Pour l'IFC et le CityGML :
 

@@ -13,6 +13,17 @@ messages de commit et dans les commentaires des modules.
 
 ## Scène v16 — 26 octobre 2026
 
+- **Export de l'orthophoto en GeoTIFF**, à la place du JPEG + `.jgw` + `.prj` :
+  géoréférencée par ses propres balises (`ModelPixelScaleTag`,
+  `ModelTiepointTag`, `GeoKeyDirectoryTag` — le système par son code EPSG,
+  les quatorze proposés à l'export en font tous partie), sans fichier à part.
+  Une seule bande RGBA, compressée en Adobe Deflate (zlib) quand le navigateur
+  a `CompressionStream` ; hors du contour dessiné, l'alpha à 0 (transparente),
+  au lieu du blanc opaque du JPEG — qui reste le format de la texture collée
+  sur le relief de l'IFC et du CityGML (plus haut), seul format que ces
+  visionneuses chargent. `outils/verifier-export.mjs` relit le GeoTIFF avec
+  Pillow (déjà une dépendance du projet) : taille, mode RGBA, coins et
+  balises de géoréférencement, GeoKeyDirectoryTag et compression.
 - **Orthophoto collée sur le relief de l'IFC** : le même interrupteur « Orthophoto
   sur le terrain » vaut désormais pour l'IFC. Le maillage du terrain reçoit une
   `IfcImageTexture` (image désignée par son nom), un `IfcSurfaceStyleWithTextures`

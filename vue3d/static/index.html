@@ -691,7 +691,7 @@
             <button type="button" class="lien-ext" id="btn-citygml" data-format="citygml"
                     title="Pour les SIG et les maquettes urbaines : FME, 3DCityDB, FZKViewer… Écrit tout de suite, avec les couches cochées.">⬇ CityGML 2.0</button>
             <button type="button" class="lien-ext" id="btn-ortho" data-format="ortho"
-                    title="La photo aérienne de la scène, géoréférencée : une archive zip avec l'image JPEG, son world file (.jgw) et sa projection (.prj), dans la projection choisie (Lambert-93 par défaut). Pour QGIS, ArcGIS, Civil 3D…">⬇ Orthophoto (zip)</button>
+                    title="La photo aérienne de la scène, en GeoTIFF : géoréférencée par ses propres balises, sans fichier à part, dans la projection choisie (Lambert-93 par défaut). Pour QGIS, ArcGIS, Civil 3D…">⬇ Orthophoto (GeoTIFF)</button>
             <div class="note" id="note-export">
                 IFC pour la conception (Revit, ArchiCAD…), CityGML pour les SIG.
                 Les bâtiments tels qu'affichés (toits en pente, mesurés, monuments
@@ -925,7 +925,7 @@
                         <button type="button" role="radio" aria-checked="false"
                                 data-export-format="citygml">CityGML 2.0 <span>· SIG</span></button>
                         <button type="button" role="radio" aria-checked="false"
-                                data-export-format="ortho" title="La photo aérienne de la scène, géoréférencée : JPEG, .jgw et .prj en archive zip. Les couches ne s'appliquent pas.">Orthophoto <span>· image</span></button>
+                                data-export-format="ortho" title="La photo aérienne de la scène, en GeoTIFF géoréférencé, dans une archive zip. Les couches ne s'appliquent pas.">Orthophoto <span>· image</span></button>
                     </div>
                     <div class="toggles" id="export-texture-bloc" hidden>
                         <button type="button" class="toggle" id="x-texture"
@@ -10152,9 +10152,11 @@ const PROJECTIONS = [
 // --- L'orthophoto exportée : image géoréférencée ----------------------------------
 // La mosaïque est lue en EPSG:4326, un repère où un pixel n'est pas un carré de
 // terrain : un SIG qui la poserait telle quelle la placerait en degrés. On la
-// rééchantillonne donc dans le repère choisi à l'export, et on l'accompagne de
-// son world file (.jgw) et de sa projection (.prj), dans une archive : un seul
-// fichier à télécharger ou à déposer dans le projet.
+// rééchantillonne donc dans le repère choisi à l'export. L'export autonome
+// (« Orthophoto ») en fait un GeoTIFF, géoréférencé par ses propres balises —
+// aucun fichier à part, contrairement au JPEG d'origine (.jpg + .jgw + .prj) ;
+// collée sur le relief d'un IFC ou d'un CityGML (plus bas), l'image reste en
+// JPEG, le seul format que ces visionneuses chargent comme texture.
 
 /** [lon, lat] dont `vers` fait (x, y) : Newton, jacobienne par différences
  *  finies (1e-6° vaut 0,1 m). Quatre pas suffisent sur quelques kilomètres. */
@@ -10306,12 +10308,104 @@ function crc32(octets) {
     return (c ^ 0xFFFFFFFF) >>> 0;
 }
 
-/** Les octets en deflate brut (celui d'un ZIP), ou null quand le navigateur n'a
- *  pas CompressionStream : l'archive stocke alors le fichier tel quel. */
-async function compresserDeflate(octets) {
+/** Les octets compressés avec `algo` ('deflate-raw', brut, pour un ZIP ;
+ *  'deflate', zlib, pour la bande d'un TIFF Adobe Deflate), ou null quand le
+ *  navigateur n'a pas CompressionStream : l'appelant garde alors les octets
+ *  tels quels. */
+async function comprimer(octets, algo) {
     if (typeof CompressionStream === 'undefined') return null;
-    const flux = new Blob([octets]).stream().pipeThrough(new CompressionStream('deflate-raw'));
+    const flux = new Blob([octets]).stream().pipeThrough(new CompressionStream(algo));
     return new Uint8Array(await new Response(flux).arrayBuffer());
+}
+
+/** Les octets en deflate brut (celui d'un ZIP) : voir comprimer(). */
+async function compresserDeflate(octets) {
+    return comprimer(octets, 'deflate-raw');
+}
+
+/**
+ * Un GeoTIFF (TIFF 6.0 + balises GeoTIFF 1.0) de `rgba` (RGBA, opaque ou avec
+ * l'alpha du contour dessiné), `plan.largeur` × `plan.hauteur`. Géoréférencé
+ * par ses propres balises — ModelPixelScaleTag (la taille du pixel),
+ * ModelTiepointTag (le coin du pixel (0, 0), pas son centre : GTRasterTypeGeoKey
+ * = RasterPixelIsArea) et GeoKeyDirectoryTag (le système, par son code EPSG :
+ * les quatorze proposés à l'export en font tous partie, nul besoin d'y joindre
+ * leur WKT) — sans fichier à part. Une seule bande, compressée en Adobe
+ * Deflate (zlib, comme un PNG) quand le navigateur a CompressionStream : 55 Mo
+ * à 90 % de blanc transparent (hors d'un contour serré) tiennent dans 3 Mo.
+ */
+async function ecrireGeoTiff(rgba, plan, proj) {
+    const { largeur: W, hauteur: H } = plan;
+    const comprime = await comprimer(rgba, 'deflate');
+    const donneesImage = comprime || rgba;
+    const TYPE = { ASCII: 2, SHORT: 3, LONG: 4, DOUBLE: 12 };
+    const packU16 = v => { const b = new Uint8Array(v.length * 2), dv = new DataView(b.buffer);
+        v.forEach((x, i) => dv.setUint16(i * 2, x, true)); return b; };
+    const packF64 = v => { const b = new Uint8Array(v.length * 8), dv = new DataView(b.buffer);
+        v.forEach((x, i) => dv.setFloat64(i * 8, x, true)); return b; };
+
+    // Les clés GeoTIFF : modèle projeté, système par son code EPSG, unité en
+    // mètres, et un intitulé (GTCitationGeoKey) que les logiciels affichent.
+    const citation = `${proj.description} (EPSG:${proj.epsg})|`;
+    const citationOctets = new TextEncoder().encode(citation);
+    const cles = [
+        [1024, 0, 1, 1],                          // GTModelTypeGeoKey = ModelTypeProjected
+        [1025, 0, 1, 1],                          // GTRasterTypeGeoKey = RasterPixelIsArea
+        [1026, 34737, citationOctets.length, 0],  // GTCitationGeoKey → GeoAsciiParamsTag, décalage 0
+        [3072, 0, 1, proj.epsg],                  // ProjectedCSTypeGeoKey
+        [3076, 0, 1, 9001],                       // ProjLinearUnitsGeoKey = metre
+    ];
+    const geoKeyDir = packU16([1, 1, 0, cles.length, ...cles.flat()]);
+
+    // `donnees` : une valeur qui ne tient pas sur les 4 octets du champ de
+    // l'entrée IFD (TIFF 6.0 §2) et va donc à un décalage, calculé plus bas.
+    // `valeur` (SHORT ou LONG) y tient directement. RGBA en une seule bande :
+    // StripOffsets et RowsPerStrip couvrent toute l'image.
+    const entrees = [
+        { tag: 256, type: TYPE.LONG, count: 1, valeur: W },                        // ImageWidth
+        { tag: 257, type: TYPE.LONG, count: 1, valeur: H },                        // ImageLength
+        { tag: 258, type: TYPE.SHORT, count: 4, donnees: packU16([8, 8, 8, 8]) },  // BitsPerSample
+        { tag: 259, type: TYPE.SHORT, count: 1, valeur: comprime ? 8 : 1 },        // Compression
+        { tag: 262, type: TYPE.SHORT, count: 1, valeur: 2 },                       // PhotometricInterpretation = RGB
+        { tag: 273, type: TYPE.LONG, count: 1, cle: 'offsetBande' },               // StripOffsets, rempli plus bas
+        { tag: 277, type: TYPE.SHORT, count: 1, valeur: 4 },                       // SamplesPerPixel
+        { tag: 278, type: TYPE.LONG, count: 1, valeur: H },                        // RowsPerStrip
+        { tag: 279, type: TYPE.LONG, count: 1, valeur: donneesImage.length },      // StripByteCounts
+        { tag: 284, type: TYPE.SHORT, count: 1, valeur: 1 },                       // PlanarConfiguration = chunky
+        { tag: 338, type: TYPE.SHORT, count: 1, valeur: 2 },                       // ExtraSamples = alpha non associé
+        { tag: 33550, type: TYPE.DOUBLE, count: 3, donnees: packF64([plan.pasX, plan.pasY, 0]) },
+        { tag: 33922, type: TYPE.DOUBLE, count: 6, donnees: packF64([0, 0, 0, plan.minX, plan.maxY, 0]) },
+        { tag: 34735, type: TYPE.SHORT, count: geoKeyDir.length / 2, donnees: geoKeyDir },
+        { tag: 34737, type: TYPE.ASCII, count: citationOctets.length, donnees: citationOctets },
+    ].sort((a, b) => a.tag - b.tag);
+
+    // Emplacement : l'en-tête (8 octets), puis l'IFD (son compte, ses entrées,
+    // l'IFD suivant, toujours nul), puis les données hors ligne, chacune à un
+    // décalage pair (TIFF 6.0 §2), puis la bande.
+    let decalage = 8 + 2 + entrees.length * 12 + 4;
+    for (const e of entrees) if (e.donnees) {
+        e.position = decalage;
+        decalage += e.donnees.length + (e.donnees.length % 2);
+    }
+    entrees.find(e => e.cle === 'offsetBande').valeur = decalage;
+
+    const tiff = new Uint8Array(decalage + donneesImage.length);
+    const dv = new DataView(tiff.buffer);
+    dv.setUint16(0, 0x4949, true); dv.setUint16(2, 42, true); dv.setUint32(4, 8, true);   // 'II', 42, IFD à 8
+    dv.setUint16(8, entrees.length, true);
+    entrees.forEach((e, i) => {
+        const o = 10 + i * 12;
+        dv.setUint16(o, e.tag, true);
+        dv.setUint16(o + 2, e.type, true);
+        dv.setUint32(o + 4, e.count, true);
+        if (e.donnees) dv.setUint32(o + 8, e.position, true);
+        else if (e.type === TYPE.SHORT) dv.setUint16(o + 8, e.valeur, true);
+        else dv.setUint32(o + 8, e.valeur, true);
+    });
+    dv.setUint32(10 + entrees.length * 12, 0, true);   // pas d'IFD suivant
+    for (const e of entrees) if (e.donnees) tiff.set(e.donnees, e.position);
+    tiff.set(donneesImage, tiff.length - donneesImage.length);
+    return tiff;
 }
 
 /**
@@ -11703,13 +11797,12 @@ const FORMATS_EXPORT = {
 };
 
 /**
- * L'orthophoto de la scène, rééchantillonnée dans la projection choisie et
- * rangée en archive avec son world file (.jgw) et sa projection (.prj) : un
- * SIG la pose au bon endroit sans autre réglage. C'est la mosaïque publiée
- * avec la scène (celle que la vue drape), pas le fond affiché, qui peut être
- * le plan IGN. Hors du contour dessiné, le blanc : rien n'est exporté au-delà.
+ * Lit la mosaïque et la rééchantillonne dans la projection choisie à l'export
+ * (planOrtho, reechantillonnerOrtho) : la grille RGBA, opaque, et le plan de
+ * sortie. Partagée par l'export « Orthophoto » (GeoTIFF) et par la texture du
+ * relief en IFC et CityGML (JPEG) — `rognerOrtho`, plus bas, fait le reste.
  */
-async function imageOrtho() {
+async function grilleOrtho() {
     await chargementArtefact;
     if (!ARTEFACT) throw new Error("la scène n'est pas encore prête");
     const proj = projectionExport;
@@ -11723,56 +11816,79 @@ async function imageOrtho() {
     ctxSource.drawImage(img, 0, 0);
     const plan = planOrtho(ARTEFACT.bbox, proj.vers, lg, ht);
     const rgba = reechantillonnerOrtho(ctxSource.getImageData(0, 0, lg, ht).data, lg, ht, plan);
+    return { proj, plan, rgba };
+}
+
+/**
+ * `rgba` (plan.largeur × plan.hauteur) rogné au contour dessiné (`POLY`) :
+ * les pixels hors contour reçoivent `fond`, une couleur opaque — le JPEG n'a
+ * pas de transparence —, ou restent transparents quand `fond` est null — le
+ * GeoTIFF, qui en porte une. Sans contour, `rgba` est rendu tel quel.
+ */
+function rognerOrtho(rgba, plan, proj, fond) {
+    if (!POLY) return rgba;
+    const tampon = document.createElement('canvas');
+    tampon.width = plan.largeur; tampon.height = plan.hauteur;
+    tampon.getContext('2d').putImageData(new ImageData(rgba, plan.largeur, plan.hauteur), 0, 0);
     const sortie = document.createElement('canvas');
     sortie.width = plan.largeur; sortie.height = plan.hauteur;
     const ctx = sortie.getContext('2d');
-    const pixels = new ImageData(rgba, plan.largeur, plan.hauteur);
-    if (POLY) {
-        // Le contour en pixels de la sortie ; le reste de l'image reste blanc.
-        ctx.fillStyle = '#fff';
-        ctx.fillRect(0, 0, plan.largeur, plan.hauteur);
-        const tampon = document.createElement('canvas');
-        tampon.width = plan.largeur; tampon.height = plan.hauteur;
-        tampon.getContext('2d').putImageData(pixels, 0, 0);
-        ctx.save();
-        ctx.beginPath();
-        POLY.forEach(([lat, lon], i) => {
-            const [x, y] = proj.vers(lon, lat);
-            const px = (x - plan.minX) / plan.pasX, py = (plan.maxY - y) / plan.pasY;
-            if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-        });
-        ctx.closePath();
-        ctx.clip();
-        ctx.drawImage(tampon, 0, 0);
-        ctx.restore();
-    } else {
-        ctx.putImageData(pixels, 0, 0);
-    }
+    if (fond) { ctx.fillStyle = fond; ctx.fillRect(0, 0, plan.largeur, plan.hauteur); }
+    ctx.save();
+    ctx.beginPath();
+    POLY.forEach(([lat, lon], i) => {
+        const [x, y] = proj.vers(lon, lat);
+        const px = (x - plan.minX) / plan.pasX, py = (plan.maxY - y) / plan.pasY;
+        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+    });
+    ctx.closePath();
+    ctx.clip();
+    ctx.drawImage(tampon, 0, 0);
+    ctx.restore();
+    return ctx.getImageData(0, 0, plan.largeur, plan.hauteur).data;
+}
+
+/**
+ * L'image JPEG collée sur le relief d'un IFC ou d'un CityGML (plus bas) : fond
+ * blanc hors du contour dessiné, le JPEG n'ayant pas de transparence.
+ */
+async function imageOrtho() {
+    const { proj, plan, rgba } = await grilleOrtho();
+    const pixels = rognerOrtho(rgba, plan, proj, '#fff');
+    const sortie = document.createElement('canvas');
+    sortie.width = plan.largeur; sortie.height = plan.hauteur;
+    sortie.getContext('2d').putImageData(new ImageData(pixels, plan.largeur, plan.hauteur), 0, 0);
     const jpeg = await new Promise(ok => sortie.toBlob(ok, 'image/jpeg', 0.92));
     if (!jpeg) throw new Error("l'image n'a pas pu être encodée en JPEG");
     return { proj, plan, jpeg: new Uint8Array(await jpeg.arrayBuffer()) };
 }
 
-/** Le modèle de l'export « Orthophoto » : l'image, son world file, son .prj, en zip. */
+/**
+ * Le modèle de l'export « Orthophoto » : un GeoTIFF, géoréférencé par ses
+ * propres balises, dans une archive avec la mention de licence — aucun
+ * fichier à part (ni world file, ni .prj), à la différence du JPEG collé sur
+ * le relief. Hors du contour dessiné, transparente (bande alpha), au lieu du
+ * blanc opaque du JPEG.
+ */
 async function modeleOrtho() {
-    const { proj, plan, jpeg } = await imageOrtho();
+    const { proj, plan, rgba } = await grilleOrtho();
+    const pixels = rognerOrtho(rgba, plan, proj, null);
+    const tif = await ecrireGeoTiff(pixels, plan, proj);
     const encodeur = new TextEncoder();
     const base = nomFichierExport();
     const pas = ((plan.pasX + plan.pasY) / 2).toFixed(2).replace('.', ',');
     const licence = 'Orthophotographie © IGN, Géoplateforme (data.geopf.fr), Licence Ouverte Etalab 2.0.\n'
-        + `Image JPEG de ${plan.largeur} × ${plan.hauteur} px, rééchantillonnée en ${proj.description} `
-        + `(EPSG:${proj.epsg}), ${pas} m par pixel ; géoréférencée par le world file .jgw et la projection .prj.\n`
-        + (POLY ? "Hors du contour de la scène, l'image est blanche.\n" : '');
+        + `Image GeoTIFF de ${plan.largeur} × ${plan.hauteur} px, rééchantillonnée en ${proj.description} `
+        + `(EPSG:${proj.epsg}), ${pas} m par pixel ; géoréférencée par ses propres balises, sans fichier à part.\n`
+        + (POLY ? "Hors du contour de la scène, transparente (bande alpha).\n" : '');
     return {
         ortho: true,
         blobs: archiveZip([
-            { nom: `${base}.jpg`, octets: jpeg },
-            { nom: `${base}.jgw`, octets: encodeur.encode(fichierJgw(plan)) },
-            { nom: `${base}.prj`, octets: encodeur.encode(wktProjection(proj)) },
+            { nom: `${base}.tif`, octets: tif },
             { nom: `${base}_licence.txt`, octets: encodeur.encode(licence) },
         ]),
         resume: `1 orthophoto de ${plan.largeur} × ${plan.hauteur} px, ${pas} m par pixel`,
-        reperes: `${proj.description} (EPSG:${proj.epsg}) : .jpg, .jgw et .prj dans une archive zip.`,
+        reperes: `${proj.description} (EPSG:${proj.epsg}) : GeoTIFF dans une archive zip.`,
     };
 }
 const noteExport =document.getElementById('note-export');
