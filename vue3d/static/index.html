@@ -652,6 +652,8 @@
                 <button class="toggle on" id="t-aerodromes" hidden title="Aérodromes, héliports et leurs pistes, de la BD TOPO">Aéroports</button>
                 <button class="toggle on" id="t-postes" hidden title="Postes de transformation électrique de la BD TOPO">Postes élec.</button>
                 <button class="toggle on" id="t-haies" hidden title="Haies de la BD TOPO, dressées sur le relief">Haies</button>
+                <button class="toggle on" id="t-foret" hidden title="Massifs forestiers de la BD Forêt v2 de l'IGN, drapés sur le relief">Massifs BD Forêt</button>
+                <button class="toggle on" id="t-rpg" hidden title="Parcelles agricoles du Registre Parcellaire Graphique (RPG), drapées sur le relief">Parcelles RPG</button>
                 <button class="toggle" id="t-nuage" hidden title="Tout le bâti en points du nuage LiDAR HD ; les ouvrages ajourés, comme la tour Eiffel, y sont toujours">Nuage LiDAR</button>
                 <button class="toggle on" id="t-vehicules" hidden title="Véhicules vus sur l'orthophoto, le jour de la prise de vue">Véhicules</button>
                 <button class="toggle on" id="t-piscines" hidden title="Piscines vues sur l'orthophoto">Piscines</button>
@@ -934,6 +936,8 @@
                         <button type="button" class="toggle on" id="x-aerodromes" title="Aérodromes de la BD TOPO et leurs pistes, drapés sur le relief.">Aérodromes et pistes</button>
                         <button type="button" class="toggle on" id="x-postes" title="Postes de transformation de la BD TOPO, drapés sur le relief.">Postes élec.</button>
                         <button type="button" class="toggle on" id="x-haies" title="Haies de la BD TOPO, dressées : 2 m de haut et 1,5 m d'épaisseur de convention, la donnée les taisant.">Haies</button>
+                        <button type="button" class="toggle on" id="x-foret" title="Massifs forestiers BD Forêt v2, drapés sur le relief.">Massifs BD Forêt</button>
+                        <button type="button" class="toggle on" id="x-rpg" title="Parcelles agricoles RPG, drapées sur le relief.">Parcelles RPG</button>
                         <button type="button" class="toggle on" id="x-routes" title="Tronçons de route, chemins et sentiers de la BD TOPO, drapés sur le relief.">Routes et chemins</button>
                         <button type="button" class="toggle on" id="x-eau" title="Étendues et cours d'eau de la BD TOPO, drapés sur le relief.">Hydrographie</button>
                         <button type="button" class="toggle on" id="x-ouvrages" title="Murs, ponts, voies ferrées et terrains de sport de la BD TOPO : murs et tabliers en volumes, voies et terrains drapés sur le relief.">Ouvrages</button>
@@ -2325,7 +2329,8 @@ const demandeScene = window.DEMANDE_SCENE && window.DEMANDE_SCENE.url === URL_VU
 const demandesAnticipees = new Map();
 function demanderSuite() {
     for (const [url, options] of [
-        [URL_MONUMENTS], [URL_OUVRAGES], ['api/sante', { cache: 'no-store' }],
+        [URL_MONUMENTS], [URL_OUVRAGES], [URL_FORET], [URL_RPG],
+        ['api/sante', { cache: 'no-store' }],
         [URL_PISCINES, { cache: 'no-cache' }], [URL_PANNEAUX, { cache: 'no-cache' }]]) {
         const reponse = fetch(url, options);
         reponse.catch(() => {});      // l'erreur est traitée par le chargeur
@@ -4189,6 +4194,8 @@ const sceneConstruite = chargerScene()
         chargerMonuments();
         chargerOuvrages();
         chargerEmprises();
+        chargerForet();
+        chargerRpg();
         chargerNuage();
         chargerDetections();
         chargerPanneaux();
@@ -5136,6 +5143,8 @@ async function chargerRelief() {
         reliefRegle = true;
         construireOuvrages();
         construireEmprises();
+        construireForet();
+        construireRpg();
         construireNuage();
         construireVehicules();
         construirePiscines();
@@ -5222,6 +5231,8 @@ async function chargerRelief() {
     reliefRegle = true;
     construireOuvrages();
     construireEmprises();
+    construireForet();
+    construireRpg();
     construireNuage();
     construireVehicules();
     construirePiscines();
@@ -7125,6 +7136,150 @@ async function chargerEmprises(essai = 1) {
         etatCouche('etat-emprises',
                    `Emprises BD TOPO indisponibles : nouvel essai dans ${ATTENTE_MONUMENTS_S} s.`, true);
         setTimeout(() => chargerEmprises(essai + 1), ATTENTE_MONUMENTS_S * 1000);
+    }
+}
+
+// --- BD Forêt v2 ---------------------------------------------------------------
+// Massifs forestiers de la BD Forêt v2 (/api/foret, vue3d/foret.py), demandés
+// une fois la scène affichée. Chaque massif est un aplat drapé sur le relief,
+// coloré selon sa présence. Sur une zone urbaine, la couche est souvent vide.
+const URL_FORET = `api/foret?${REQUETE}`;
+const FORET_DECALAGE = 0.02;
+const MAT_FORET = new THREE.MeshStandardMaterial({
+    color: 0x2d6e3e, roughness: 1, transparent: true, opacity: 0.45,
+    polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+
+const groupeForet = new THREE.Group();
+scene.add(groupeForet);
+let FORET = null;
+let foretConstruite = false;
+
+function construireForet() {
+    if (!FORET || !reliefRegle || foretConstruite) return;
+    foretConstruite = true;
+    const polygones = g => g.type === 'Polygon' ? [g.coordinates]
+                         : g.type === 'MultiPolygon' ? g.coordinates : [];
+    for (const m of FORET.massifs) {
+        const tris = polygones(m.geometrie).flatMap(p => subdiviser(trianglesPolygone(p), EAU_MAILLE));
+        if (!tris.length) continue;
+        const mesh = maillageDrape(tris, MAT_FORET, groupeForet, FORET_DECALAGE);
+        const ess = m.libelle || m.essence || 'Massif forestier';
+        mesh.userData = {
+            infobulle: `<b>${ess}</b>`
+                + (m.type_peuplement ? `<br>${m.type_peuplement}` : '')
+                + (m.annee ? ` <i>(${m.annee})</i>` : '')
+                + '<br><i>BD Forêt v2</i>',
+            emprise: { couche: 'foret', donnees: m },
+        };
+    }
+    placerDrapes();
+    const bouton = document.getElementById('t-foret');
+    bouton.hidden = !groupeForet.children.length;
+    if (!bouton.hidden) {
+        bouton.addEventListener('click', e => {
+            groupeForet.visible = !groupeForet.visible;
+            e.currentTarget.classList.toggle('on', groupeForet.visible);
+            majCiblesSurvol();
+        });
+    }
+    majCiblesSurvol();
+}
+
+async function chargerForet(essai = 1) {
+    const retard = setTimeout(
+        () => etatCouche('etat-foret', 'BD Forêt v2 : chargement…', true),
+        essai === 1 ? RETARD_ETAT_MONUMENTS_MS : 0);
+    try {
+        const r = await requete(URL_FORET);
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const f = await r.json();
+        clearTimeout(retard);
+        etatCouche('etat-foret', null);
+        if (!f) return;
+        FORET = f;
+        construireForet();
+    } catch (err) {
+        clearTimeout(retard);
+        if (essai >= ESSAIS_MONUMENTS) {
+            etatCouche('etat-foret',
+                       'BD Forêt v2 indisponible : recharger la page pour réessayer.');
+            return;
+        }
+        etatCouche('etat-foret',
+                   `BD Forêt v2 indisponible : nouvel essai dans ${ATTENTE_MONUMENTS_S} s.`, true);
+        setTimeout(() => chargerForet(essai + 1), ATTENTE_MONUMENTS_S * 1000);
+    }
+}
+
+// --- RPG -----------------------------------------------------------------------
+// Parcelles agricoles du Registre Parcellaire Graphique (/api/rpg, vue3d/rpg.py),
+// demandées une fois la scène affichée. Chaque parcelle est un aplat drapé sur le
+// relief. La couche est vide en zone urbaine ou hors zones déclarées à la PAC.
+const URL_RPG = `api/rpg?${REQUETE}`;
+const RPG_DECALAGE = 0.02;
+const MAT_RPG = new THREE.MeshStandardMaterial({
+    color: 0xc8a84b, roughness: 1, transparent: true, opacity: 0.45,
+    polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+
+const groupeRpg = new THREE.Group();
+scene.add(groupeRpg);
+let RPG = null;
+let rpgConstruit = false;
+
+function construireRpg() {
+    if (!RPG || !reliefRegle || rpgConstruit) return;
+    rpgConstruit = true;
+    const polygones = g => g.type === 'Polygon' ? [g.coordinates]
+                         : g.type === 'MultiPolygon' ? g.coordinates : [];
+    for (const p of RPG.parcelles) {
+        const tris = polygones(p.geometrie).flatMap(pl => subdiviser(trianglesPolygone(pl), EAU_MAILLE));
+        if (!tris.length) continue;
+        const mesh = maillageDrape(tris, MAT_RPG, groupeRpg, RPG_DECALAGE);
+        const lib = p.libelle || p.code_culture || 'Parcelle agricole';
+        mesh.userData = {
+            infobulle: `<b>${lib}</b>`
+                + (p.groupe ? `<br>${p.groupe}` : '')
+                + (p.surface_ha != null ? `<br>${p.surface_ha.toFixed(2)} ha` : '')
+                + '<br><i>RPG</i>',
+            emprise: { couche: 'rpg', donnees: p },
+        };
+    }
+    placerDrapes();
+    const bouton = document.getElementById('t-rpg');
+    bouton.hidden = !groupeRpg.children.length;
+    if (!bouton.hidden) {
+        bouton.addEventListener('click', e => {
+            groupeRpg.visible = !groupeRpg.visible;
+            e.currentTarget.classList.toggle('on', groupeRpg.visible);
+            majCiblesSurvol();
+        });
+    }
+    majCiblesSurvol();
+}
+
+async function chargerRpg(essai = 1) {
+    const retard = setTimeout(
+        () => etatCouche('etat-rpg', 'RPG : chargement…', true),
+        essai === 1 ? RETARD_ETAT_MONUMENTS_MS : 0);
+    try {
+        const r = await requete(URL_RPG);
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const rp = await r.json();
+        clearTimeout(retard);
+        etatCouche('etat-rpg', null);
+        if (!rp) return;
+        RPG = rp;
+        construireRpg();
+    } catch (err) {
+        clearTimeout(retard);
+        if (essai >= ESSAIS_MONUMENTS) {
+            etatCouche('etat-rpg',
+                       'RPG indisponible : recharger la page pour réessayer.');
+            return;
+        }
+        etatCouche('etat-rpg',
+                   `RPG indisponible : nouvel essai dans ${ATTENTE_MONUMENTS_S} s.`, true);
+        setTimeout(() => chargerRpg(essai + 1), ATTENTE_MONUMENTS_S * 1000);
     }
 }
 
@@ -10669,6 +10824,8 @@ const ENTITES_IFC = {
     piste: ['IFCGEOGRAPHICELEMENT', 'USERDEFINED', "Piste d'aérodrome"],
     poste: ['IFCGEOGRAPHICELEMENT', 'USERDEFINED', 'Poste de transformation'],
     haie: ['IFCGEOGRAPHICELEMENT', 'USERDEFINED', 'Haie'],
+    foret: ['IFCGEOGRAPHICELEMENT', 'USERDEFINED', 'Massif forestier'],
+    rpg: ['IFCGEOGRAPHICELEMENT', 'USERDEFINED', 'Parcelle agricole'],
     // Les réseaux : le ruban d'un tronçon de route ou d'un cours d'eau, le
     // volume d'un pylône, le tube des conducteurs d'une ligne.
     route: ['IFCGEOGRAPHICELEMENT', 'USERDEFINED', 'Tronçon de route'],
@@ -11238,11 +11395,14 @@ const LIBELLES_EMPRISE = {
     piste: ['VueIGN_Piste', "Piste d'aérodrome"],
     poste: ['VueIGN_Poste', 'Poste de transformation'],
     haie: ['VueIGN_Haie', 'Haie'],
+    foret: ['VueIGN_Foret', 'Massif forestier'],
+    rpg: ['VueIGN_Rpg', 'Parcelle agricole'],
 };
 /** L'interrupteur d'export que suit chaque sous-couche : les pistes vont avec
  *  les aérodromes, comme leur bouton dans le panneau. */
 const OPTION_EMPRISE = { cimetiere: 'cimetieres', aerodrome: 'aerodromes',
-                         piste: 'aerodromes', poste: 'postes', haie: 'haies' };
+                         piste: 'aerodromes', poste: 'postes', haie: 'haies',
+                         foret: 'foret', rpg: 'rpg' };
 
 /**
  * Un élément d'export pour une emprise BD TOPO lue dans la scène
@@ -11274,6 +11434,20 @@ function elementEmprise(meta, facettes, i) {
     } else if (genre === 'poste') {
         nom = d.nom || libelle;
         valeurs = [['Importance', 'IFCLABEL', d.importance]];
+    } else if (genre === 'foret') {
+        nom = d.libelle || d.essence || libelle;
+        description = [d.type_peuplement, d.annee ? `Campagne ${d.annee}` : null, 'BD Forêt v2']
+            .filter(Boolean).join(', ');
+        valeurs = [['Essence', 'IFCLABEL', d.essence], ['Libelle', 'IFCLABEL', d.libelle],
+                   ['TypePeuplement', 'IFCLABEL', d.type_peuplement],
+                   ['AnneeReference', 'IFCINTEGER', d.annee ? parseInt(d.annee) : null]];
+    } else if (genre === 'rpg') {
+        nom = d.libelle || d.code_culture || libelle;
+        description = [d.groupe, d.surface_ha != null ? `${d.surface_ha.toFixed(2)} ha` : null, 'RPG']
+            .filter(Boolean).join(', ');
+        valeurs = [['CodeCulture', 'IFCLABEL', d.code_culture], ['Libelle', 'IFCLABEL', d.libelle],
+                   ['Groupe', 'IFCLABEL', d.groupe],
+                   ['SurfaceHa', 'IFCLENGTHMEASURE', d.surface_ha]];
     } else {
         description = `${d.h.toFixed(1)} m de haut (${d.h_mesuree ? 'BD TOPO' : 'convention'}), `
             + `${d.largeur_m.toFixed(1)} m d'épaisseur (${d.largeur_mesuree ? 'BD TOPO' : 'convention'})`;
@@ -11283,7 +11457,7 @@ function elementEmprise(meta, facettes, i) {
                    ['SourceLargeur', 'IFCLABEL', d.largeur_mesuree ? 'BD TOPO' : 'convention']];
     }
     return {
-        cle: `${genre}|${d.cleabs || d.oaci || d.nom || d.nature || ''}|${i}`,
+        cle: `${genre}|${d.cleabs || d.oaci || d.nom || d.nature || d.code_culture || d.essence || ''}|${i}`,
         genre, nom, description, tag: null,
         proprietes: { nom: nomPset, valeurs },
         maillages: [{ style, facettes }],
@@ -11467,6 +11641,7 @@ function modeleExport(options) {
     const compte = { batiments: 0, arbres: 0, masses: 0, maille: null, osm: false,
                      routes: 0, surfacesEau: 0, coursEau: 0, pylones: 0, lignes: 0,
                      cimetieres: 0, aerodromes: 0, postes: 0, haies: 0,
+                     foret: 0, rpg: 0,
                      murs: 0, ponts: 0, voies: 0, terrainsSport: 0 };
 
     if (options.batiments) {
@@ -11609,6 +11784,7 @@ function modeleExport(options) {
     // maillages sont replacés le temps de la lecture, puis remis : un aplat
     // suit la pente du sol, un toit ne l'a jamais suivie.
     if (options.cimetieres || options.aerodromes || options.postes || options.haies
+        || options.foret || options.rpg
         || options.routes || options.eau || options.lignes || options.ouvrages) {
         const exagEmp = exagVert, reliefEmp = relief;
         exagVert = 1; relief = true;
@@ -11622,7 +11798,8 @@ function modeleExport(options) {
             groupeOuvrages.updateMatrixWorld(true);
             groupeVoies.updateMatrixWorld(true);
             const v = new THREE.Vector3();
-            for (const groupe of [groupeCimetieres, groupeAerodromes, groupePostes, groupeHaies]) {
+            for (const groupe of [groupeCimetieres, groupeAerodromes, groupePostes, groupeHaies,
+                                  groupeForet, groupeRpg]) {
                 for (const o of groupe.children) {
                     const meta = o.userData.emprise;
                     if (!meta || !options[OPTION_EMPRISE[meta.couche]]) continue;
@@ -11720,6 +11897,8 @@ function modeleExport(options) {
             placerLignes();
             placerOuvrages();
             groupeEmprises.updateMatrixWorld(true);
+            groupeForet.updateMatrixWorld(true);
+            groupeRpg.updateMatrixWorld(true);
             groupeLignes.updateMatrixWorld(true);
             groupeOuvrages.updateMatrixWorld(true);
             groupeVoies.updateMatrixWorld(true);
@@ -11752,7 +11931,7 @@ function modeleExport(options) {
     const corse = CENTER[0] > 8 && CENTER[1] < 43.1;
     const datumVertical = rgeAlti ? (corse ? 'NGF-IGN78' : 'NGF-IGN69') : null;
     const epsgVertical = rgeAlti ? (corse ? 5721 : 5720) : null;
-    const credits = ['Données IGN – Géoplateforme (BD TOPO, LiDAR HD, BD Forêt'
+    const credits = ['Données IGN – Géoplateforme (BD TOPO, LiDAR HD, BD Forêt, RPG'
         + (rgeAlti ? ', RGE ALTI' : '') + '), Licence Ouverte 2.0'];
     if (!rgeAlti && sourceRelief) credits.push(`relief : ${sourceRelief} (Mapzen Terrain Tiles, EU-DEM © Copernicus)`);
     if (compte.osm) credits.push('parties de monuments © contributeurs OpenStreetMap, ODbL');
@@ -11784,12 +11963,14 @@ function modeleExport(options) {
 // les masses pèsent lourd (11 000 éléments au Trocadéro).
 const optionsExport = { relief: true, batiments: true, arbres: true, masses: false,
                         routes: true, eau: true, lignes: true, ouvrages: true,
-                        cimetieres: true, aerodromes: true, postes: true, haies: true };
+                        cimetieres: true, aerodromes: true, postes: true, haies: true,
+                        foret: true, rpg: true };
 const COUCHES_EXPORT = [['relief', 'x-relief'], ['batiments', 'x-batiments'],
                         ['arbres', 'x-arbres'], ['masses', 'x-masses'],
                         ['routes', 'x-routes'], ['eau', 'x-eau'], ['ouvrages', 'x-ouvrages'], ['lignes', 'x-lignes'],
                         ['cimetieres', 'x-cimetieres'], ['aerodromes', 'x-aerodromes'],
-                        ['postes', 'x-postes'], ['haies', 'x-haies']];
+                        ['postes', 'x-postes'], ['haies', 'x-haies'],
+                        ['foret', 'x-foret'], ['rpg', 'x-rpg']];
 for (const [cle, id] of COUCHES_EXPORT) {
     const bouton = document.getElementById(id);
     bouton.dataset.titre = bouton.title;          // etatCouchesExport() le remplace
@@ -11968,6 +12149,8 @@ const COUCHES_PRESENTES = {
     aerodromes: () => groupeAerodromes.children.length > 0,
     postes: () => groupePostes.children.length > 0,
     haies: () => groupeHaies.children.length > 0,
+    foret: () => groupeForet.children.length > 0,
+    rpg: () => groupeRpg.children.length > 0,
 };
 
 /** Éteint, dans la fenêtre, les couches que la scène ne porte pas. */

@@ -80,6 +80,8 @@ from .dvf import DVF_VERSION, dvf_pour_emprise, fetch_dvf
 from .eau import (COUCHE_COURS_EAU, COUCHE_SURFACES_EAU, eau_pour_emprise,
                   masque_eau)
 from .emprises import EMPRISES_VERSION, emprises_pour_emprise, fetch_emprises
+from .foret import FORET_VERSION, foret_pour_emprise, fetch_foret
+from .rpg import RPG_VERSION, rpg_pour_emprise, fetch_rpg
 from .geopf import Groupe
 from .lignes import COUCHE_LIGNES, COUCHE_PYLONES, lignes_pour_emprise
 from .houppiers import houppiers_pour_emprise
@@ -252,6 +254,8 @@ NOM_MONUMENTS = "monuments.json.gz"
 # La version de la couche est dans son nom : la changer ne refait qu'elle.
 NOM_OUVRAGES = f"ouvrages-v{OUVRAGES_VERSION}.json.gz"
 NOM_EMPRISES = f"emprises-v{EMPRISES_VERSION}.json.gz"
+NOM_FORET = f"foret-v{FORET_VERSION}.json.gz"
+NOM_RPG = f"rpg-v{RPG_VERSION}.json.gz"
 
 
 # Les panneaux solaires ont une seule source : le registre, à sa version.
@@ -346,6 +350,16 @@ class OuvragesIndisponibles(RuntimeError):
 class EmprisesIndisponibles(RuntimeError):
     """Une couche d'emprises de l'IGN n'a pas répondu : rien n'est mis en
     cache, la scène reste affichée sans elles, réessayer plus tard."""
+
+
+class ForetIndisponible(RuntimeError):
+    """La couche BD Forêt v2 de l'IGN n'a pas répondu : rien n'est mis en
+    cache, la scène reste affichée sans elle, réessayer plus tard."""
+
+
+class RpgIndisponible(RuntimeError):
+    """La couche RPG de l'IGN n'a pas répondu : rien n'est mis en cache,
+    la scène reste affichée sans elle, réessayer plus tard."""
 
 
 class ReconstructionRefusee(RuntimeError):
@@ -920,7 +934,7 @@ class Cache:
     GRANDES_ZONES_ENSEMBLE = 1
 
     def __init__(self, dossier, lire_monuments=fetch_monuments, lire_ouvrages=fetch_ouvrages,
-                 lire_emprises=fetch_emprises,
+                 lire_emprises=fetch_emprises, lire_foret=fetch_foret, lire_rpg=fetch_rpg,
                  lire_vehicules=None, lire_panneaux=None, lire_nuage=fetch_nuage,
                  lire_dpe=fetch_dpe, lire_dvf=fetch_dvf, lire_mer=fetch_mer,
                  lire_bornes=fetch_bornes):
@@ -955,6 +969,8 @@ class Cache:
         self.lire_monuments = lire_monuments
         self.lire_ouvrages = lire_ouvrages
         self.lire_emprises = lire_emprises
+        self.lire_foret = lire_foret
+        self.lire_rpg = lire_rpg
         self.lire_vehicules = self._qui_cede(lire_vehicules)
         self.mode_vehicules = lire_vehicules.mode if lire_vehicules else None
         self.lire_panneaux = lire_panneaux
@@ -972,6 +988,10 @@ class Cache:
             # Cinq petites lectures WFS, comme les ouvrages.
             NOM_EMPRISES: concurrent.futures.ThreadPoolExecutor(
                 max_workers=2, thread_name_prefix="emprises"),
+            NOM_FORET: concurrent.futures.ThreadPoolExecutor(
+                max_workers=2, thread_name_prefix="foret"),
+            NOM_RPG: concurrent.futures.ThreadPoolExecutor(
+                max_workers=2, thread_name_prefix="rpg"),
             # Une lecture SQLite de quelques millisecondes.
             NOM_PANNEAUX: concurrent.futures.ThreadPoolExecutor(
                 max_workers=1, thread_name_prefix="panneaux"),
@@ -1325,6 +1345,44 @@ class Cache:
             NOM_EMPRISES, lat, lon, construire, self.lire_emprises,
             lambda message: EmprisesIndisponibles(f"emprises illisibles : {message}"),
             lambda bbox, brut, scene: emprises_pour_emprise(*bbox, brut), zone=zone)
+
+    def prelire_foret(self, lat, lon, zone=None):
+        """Lance la lecture de la BD Forêt v2 en tâche de fond."""
+        self._prelire(NOM_FORET, lat, lon, self.lire_foret, zone)
+
+    def obtenir_foret(self, lat, lon, construire=construire, zone=None):
+        """Chemin du dossier où la couche BD Forêt v2 du point est écrite.
+
+        La couche ne lit rien de la scène : ses massifs sont drapés par la vue
+        sur le relief.
+
+        Raises:
+            ForetIndisponible si la couche de l'IGN n'a pas répondu : rien
+            n'est écrit, la demande suivante réessaie.
+        """
+        return self._obtenir_couche(
+            NOM_FORET, lat, lon, construire, self.lire_foret,
+            lambda message: ForetIndisponible(f"BD Forêt illisible : {message}"),
+            lambda bbox, brut, scene: foret_pour_emprise(*bbox, brut), zone=zone)
+
+    def prelire_rpg(self, lat, lon, zone=None):
+        """Lance la lecture du RPG en tâche de fond."""
+        self._prelire(NOM_RPG, lat, lon, self.lire_rpg, zone)
+
+    def obtenir_rpg(self, lat, lon, construire=construire, zone=None):
+        """Chemin du dossier où la couche RPG du point est écrite.
+
+        La couche ne lit rien de la scène : ses parcelles sont drapées par la
+        vue sur le relief.
+
+        Raises:
+            RpgIndisponible si la couche de l'IGN n'a pas répondu : rien
+            n'est écrit, la demande suivante réessaie.
+        """
+        return self._obtenir_couche(
+            NOM_RPG, lat, lon, construire, self.lire_rpg,
+            lambda message: RpgIndisponible(f"RPG illisible : {message}"),
+            lambda bbox, brut, scene: rpg_pour_emprise(*bbox, brut), zone=zone)
 
     def obtenir_nuage(self, lat, lon, construire=construire, zone=None):
         """Chemin du dossier où la couche du nuage LiDAR HD du point est écrite.
