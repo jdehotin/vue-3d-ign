@@ -654,6 +654,8 @@
                 <button class="toggle on" id="t-haies" hidden title="Haies de la BD TOPO, dressées sur le relief">Haies</button>
                 <button class="toggle on" id="t-foret" hidden title="Massifs forestiers de la BD Forêt v2 de l'IGN, drapés sur le relief">Massifs BD Forêt</button>
                 <button class="toggle on" id="t-rpg" hidden title="Parcelles agricoles du Registre Parcellaire Graphique (RPG), drapées sur le relief">Parcelles RPG</button>
+                <button class="toggle on" id="t-chemins" hidden title="Chemins, sentiers, pistes cyclables et voies vertes de la BD TOPO, drapés sur le relief">Chemins et pistes</button>
+                <button class="toggle on" id="t-reseaux" hidden title="Canalisations de la BD TOPO (eau, gaz, électricité…), drapées sur le relief">Réseaux souterrains</button>
                 <button class="toggle" id="t-nuage" hidden title="Tout le bâti en points du nuage LiDAR HD ; les ouvrages ajourés, comme la tour Eiffel, y sont toujours">Nuage LiDAR</button>
                 <button class="toggle on" id="t-vehicules" hidden title="Véhicules vus sur l'orthophoto, le jour de la prise de vue">Véhicules</button>
                 <button class="toggle on" id="t-piscines" hidden title="Piscines vues sur l'orthophoto">Piscines</button>
@@ -811,6 +813,8 @@
         <div id="etat-emprises" class="etat-couche" role="status" hidden><i class="roue"></i><span></span></div>
             <div id="etat-foret" class="etat-couche" role="status" hidden><i class="roue"></i><span></span></div>
             <div id="etat-rpg" class="etat-couche" role="status" hidden><i class="roue"></i><span></span></div>
+            <div id="etat-chemins" class="etat-couche" role="status" hidden><i class="roue"></i><span></span></div>
+            <div id="etat-reseaux" class="etat-couche" role="status" hidden><i class="roue"></i><span></span></div>
             <div id="etat-nuage" class="etat-couche" role="status" hidden><i class="roue"></i><span></span></div>
             <div id="etat-vehicules" class="etat-couche" role="status" hidden><i class="roue"></i><span></span></div>
             <div id="etat-foncier" class="etat-couche" role="status" hidden><i class="roue"></i><span></span></div>
@@ -940,6 +944,8 @@
                         <button type="button" class="toggle on" id="x-haies" title="Haies de la BD TOPO, dressées : 2 m de haut et 1,5 m d'épaisseur de convention, la donnée les taisant.">Haies</button>
                         <button type="button" class="toggle on" id="x-foret" title="Massifs forestiers BD Forêt v2, drapés sur le relief.">Massifs BD Forêt</button>
                         <button type="button" class="toggle on" id="x-rpg" title="Parcelles agricoles RPG, drapées sur le relief.">Parcelles RPG</button>
+                        <button type="button" class="toggle on" id="x-chemins" title="Chemins, sentiers, pistes cyclables et voies vertes BD TOPO.">Chemins et pistes</button>
+                        <button type="button" class="toggle on" id="x-reseaux" title="Canalisations BD TOPO (eau, gaz, électricité…).">Réseaux souterrains</button>
                         <button type="button" class="toggle on" id="x-routes" title="Tronçons de route, chemins et sentiers de la BD TOPO, drapés sur le relief.">Routes et chemins</button>
                         <button type="button" class="toggle on" id="x-eau" title="Étendues et cours d'eau de la BD TOPO, drapés sur le relief.">Hydrographie</button>
                         <button type="button" class="toggle on" id="x-ouvrages" title="Murs, ponts, voies ferrées et terrains de sport de la BD TOPO : murs et tabliers en volumes, voies et terrains drapés sur le relief.">Ouvrages</button>
@@ -2331,7 +2337,7 @@ const demandeScene = window.DEMANDE_SCENE && window.DEMANDE_SCENE.url === URL_VU
 const demandesAnticipees = new Map();
 function demanderSuite() {
     for (const [url, options] of [
-        [URL_MONUMENTS], [URL_OUVRAGES], [URL_FORET], [URL_RPG],
+        [URL_MONUMENTS], [URL_OUVRAGES], [URL_FORET], [URL_RPG], [URL_CHEMINS], [URL_RESEAUX],
         ['api/sante', { cache: 'no-store' }],
         [URL_PISCINES, { cache: 'no-cache' }], [URL_PANNEAUX, { cache: 'no-cache' }]]) {
         const reponse = fetch(url, options);
@@ -4198,6 +4204,8 @@ const sceneConstruite = chargerScene()
         chargerEmprises();
         chargerForet();
         chargerRpg();
+        chargerChemins();
+        chargerReseaux();
         chargerNuage();
         chargerDetections();
         chargerPanneaux();
@@ -5147,6 +5155,8 @@ async function chargerRelief() {
         construireEmprises();
         construireForet();
         construireRpg();
+        construireChemins();
+        construireReseaux();
         construireNuage();
         construireVehicules();
         construirePiscines();
@@ -5235,6 +5245,8 @@ async function chargerRelief() {
     construireEmprises();
     construireForet();
     construireRpg();
+    construireChemins();
+    construireReseaux();
     construireNuage();
     construireVehicules();
     construirePiscines();
@@ -7282,6 +7294,179 @@ async function chargerRpg(essai = 1) {
         etatCouche('etat-rpg',
                    `RPG indisponible : nouvel essai dans ${ATTENTE_MONUMENTS_S} s.`, true);
         setTimeout(() => chargerRpg(essai + 1), ATTENTE_MONUMENTS_S * 1000);
+    }
+}
+
+// --- Chemins et pistes cyclables -----------------------------------------------
+// Voies piétonnes et cyclables de la BD TOPO (/api/chemins, vue3d/chemins.py),
+// demandées une fois la scène affichée. Les natures sont absentes de la scène
+// principale ou peu mises en valeur : chemins, sentiers, pistes cyclables, voies
+// vertes, escaliers. Chaque segment est un ruban drapé sur le relief, légèrement
+// au-dessus des routes pour éviter le z-fighting.
+const URL_CHEMINS = `api/chemins?${REQUETE}`;
+// Juste au-dessus de ROUTE_DECALAGE pour ne pas se confondre avec les routes.
+const CHEMINS_DECALAGE = ROUTE_DECALAGE + 0.02;
+// Couleur par nature : convention visuelle, mesurée sur des fonds de carte.
+const COULEUR_CHEMIN_PAR_NATURE = {
+    'Piste cyclable': 0x2a9d3f,
+    'Voie verte':     0x57b55f,
+    'Sentier':        0xc07820,
+    'Chemin':         0x8b6914,
+    'Escalier':       0x607d8b,
+};
+function matChemin(nature) {
+    const c = COULEUR_CHEMIN_PAR_NATURE[nature] || 0x9e9e9e;
+    return new THREE.MeshStandardMaterial({
+        color: c, roughness: 0.95, transparent: true, opacity: 0.85,
+        polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 });
+}
+
+const groupeChemins = new THREE.Group();
+scene.add(groupeChemins);
+let CHEMINS = null;
+let cheminsConstruits = false;
+const cheminsPoses = [];   // { donnees, tris } — pour l'export
+
+function construireChemins() {
+    if (!CHEMINS || !reliefRegle || cheminsConstruits) return;
+    cheminsConstruits = true;
+    for (const c of CHEMINS.chemins) {
+        const largeur = c.largeur_m || 1.5;
+        const tris = trianglesRuban(c.ligne, largeur);
+        if (!tris.length) continue;
+        const mat = matChemin(c.nature);
+        const mesh = maillageDrape(tris, mat, groupeChemins, CHEMINS_DECALAGE);
+        const am = c.amenagement_cyclable;
+        mesh.userData = {
+            infobulle: `<b>${c.nature || 'Voie piétonne'}</b>`
+                + (am ? `<br>${am}` : '')
+                + `<br>${largeur.toFixed(1)} m`
+                + '<br><i>BD TOPO</i>',
+        };
+        cheminsPoses.push({ donnees: c, tris });
+    }
+    placerDrapes();
+    const bouton = document.getElementById('t-chemins');
+    bouton.hidden = !groupeChemins.children.length;
+    if (!bouton.hidden) {
+        bouton.addEventListener('click', e => {
+            groupeChemins.visible = !groupeChemins.visible;
+            e.currentTarget.classList.toggle('on', groupeChemins.visible);
+            majCiblesSurvol();
+        });
+    }
+    majCiblesSurvol();
+}
+
+async function chargerChemins(essai = 1) {
+    const retard = setTimeout(
+        () => etatCouche('etat-chemins', 'Chemins et pistes : chargement…', true),
+        essai === 1 ? RETARD_ETAT_MONUMENTS_MS : 0);
+    try {
+        const r = await requete(URL_CHEMINS);
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const c = await r.json();
+        clearTimeout(retard);
+        etatCouche('etat-chemins', null);
+        if (!c) return;
+        CHEMINS = c;
+        construireChemins();
+    } catch (err) {
+        clearTimeout(retard);
+        if (essai >= ESSAIS_MONUMENTS) {
+            etatCouche('etat-chemins',
+                       'Chemins indisponibles : recharger la page pour réessayer.');
+            return;
+        }
+        etatCouche('etat-chemins',
+                   `Chemins indisponibles : nouvel essai dans ${ATTENTE_MONUMENTS_S} s.`, true);
+        setTimeout(() => chargerChemins(essai + 1), ATTENTE_MONUMENTS_S * 1000);
+    }
+}
+
+// --- Réseaux souterrains -------------------------------------------------------
+// Canalisations de la BD TOPO (/api/reseaux, vue3d/reseaux.py), demandées une
+// fois la scène affichée. Chaque canalisation est un ruban fin (0,5 m) drapé sur
+// le terrain, coloré par nature (eau = bleu, gaz = ambre, électricité = rouge…).
+const URL_RESEAUX = `api/reseaux?${REQUETE}`;
+const RESEAUX_DECALAGE = ROUTE_DECALAGE;
+// Couleurs conventionnelles des réseaux, proches des repères normalisés.
+const COULEUR_RESEAU_PAR_NATURE = {
+    'Eau potable':                  0x2196f3,
+    'Assainissement eau pluviale':  0x607d8b,
+    'Assainissement eau usée':      0x795548,
+    'Hydrocarbure':                 0xff5722,
+    'Gaz':                          0xf9a825,
+    'Électricité':                  0xf44336,
+    'Chaleur':                      0xe91e63,
+    'Télécommunication':            0x9c27b0,
+};
+function matReseau(nature) {
+    const c = COULEUR_RESEAU_PAR_NATURE[nature] || 0x9e9e9e;
+    return new THREE.MeshStandardMaterial({
+        color: c, roughness: 0.9, transparent: true, opacity: 0.8,
+        polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 });
+}
+
+const groupeReseaux = new THREE.Group();
+scene.add(groupeReseaux);
+let RESEAUX = null;
+let reseauxConstruits = false;
+const reseauxPoses = [];   // { donnees, tris } — pour l'export
+
+function construireReseaux() {
+    if (!RESEAUX || !reliefRegle || reseauxConstruits) return;
+    reseauxConstruits = true;
+    const positions = { '-1': 'Souterrain', '0': 'Au niveau du sol', '1': 'Aérien' };
+    for (const r of RESEAUX.reseaux) {
+        const tris = trianglesRuban(r.ligne, 0.5);
+        if (!tris.length) continue;
+        const mat = matReseau(r.nature);
+        const mesh = maillageDrape(tris, mat, groupeReseaux, RESEAUX_DECALAGE);
+        const pos = positions[String(r.position)] || '';
+        mesh.userData = {
+            infobulle: `<b>${r.nature || 'Canalisation'}</b>`
+                + (pos ? `<br>${pos}` : '')
+                + '<br><i>BD TOPO</i>',
+        };
+        reseauxPoses.push({ donnees: r, tris });
+    }
+    placerDrapes();
+    const bouton = document.getElementById('t-reseaux');
+    bouton.hidden = !groupeReseaux.children.length;
+    if (!bouton.hidden) {
+        bouton.addEventListener('click', e => {
+            groupeReseaux.visible = !groupeReseaux.visible;
+            e.currentTarget.classList.toggle('on', groupeReseaux.visible);
+            majCiblesSurvol();
+        });
+    }
+    majCiblesSurvol();
+}
+
+async function chargerReseaux(essai = 1) {
+    const retard = setTimeout(
+        () => etatCouche('etat-reseaux', 'Réseaux souterrains : chargement…', true),
+        essai === 1 ? RETARD_ETAT_MONUMENTS_MS : 0);
+    try {
+        const r = await requete(URL_RESEAUX);
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const rs = await r.json();
+        clearTimeout(retard);
+        etatCouche('etat-reseaux', null);
+        if (!rs) return;
+        RESEAUX = rs;
+        construireReseaux();
+    } catch (err) {
+        clearTimeout(retard);
+        if (essai >= ESSAIS_MONUMENTS) {
+            etatCouche('etat-reseaux',
+                       'Réseaux indisponibles : recharger la page pour réessayer.');
+            return;
+        }
+        etatCouche('etat-reseaux',
+                   `Réseaux indisponibles : nouvel essai dans ${ATTENTE_MONUMENTS_S} s.`, true);
+        setTimeout(() => chargerReseaux(essai + 1), ATTENTE_MONUMENTS_S * 1000);
     }
 }
 
@@ -11644,6 +11829,7 @@ function modeleExport(options) {
                      routes: 0, surfacesEau: 0, coursEau: 0, pylones: 0, lignes: 0,
                      cimetieres: 0, aerodromes: 0, postes: 0, haies: 0,
                      foret: 0, rpg: 0,
+                     chemins: 0, reseaux: 0,
                      murs: 0, ponts: 0, voies: 0, terrainsSport: 0 };
 
     if (options.batiments) {
@@ -11787,6 +11973,7 @@ function modeleExport(options) {
     // suit la pente du sol, un toit ne l'a jamais suivie.
     if (options.cimetieres || options.aerodromes || options.postes || options.haies
         || options.foret || options.rpg
+        || options.chemins || options.reseaux
         || options.routes || options.eau || options.lignes || options.ouvrages) {
         const exagEmp = exagVert, reliefEmp = relief;
         exagVert = 1; relief = true;
@@ -11799,6 +11986,8 @@ function modeleExport(options) {
             groupeLignes.updateMatrixWorld(true);
             groupeOuvrages.updateMatrixWorld(true);
             groupeVoies.updateMatrixWorld(true);
+            groupeChemins.updateMatrixWorld(true);
+            groupeReseaux.updateMatrixWorld(true);
             const v = new THREE.Vector3();
             for (const groupe of [groupeCimetieres, groupeAerodromes, groupePostes, groupeHaies,
                                   groupeForet, groupeRpg]) {
@@ -11824,6 +12013,48 @@ function modeleExport(options) {
                     if (!facettes.faces.length) continue;
                     elements.push(elementRoute(donnees, facettes, elements.length));
                     compte.routes++;
+                }
+            }
+            if (options.chemins) {
+                for (const { donnees: c, tris } of cheminsPoses) {
+                    const facettes = facettesDrapes(tris, CHEMINS_DECALAGE, versIfc);
+                    if (!facettes.faces.length) continue;
+                    elements.push({
+                        cle: `chemin|${c.nature || ''}|${elements.length}`,
+                        genre: 'chemin',
+                        nom: c.nature || 'Voie piétonne',
+                        description: `${(c.largeur_m || 1.5).toFixed(1)} m`
+                            + (c.amenagement_cyclable ? `, ${c.amenagement_cyclable}` : '')
+                            + ' (BD TOPO)',
+                        tag: null,
+                        proprietes: { nom: 'VueIGN_Chemin', valeurs: [
+                            ['Nature', 'IFCLABEL', c.nature],
+                            ['AmenagementCyclable', 'IFCLABEL', c.amenagement_cyclable],
+                            ['Largeur', 'IFCLENGTHMEASURE', c.largeur_m || 1.5],
+                        ] },
+                        maillages: [{ style: 'chemin', facettes }],
+                    });
+                    compte.chemins++;
+                }
+            }
+            if (options.reseaux) {
+                for (const { donnees: r, tris } of reseauxPoses) {
+                    const facettes = facettesDrapes(tris, RESEAUX_DECALAGE, versIfc);
+                    if (!facettes.faces.length) continue;
+                    elements.push({
+                        cle: `reseau|${r.nature || ''}|${elements.length}`,
+                        genre: 'reseau',
+                        nom: r.nature || 'Canalisation',
+                        description: `Canalisation BD TOPO`
+                            + (r.position === '-1' ? ', souterraine' : r.position === '1' ? ', aérienne' : ''),
+                        tag: null,
+                        proprietes: { nom: 'VueIGN_Reseau', valeurs: [
+                            ['Nature', 'IFCLABEL', r.nature],
+                            ['Position', 'IFCLABEL', r.position],
+                        ] },
+                        maillages: [{ style: 'route', facettes }],
+                    });
+                    compte.reseaux++;
                 }
             }
             if (options.eau) {
@@ -11966,13 +12197,15 @@ function modeleExport(options) {
 const optionsExport = { relief: true, batiments: true, arbres: true, masses: false,
                         routes: true, eau: true, lignes: true, ouvrages: true,
                         cimetieres: true, aerodromes: true, postes: true, haies: true,
-                        foret: true, rpg: true };
+                        foret: true, rpg: true,
+                        chemins: true, reseaux: true };
 const COUCHES_EXPORT = [['relief', 'x-relief'], ['batiments', 'x-batiments'],
                         ['arbres', 'x-arbres'], ['masses', 'x-masses'],
                         ['routes', 'x-routes'], ['eau', 'x-eau'], ['ouvrages', 'x-ouvrages'], ['lignes', 'x-lignes'],
                         ['cimetieres', 'x-cimetieres'], ['aerodromes', 'x-aerodromes'],
                         ['postes', 'x-postes'], ['haies', 'x-haies'],
-                        ['foret', 'x-foret'], ['rpg', 'x-rpg']];
+                        ['foret', 'x-foret'], ['rpg', 'x-rpg'],
+                        ['chemins', 'x-chemins'], ['reseaux', 'x-reseaux']];
 for (const [cle, id] of COUCHES_EXPORT) {
     const bouton = document.getElementById(id);
     bouton.dataset.titre = bouton.title;          // etatCouchesExport() le remplace
@@ -12153,6 +12386,8 @@ const COUCHES_PRESENTES = {
     haies: () => groupeHaies.children.length > 0,
     foret: () => groupeForet.children.length > 0,
     rpg: () => groupeRpg.children.length > 0,
+    chemins: () => cheminsPoses.length > 0,
+    reseaux: () => reseauxPoses.length > 0,
 };
 
 /** Éteint, dans la fenêtre, les couches que la scène ne porte pas. */
@@ -12352,6 +12587,8 @@ function resumeExport(modele, choix) {
             choix.aerodromes && `${c.aerodromes.toLocaleString('fr-FR')} aérodrome(s) ou piste(s)`,
             choix.postes && nombre(c.postes, 'poste'),
             choix.haies && nombre(c.haies, 'haie'),
+            choix.chemins && nombre(c.chemins, 'chemin/piste'),
+            choix.reseaux && nombre(c.reseaux, 'canalisation'),
             choix.ouvrages && c.murs > 0 && nombre(c.murs, 'mur'),
             choix.ouvrages && c.ponts > 0 && nombre(c.ponts, 'pont'),
             choix.ouvrages && c.voies > 0 && nombreDe(c.voies, 'tronçon(s) de voie ferrée'),

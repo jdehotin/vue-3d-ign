@@ -55,6 +55,7 @@ def client(tmp_path):
                                  lire_monuments=lire_monuments, lire_ouvrages=lire_ouvrages,
                                  lire_emprises=lire_emprises,
                                  lire_foret=lambda *b: None, lire_rpg=lambda *b: None,
+                                 lire_chemins=lambda *b: None, lire_reseaux=lambda *b: None,
                                  lire_nuage=lire_nuage)
     client = appli.test_client()
     client.lectures_nuage = lectures_nuage
@@ -115,6 +116,7 @@ def client_vehicules(tmp_path):
                                  lire_monuments=lambda *b: {"elements": []},
                                  lire_ouvrages=lambda *b: {}, lire_emprises=lambda *b: {},
                                  lire_foret=lambda *b: None, lire_rpg=lambda *b: None,
+                                 lire_chemins=lambda *b: None, lire_reseaux=lambda *b: None,
                                  lire_vehicules=lecteur,
                                  lire_mer=lire_mer)
     return appli.test_client()
@@ -391,6 +393,7 @@ def client_panneaux(tmp_path):
                                  lire_monuments=lambda *b: {"elements": []},
                                  lire_ouvrages=lambda *b: {}, lire_emprises=lambda *b: {},
                                  lire_foret=lambda *b: None, lire_rpg=lambda *b: None,
+                                 lire_chemins=lambda *b: None, lire_reseaux=lambda *b: None,
                                  lire_panneaux=lire_panneaux)
     return appli.test_client()
 
@@ -484,6 +487,7 @@ def client_dpe_dvf(tmp_path):
                                  lire_monuments=lambda *b: {"elements": []},
                                  lire_ouvrages=lambda *b: {}, lire_emprises=lambda *b: {},
                                  lire_foret=lambda *b: None, lire_rpg=lambda *b: None,
+                                 lire_chemins=lambda *b: None, lire_reseaux=lambda *b: None,
                                  lire_nuage=lambda *b: None,
                                  lire_dpe=lire_dpe, lire_dvf=lire_dvf, lire_bornes=lire_bornes)
     return appli.test_client(), lectures
@@ -539,6 +543,7 @@ def client_quota(tmp_path):
                                     lire_monuments=lambda *b: {"elements": []},
                                     lire_ouvrages=lambda *b: {}, lire_emprises=lambda *b: {},
                                     lire_foret=lambda *b: None, lire_rpg=lambda *b: None,
+                                 lire_chemins=lambda *b: None, lire_reseaux=lambda *b: None,
                                     lire_nuage=lambda *b: None,
                                     **options).test_client()
     return creer

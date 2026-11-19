@@ -82,6 +82,8 @@ from .eau import (COUCHE_COURS_EAU, COUCHE_SURFACES_EAU, eau_pour_emprise,
 from .emprises import EMPRISES_VERSION, emprises_pour_emprise, fetch_emprises
 from .foret import FORET_VERSION, foret_pour_emprise, fetch_foret
 from .rpg import RPG_VERSION, rpg_pour_emprise, fetch_rpg
+from .chemins import CHEMINS_VERSION, chemins_pour_emprise, fetch_chemins
+from .reseaux import RESEAUX_VERSION, reseaux_pour_emprise, fetch_reseaux
 from .geopf import Groupe
 from .lignes import COUCHE_LIGNES, COUCHE_PYLONES, lignes_pour_emprise
 from .houppiers import houppiers_pour_emprise
@@ -256,6 +258,8 @@ NOM_OUVRAGES = f"ouvrages-v{OUVRAGES_VERSION}.json.gz"
 NOM_EMPRISES = f"emprises-v{EMPRISES_VERSION}.json.gz"
 NOM_FORET = f"foret-v{FORET_VERSION}.json.gz"
 NOM_RPG = f"rpg-v{RPG_VERSION}.json.gz"
+NOM_CHEMINS = f"chemins-v{CHEMINS_VERSION}.json.gz"
+NOM_RESEAUX = f"reseaux-v{RESEAUX_VERSION}.json.gz"
 
 
 # Les panneaux solaires ont une seule source : le registre, à sa version.
@@ -360,6 +364,16 @@ class ForetIndisponible(RuntimeError):
 class RpgIndisponible(RuntimeError):
     """La couche RPG de l'IGN n'a pas répondu : rien n'est mis en cache,
     la scène reste affichée sans elle, réessayer plus tard."""
+
+
+class CheminsIndisponibles(RuntimeError):
+    """La couche des voies piétonnes et cyclables n'a pas pu être lue : rien
+    n'est mis en cache, la scène reste affichée sans eux, réessayer plus tard."""
+
+
+class ReseauxIndisponibles(RuntimeError):
+    """La couche des canalisations de la BD TOPO n'a pas pu être lue : rien
+    n'est mis en cache, la scène reste affichée sans eux, réessayer plus tard."""
 
 
 class ReconstructionRefusee(RuntimeError):
@@ -935,6 +949,7 @@ class Cache:
 
     def __init__(self, dossier, lire_monuments=fetch_monuments, lire_ouvrages=fetch_ouvrages,
                  lire_emprises=fetch_emprises, lire_foret=fetch_foret, lire_rpg=fetch_rpg,
+                 lire_chemins=fetch_chemins, lire_reseaux=fetch_reseaux,
                  lire_vehicules=None, lire_panneaux=None, lire_nuage=fetch_nuage,
                  lire_dpe=fetch_dpe, lire_dvf=fetch_dvf, lire_mer=fetch_mer,
                  lire_bornes=fetch_bornes):
@@ -971,6 +986,8 @@ class Cache:
         self.lire_emprises = lire_emprises
         self.lire_foret = lire_foret
         self.lire_rpg = lire_rpg
+        self.lire_chemins = lire_chemins
+        self.lire_reseaux = lire_reseaux
         self.lire_vehicules = self._qui_cede(lire_vehicules)
         self.mode_vehicules = lire_vehicules.mode if lire_vehicules else None
         self.lire_panneaux = lire_panneaux
@@ -992,6 +1009,10 @@ class Cache:
                 max_workers=2, thread_name_prefix="foret"),
             NOM_RPG: concurrent.futures.ThreadPoolExecutor(
                 max_workers=2, thread_name_prefix="rpg"),
+            NOM_CHEMINS: concurrent.futures.ThreadPoolExecutor(
+                max_workers=2, thread_name_prefix="chemins"),
+            NOM_RESEAUX: concurrent.futures.ThreadPoolExecutor(
+                max_workers=2, thread_name_prefix="reseaux"),
             # Une lecture SQLite de quelques millisecondes.
             NOM_PANNEAUX: concurrent.futures.ThreadPoolExecutor(
                 max_workers=1, thread_name_prefix="panneaux"),
@@ -1383,6 +1404,44 @@ class Cache:
             NOM_RPG, lat, lon, construire, self.lire_rpg,
             lambda message: RpgIndisponible(f"RPG illisible : {message}"),
             lambda bbox, brut, scene: rpg_pour_emprise(*bbox, brut), zone=zone)
+
+    def prelire_chemins(self, lat, lon, zone=None):
+        """Lance la lecture des voies piétonnes et cyclables en tâche de fond."""
+        self._prelire(NOM_CHEMINS, lat, lon, self.lire_chemins, zone)
+
+    def obtenir_chemins(self, lat, lon, construire=construire, zone=None):
+        """Chemin du dossier où la couche des chemins et pistes du point est écrite.
+
+        La couche ne lit rien de la scène : ses segments sont drapés par la
+        vue sur le relief.
+
+        Raises:
+            CheminsIndisponibles si la couche de l'IGN n'a pas répondu : rien
+            n'est écrit, la demande suivante réessaie.
+        """
+        return self._obtenir_couche(
+            NOM_CHEMINS, lat, lon, construire, self.lire_chemins,
+            lambda message: CheminsIndisponibles(f"Chemins illisibles : {message}"),
+            lambda bbox, brut, scene: chemins_pour_emprise(*bbox, brut), zone=zone)
+
+    def prelire_reseaux(self, lat, lon, zone=None):
+        """Lance la lecture des canalisations en tâche de fond."""
+        self._prelire(NOM_RESEAUX, lat, lon, self.lire_reseaux, zone)
+
+    def obtenir_reseaux(self, lat, lon, construire=construire, zone=None):
+        """Chemin du dossier où la couche des réseaux souterrains du point est écrite.
+
+        La couche ne lit rien de la scène : ses segments sont drapés par la
+        vue sur le relief.
+
+        Raises:
+            ReseauxIndisponibles si la couche de l'IGN n'a pas répondu : rien
+            n'est écrit, la demande suivante réessaie.
+        """
+        return self._obtenir_couche(
+            NOM_RESEAUX, lat, lon, construire, self.lire_reseaux,
+            lambda message: ReseauxIndisponibles(f"Réseaux illisibles : {message}"),
+            lambda bbox, brut, scene: reseaux_pour_emprise(*bbox, brut), zone=zone)
 
     def obtenir_nuage(self, lat, lon, construire=construire, zone=None):
         """Chemin du dossier où la couche du nuage LiDAR HD du point est écrite.
