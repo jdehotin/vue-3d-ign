@@ -672,11 +672,11 @@
                 <span><i style="background:#943636"></i>BD ALTI</span>
                 <span><i style="background:#b7b7b7"></i>Limite</span>
             </div>
-            <div class="row">
+            <div class="row" hidden>
                 <label for="speed" title="Orbite : degrés par seconde. Drone : vitesse de pointe, 3 m/s par cran.">vitesse</label>
                 <input type="range" id="speed" min="1" max="20" step="1" value="6" />
             </div>
-            <div class="row">
+            <div class="row" hidden>
                 <label for="exag">exagération Z</label>
                 <input type="range" id="exag" min="1" max="5" step="0.5" value="1" />
                 <b id="s-exag">1</b>
@@ -699,7 +699,7 @@
             </div>
         </div>
 
-        <div class="section">
+        <div class="section" hidden>
             <h2>Soleil</h2>
             <div class="stat"><span>date</span><b id="s-date">—</b></div>
             <div class="stat"><span>azimut</span><b id="s-azimut">—</b></div>
