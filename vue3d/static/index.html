@@ -646,16 +646,16 @@
                 <button class="toggle on" id="t-routes">Routes</button>
                 <button class="toggle on" id="t-lignes">Lignes HT</button>
                 <button class="toggle on" id="t-constructions" hidden title="Réservoirs, torchères, cheminées, antennes et mâts de la BD TOPO">Réservoirs, mâts</button>
-                <button class="toggle on" id="t-ouvrages" hidden title="Murs, ponts et terrains de sport de la BD TOPO">Murs, ponts</button>
-                <button class="toggle on" id="t-voies" hidden title="Voies ferrées et tramways de la BD TOPO">Voies ferrées</button>
-                <button class="toggle on" id="t-cimetieres" hidden title="Cimetières civils et militaires de la BD TOPO">Cimetières</button>
-                <button class="toggle on" id="t-aerodromes" hidden title="Aérodromes, héliports et leurs pistes, de la BD TOPO">Aéroports</button>
-                <button class="toggle on" id="t-postes" hidden title="Postes de transformation électrique de la BD TOPO">Postes élec.</button>
-                <button class="toggle on" id="t-haies" hidden title="Haies de la BD TOPO, dressées sur le relief">Haies</button>
-                <button class="toggle on" id="t-foret" hidden title="Massifs forestiers de la BD Forêt v2 de l'IGN, drapés sur le relief">Massifs BD Forêt</button>
-                <button class="toggle on" id="t-rpg" hidden title="Parcelles agricoles du Registre Parcellaire Graphique (RPG), drapées sur le relief">Parcelles RPG</button>
-                <button class="toggle on" id="t-chemins" hidden title="Chemins, sentiers, pistes cyclables et voies vertes de la BD TOPO, drapés sur le relief">Chemins et pistes</button>
-                <button class="toggle on" id="t-reseaux" hidden title="Canalisations de la BD TOPO (eau, gaz, électricité…), drapées sur le relief">Réseaux souterrains</button>
+                <button class="toggle" id="t-ouvrages" disabled title="Murs, ponts et terrains de sport de la BD TOPO">Murs, ponts</button>
+                <button class="toggle" id="t-voies" disabled title="Voies ferrées et tramways de la BD TOPO">Voies ferrées</button>
+                <button class="toggle" id="t-cimetieres" disabled title="Cimetières civils et militaires de la BD TOPO">Cimetières</button>
+                <button class="toggle" id="t-aerodromes" disabled title="Aérodromes, héliports et leurs pistes, de la BD TOPO">Aéroports</button>
+                <button class="toggle" id="t-postes" disabled title="Postes de transformation électrique de la BD TOPO">Postes élec.</button>
+                <button class="toggle" id="t-haies" disabled title="Haies de la BD TOPO, dressées sur le relief">Haies</button>
+                <button class="toggle" id="t-foret" disabled title="Massifs forestiers de la BD Forêt v2 de l'IGN, drapés sur le relief">Massifs BD Forêt</button>
+                <button class="toggle" id="t-rpg" disabled title="Parcelles agricoles du Registre Parcellaire Graphique (RPG), drapées sur le relief">Parcelles RPG</button>
+                <button class="toggle" id="t-chemins" disabled title="Chemins, sentiers, pistes cyclables et voies vertes de la BD TOPO, drapés sur le relief">Chemins et pistes</button>
+                <button class="toggle" id="t-reseaux" disabled title="Canalisations de la BD TOPO (eau, gaz, électricité…), drapées sur le relief">Réseaux souterrains</button>
                 <button class="toggle" id="t-nuage" hidden title="Tout le bâti en points du nuage LiDAR HD ; les ouvrages ajourés, comme la tour Eiffel, y sont toujours">Nuage LiDAR</button>
                 <button class="toggle on" id="t-vehicules" hidden title="Véhicules vus sur l'orthophoto, le jour de la prise de vue">Véhicules</button>
                 <button class="toggle on" id="t-piscines" hidden title="Piscines vues sur l'orthophoto">Piscines</button>
@@ -6947,8 +6947,12 @@ function construireOuvrages() {
         ouvragesEnVolume = ouvragesSurvol.length > 0;
         placerOuvrages();
     }
-    document.getElementById('t-ouvrages').hidden = !groupeOuvrages.children.length;
-    document.getElementById('t-voies').hidden = !groupeVoies.children.length;
+    const boutonOuvrages = document.getElementById('t-ouvrages');
+    boutonOuvrages.disabled = !groupeOuvrages.children.length;
+    boutonOuvrages.classList.toggle('on', !!groupeOuvrages.children.length);
+    const boutonVoies = document.getElementById('t-voies');
+    boutonVoies.disabled = !groupeVoies.children.length;
+    boutonVoies.classList.toggle('on', !!groupeVoies.children.length);
     majCiblesSurvol();
     // Les masses qu'un mur ou un tablier explique quittent la végétation.
     if (ouvragesEnVolume && vegPrete) construireVegetation();
@@ -7117,7 +7121,9 @@ function construireEmprises() {
                                 ['t-aerodromes', groupeAerodromes],
                                 ['t-postes', groupePostes], ['t-haies', groupeHaies]]) {
         const bouton = document.getElementById(id);
-        bouton.hidden = !groupe.children.length;
+        const present = !!groupe.children.length;
+        bouton.disabled = !present;
+        bouton.classList.toggle('on', present);
         bouton.addEventListener('click', e => {
             groupe.visible = !groupe.visible;
             e.currentTarget.classList.toggle('on', groupe.visible);
@@ -7188,14 +7194,14 @@ function construireForet() {
     }
     placerDrapes();
     const bouton = document.getElementById('t-foret');
-    bouton.hidden = !groupeForet.children.length;
-    if (!bouton.hidden) {
-        bouton.addEventListener('click', e => {
-            groupeForet.visible = !groupeForet.visible;
-            e.currentTarget.classList.toggle('on', groupeForet.visible);
-            majCiblesSurvol();
-        });
-    }
+    const foretPresente = !!groupeForet.children.length;
+    bouton.disabled = !foretPresente;
+    bouton.classList.toggle('on', foretPresente);
+    bouton.addEventListener('click', e => {
+        groupeForet.visible = !groupeForet.visible;
+        e.currentTarget.classList.toggle('on', groupeForet.visible);
+        majCiblesSurvol();
+    });
     majCiblesSurvol();
 }
 
@@ -7260,14 +7266,14 @@ function construireRpg() {
     }
     placerDrapes();
     const bouton = document.getElementById('t-rpg');
-    bouton.hidden = !groupeRpg.children.length;
-    if (!bouton.hidden) {
-        bouton.addEventListener('click', e => {
-            groupeRpg.visible = !groupeRpg.visible;
-            e.currentTarget.classList.toggle('on', groupeRpg.visible);
-            majCiblesSurvol();
-        });
-    }
+    const rpgPresent = !!groupeRpg.children.length;
+    bouton.disabled = !rpgPresent;
+    bouton.classList.toggle('on', rpgPresent);
+    bouton.addEventListener('click', e => {
+        groupeRpg.visible = !groupeRpg.visible;
+        e.currentTarget.classList.toggle('on', groupeRpg.visible);
+        majCiblesSurvol();
+    });
     majCiblesSurvol();
 }
 
@@ -7347,14 +7353,14 @@ function construireChemins() {
     }
     placerDrapes();
     const bouton = document.getElementById('t-chemins');
-    bouton.hidden = !groupeChemins.children.length;
-    if (!bouton.hidden) {
-        bouton.addEventListener('click', e => {
-            groupeChemins.visible = !groupeChemins.visible;
-            e.currentTarget.classList.toggle('on', groupeChemins.visible);
-            majCiblesSurvol();
-        });
-    }
+    const cheminsPresents = !!groupeChemins.children.length;
+    bouton.disabled = !cheminsPresents;
+    bouton.classList.toggle('on', cheminsPresents);
+    bouton.addEventListener('click', e => {
+        groupeChemins.visible = !groupeChemins.visible;
+        e.currentTarget.classList.toggle('on', groupeChemins.visible);
+        majCiblesSurvol();
+    });
     majCiblesSurvol();
 }
 
@@ -7433,14 +7439,14 @@ function construireReseaux() {
     }
     placerDrapes();
     const bouton = document.getElementById('t-reseaux');
-    bouton.hidden = !groupeReseaux.children.length;
-    if (!bouton.hidden) {
-        bouton.addEventListener('click', e => {
-            groupeReseaux.visible = !groupeReseaux.visible;
-            e.currentTarget.classList.toggle('on', groupeReseaux.visible);
-            majCiblesSurvol();
-        });
-    }
+    const reseauxPresents = !!groupeReseaux.children.length;
+    bouton.disabled = !reseauxPresents;
+    bouton.classList.toggle('on', reseauxPresents);
+    bouton.addEventListener('click', e => {
+        groupeReseaux.visible = !groupeReseaux.visible;
+        e.currentTarget.classList.toggle('on', groupeReseaux.visible);
+        majCiblesSurvol();
+    });
     majCiblesSurvol();
 }
 
