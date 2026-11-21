@@ -88,8 +88,8 @@ def test_aucune_requete_ne_part_apres_une_scene_incomplete(monkeypatch):
 
     monkeypatch.setattr(geopf.requests, "get", get)
     monkeypatch.setattr(scene, "fetch_mnh_grid", lambda *a, **k: _requete("grille"))
-    for nom in ("fetch_exg_grid", "fetch_sol_grid", "fetch_ortho_jpeg", "fetch_relief",
-                "fetch_relief_anneau"):
+    for nom in ("fetch_exg_grid", "fetch_vegetation_lidar", "fetch_sol_grid", "fetch_ortho_jpeg",
+                "fetch_relief", "fetch_relief_anneau"):
         monkeypatch.setattr(scene, nom, apres_la_grille(lambda *a, _nom=nom, **k: _requete(_nom)))
     monkeypatch.setattr(scene, "lire_couche", apres_la_grille(couches.lire_couche))
     try:
@@ -135,7 +135,7 @@ def test_l_echec_rapporte_est_celui_de_la_lecture_en_panne(monkeypatch):
     monkeypatch.setattr(scene, "lire_couche", couche)
     monkeypatch.setattr(scene, "fetch_exg_grid", orthophoto)
     monkeypatch.setattr(scene, "fetch_mnh_grid", lambda *a, **k: _GRILLE)
-    for nom, valeur in (("fetch_sol_grid", None), ("fetch_relief", None),
+    for nom, valeur in (("fetch_sol_grid", None), ("fetch_vegetation_lidar", None), ("fetch_relief", None),
                         ("fetch_relief_anneau", None), ("fetch_ortho_jpeg", (b"jpeg", None, None))):
         monkeypatch.setattr(scene, nom, lambda *a, _v=valeur, **k: _v)
     # Toutes finies quand _lire_ensemble regarde : l'ordre des fils n'y est
@@ -192,7 +192,7 @@ def test_le_terrain_devenu_inutile_ne_part_pas_s_il_attend_sa_place(monkeypatch)
     monkeypatch.setattr(scene, "fetch_sol_grid", sol)
     monkeypatch.setattr(scene, "fetch_exg_grid", lambda *a, **k: _requete("bouchon"))
     for nom, valeur in (("fetch_relief", None), ("fetch_relief_anneau", None),
-                        ("fetch_ortho_jpeg", (b"jpeg", None, None)),
+                        ("fetch_vegetation_lidar", None), ("fetch_ortho_jpeg", (b"jpeg", None, None)),
                         ("lire_couche", {"features": []})):
         monkeypatch.setattr(scene, nom, lambda *a, _v=valeur, **k: _v)
     vus = {}
@@ -240,13 +240,13 @@ def test_un_echec_du_terrain_lu_d_avance_n_arrete_pas_la_scene(monkeypatch):
     monkeypatch.setattr(scene, "fetch_sol_grid", sol)
     monkeypatch.setattr(scene, "fetch_mnh_grid",
                         apres_le_terrain("grille", {**_GRILLE, "source": "mns_mnt"}))
-    for nom, valeur in (("fetch_exg_grid", None), ("fetch_relief", None),
+    for nom, valeur in (("fetch_exg_grid", None), ("fetch_vegetation_lidar", None), ("fetch_relief", None),
                         ("fetch_relief_anneau", None), ("fetch_ortho_jpeg", (b"jpeg", None, None)),
                         ("lire_couche", {"features": []})):
         monkeypatch.setattr(scene, nom, apres_le_terrain(nom, valeur))
     scene.construire(48.8049, 2.1204)
     # Toutes parties après l'échec du terrain, aucune abandonnée : ses trois
-    # essais, la grille, l'orthophoto, la mosaïque, les deux reliefs, les dix
-    # couches WFS et le terrain relu.
-    assert len(parties) == geopf.GEOPF_ESSAIS + 1 + 4 + 10 + 1
+    # essais, la grille, l'orthophoto, la carte des classes, la mosaïque, les
+    # deux reliefs, les dix couches WFS et le terrain relu.
+    assert len(parties) == geopf.GEOPF_ESSAIS + 1 + 5 + 10 + 1
     assert parties.count("terrain mns_mnt") == 1

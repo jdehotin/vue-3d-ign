@@ -84,7 +84,7 @@ def test_le_suivi_suit_la_construction_puis_s_efface(tmp_path):
     assert cache.avancement(47.0, 2.0) == {"etat": "attente"}
 
 
-_NB_LECTURES = 16
+_NB_LECTURES = 17
 
 
 def _fausses_sources(monkeypatch, source="lidar_hd", **remplacees):
@@ -96,7 +96,8 @@ def _fausses_sources(monkeypatch, source="lidar_hd", **remplacees):
     appels = {}
     for nom, valeur in {
             "lire_couche": {"features": []}, "fetch_mnh_grid": grille,
-            "fetch_exg_grid": None, "fetch_sol_grid": None, "fetch_relief": None,
+            "fetch_exg_grid": None, "fetch_vegetation_lidar": None, "fetch_sol_grid": None,
+            "fetch_relief": None,
             "fetch_relief_anneau": None, "lignes_pour_emprise": None,
             "fetch_ortho_jpeg": (b"jpeg", None, None),
             "toits_pour_emprise": {}, "houppiers_pour_emprise": {},
@@ -119,12 +120,12 @@ def test_construire_annonce_chacune_de_ses_etapes(monkeypatch):
     scene.construire(48.8049, 2.1204, avancer=etapes.append)
     assert len(etapes) == scene.ETAPES_SCENE == _NB_LECTURES + 2
     # Au départ, toutes les lectures attendues, les plus longues en tête.
-    assert etapes[0] == "hauteurs du sursol, orthophoto et 14 autres"
+    assert etapes[0] == "hauteurs du sursol, orthophoto et 15 autres"
     assert etapes[-2:] == ["toitures", "houppiers"] == list(scene.ETAPES_DE_CALCUL)
 
 
 def test_les_lectures_partent_ensemble(monkeypatch):
-    """Les seize lectures sont en cours en même temps : une à une, la
+    """Les dix-sept lectures sont en cours en même temps : une à une, la
     barrière ne s'ouvrirait jamais."""
     barriere = threading.Barrier(_NB_LECTURES, timeout=5)
 
@@ -137,6 +138,7 @@ def test_les_lectures_partent_ensemble(monkeypatch):
     _fausses_sources(
         monkeypatch, lire_couche=lambda *a, **k: attendre(_v={"features": []}),
         fetch_mnh_grid=lambda *a, **k: attendre(_v=grille), fetch_exg_grid=attendre,
+        fetch_vegetation_lidar=attendre,
         fetch_sol_grid=attendre, fetch_relief=attendre, fetch_relief_anneau=attendre,
         fetch_ortho_jpeg=lambda *a, **k: attendre(_v=(b"jpeg", None, None)))
     scene.construire(48.8049, 2.1204)
@@ -262,6 +264,7 @@ def test_orthophoto_et_terrain_a_la_taille_de_la_grille(monkeypatch):
     bbox = scene.emprise(48.8049, 2.1204, 1000)
     attendu = mnh.dimensions_grille(*bbox, scene.TOITS_RESOLUTION_M, scene.GRILLE_PIXELS_MAX)
     assert appels["fetch_exg_grid"] == [(*bbox, *attendu)]
+    assert appels["fetch_vegetation_lidar"] == [(*bbox, *attendu)]
     assert appels["fetch_sol_grid"] == [(*bbox, *attendu, "lidar_hd")]
 
 

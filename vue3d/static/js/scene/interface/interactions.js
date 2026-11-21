@@ -15,6 +15,7 @@ import {
     lienStreetView, lienRecentrer, lienRecentrerSur, lienYAller, centreAnneau,
 } from './fiche.js';
 import { ouvrirTiroir } from './tiroir.js';
+import { TOITS_COUVERT } from '../batiments/etat.js';
 import { echapper } from '../socle/chargement.js';
 
 export const raycaster = new THREE.Raycaster();
@@ -158,7 +159,8 @@ function resumeBatiment(ud) {
         (ud.inconnue
             ? `<br><b>hauteur inconnue</b> : sous les arbres` +
               (ud.inconnue.part_verte != null
-                  ? ` (${Math.round(ud.inconnue.part_verte * 100)} % de l'emprise verte à l'orthophoto)` : '') +
+                  ? ` (${Math.round(ud.inconnue.part_verte * 100)} % de l'emprise `
+                    + (TOITS_COUVERT === 'lidar_hd' ? 'en végétation au LiDAR HD)' : 'verte à l\'orthophoto)') : '') +
               `<br>dessiné à ${hMur.toFixed(0)} m` +
               (p.nombre_d_etages > 0 ? ` (${p.nombre_d_etages} étage(s) BD TOPO)` : ' (un étage, par défaut)')
             : `<br>murs ${hMur.toFixed(1)} m` +

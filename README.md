@@ -807,8 +807,15 @@ principales :
   code de la page : `node outils/verifier-geometrie.mjs`.
 - **Bâtiments sous les arbres.** Le LiDAR y lit la canopée : une annexe de
   12 m² sous les feuillages lisait un toit plat à 12 m qui passait tous les tests
-  de forme. L'orthophoto tranche : au-delà d'un tiers de l'emprise verte, la
-  hauteur est déclarée inconnue, et le bâtiment est dessiné pâle, sans toit.
+  de forme. La carte des classes du LiDAR HD tranche (couche
+  `IGNF_LIDAR-HD_CLASS`, la classification du nuage aplatie en 2D par
+  l'IGN) : au-delà d'un tiers de l'emprise en végétation, la hauteur est
+  déclarée inconnue, et le bâtiment est dessiné pâle, sans toit. Jusqu'à la
+  scène v15, c'était l'orthophoto : son vert (ExG ≥ 4) prenait des toits gris,
+  des parvis et des routes pour des feuillages, et rejetait ainsi 39 à 43 % de
+  la surface des toits à Strasbourg et à Gordes, quand le nuage n'en met que
+  0 à 4 % sous les arbres. Hors couverture LiDAR HD, l'orthophoto reste le
+  repli.
 - **Végétation.** Une cellule du modèle de hauteur est de la végétation si elle
   tombe dans une zone BD TOPO, ou si l'orthophoto y est verte (indice
   ExG = 2G − R − B, seuil 4 : 93 % de la végétation reconnue pour 2 % de toits
@@ -940,9 +947,11 @@ principales :
   chaque visite (deux à huit secondes de carte graphique), dans des textures
   de 300 Mo à Gordes en zone de 1 000 m, 720 Mo en zone de 2 000 m : un
   téléphone peut n'y pas suffire.
-- **La règle « sous les arbres » est sévère** dans les tissus denses et arborés,
-  où l'orthophoto, qui n'est pas une vraie orthophoto, décale les feuillages
-  sur les emprises voisines.
+- **La règle « sous les arbres »** suit le nuage LiDAR HD, d'une date qui
+  n'est pas celle de la BD TOPO : un arbre abattu depuis le relevé couvre
+  encore son toit. Hors couverture LiDAR HD, elle suit l'orthophoto, qui
+  n'est pas une vraie orthophoto et décale les feuillages sur les emprises
+  voisines.
 
 ## API
 

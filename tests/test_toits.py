@@ -466,6 +466,27 @@ def test_cabane_hors_canopee_garde_le_repli_bd_topo():
     assert "gouttiere" not in t
 
 
+def test_la_vegetation_du_lidar_juge_le_couvert_a_la_place_de_l_orthophoto():
+    """Scène v16 : sur une grille LiDAR HD, la carte des classes dit qui est
+    sous les arbres (vue3d/classes.py), pas le vert de l'orthophoto."""
+    from vue3d.toits import toits_pour_emprise
+    from vue3d.ortho import EXG_SEUIL
+    bbox, bats, grille, canopee = _emprise_cabane(h_canopee=12.0, h_cabane=12.0)
+    vert_partout = np.full(canopee.shape, EXG_SEUIL + 10, dtype=np.int8)
+    # Le nuage voit la canopée : sous couvert, même avec l'orthophoto.
+    r = toits_pour_emprise(*bbox, bats, grille, vert_partout, vegetation=canopee.astype(np.uint8))
+    assert r["couvert"] == "lidar_hd" and r["toits"]["CABANE"]["sous_couvert"] is True
+    # Une toiture que l'orthophoto voit verte mais que le nuage voit bâtie :
+    # ni sous couvert ni hauteur inconnue — le cas des toits gris, des parvis.
+    bbox, bats, grille, canopee = _emprise_cabane(h_canopee=0.0, h_cabane=2.5)
+    rien = np.zeros(canopee.shape, dtype=np.uint8)
+    t = toits_pour_emprise(*bbox, bats, grille, vert_partout, vegetation=rien)["toits"]["CABANE"]
+    assert t["sous_couvert"] is False and t["hauteur_inconnue"] is False and t["part_verte"] == 0.0
+    # Hors LiDAR HD (repli MNS − MNT), l'orthophoto reste le juge.
+    r = toits_pour_emprise(*bbox, bats, {**grille, "source": "mns_mnt"}, vert_partout, vegetation=rien)
+    assert r["couvert"] == "orthophoto" and r["toits"]["CABANE"]["sous_couvert"] is True
+
+
 def test_cabane_sans_orthophoto_ne_declare_rien():
     """Sans grille ExG (exg=None), pas de second avis : part_verte reste None
     et le profil minimal n'affirme rien — même repli qu'avant le correctif."""

@@ -1116,7 +1116,7 @@ def _toit_du_batiment(f, valeurs, hauteurs, exg, sol, verdure, xs, ys, lon0, lat
 
 
 def toits_pour_emprise(west, south, east, north, batiments_geojson, grille, exg,
-                       sol=None, processus=None):
+                       sol=None, processus=None, vegetation=None):
     """Profils de toit LiDAR pour les bâtiments d'une emprise.
 
     Args:
@@ -1132,6 +1132,11 @@ def toits_pour_emprise(west, south, east, north, batiments_geojson, grille, exg,
             LiDAR ne varie que de 0,6 m, et ondulait le toit d'autant.
         processus: nombre de processus du calcul (`_toits_en_parallele`) ;
             None pour celui du service, 1 pour tout calculer ici.
+        vegetation: végétation du LiDAR HD alignée sur la grille
+            (`classes.fetch_vegetation_lidar`), ou None. Sur une grille
+            LiDAR HD, elle remplace la grille ExG pour juger un toit sous les
+            arbres et écarter ses cellules feuillues (vue3d/classes.py) ;
+            la source est dite dans `couvert`.
 
     Returns:
         dict: source ('lidar_hd' | 'mns_mnt' | None), resolution_m, ortho, et
@@ -1141,8 +1146,18 @@ def toits_pour_emprise(west, south, east, north, batiments_geojson, grille, exg,
         qualifiée), jamais rien : la vue doit savoir s'il est sous les arbres.
     """
     west, south, east, north = map(float, (west, south, east, north))
+    if vegetation is not None and grille.get("source") == "lidar_hd":
+        # Lue comme une grille ExG : 127 sur la végétation, −127 ailleurs —
+        # part_verte et cellules_du_toit la seuillent à EXG_SEUIL, et la part
+        # verte devient la part de l'emprise que le nuage voit en végétation.
+        # Pas un pixel transparent : il n'a pas de point, rien n'y pousse.
+        exg = np.where(np.asarray(vegetation).reshape(grille["height"], grille["width"]) > 0,
+                       127, -127).astype(np.int8)
+        couvert = "lidar_hd"
+    else:
+        couvert = "orthophoto" if exg is not None else None
     resultat = {"source": grille.get("source"), "resolution_m": TOITS_RESOLUTION_M,
-                "toits": {}, "ortho": exg is not None,
+                "toits": {}, "ortho": exg is not None, "couvert": couvert,
                 # Les fenêtres des surfaces de toit sont des index de cette grille.
                 "grille": {"bbox": grille.get("bbox"), "width": grille.get("width"),
                            "height": grille.get("height")}}

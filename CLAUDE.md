@@ -51,6 +51,7 @@ vue3d/
   houppiers.py  segmentation des arbres sur la grille à 0,5 m
   constructions.py  réservoirs et constructions ponctuelles BD TOPO, retirés du sursol des houppiers
   ortho.py      indice de verdure ExG, mosaïque d'orthophoto
+  classes.py    carte des classes du LiDAR HD (WMS IGNF_LIDAR-HD_CLASS) : la végétation qui dit un toit sous les arbres, à la place de l'ExG sur grille LiDAR HD
   relief.py     RGE ALTI quantifié au décimètre, anneau de relief alentour
   eau.py        étendues et cours d'eau BD TOPO, découpés sur l'emprise
   lignes.py     lignes à haute tension et hauteur de leurs supports

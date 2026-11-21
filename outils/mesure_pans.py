@@ -19,6 +19,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from vue3d.batiments import decouper_batiments
+from vue3d.classes import fetch_vegetation_lidar
 from vue3d.couches import COUCHE_BATIMENTS, lire_couche
 from vue3d.mnh import fetch_mnh_grid, fetch_sol_grid
 from vue3d.ortho import fetch_exg_grid
@@ -37,8 +38,11 @@ def mesurer(nom, lat, lon):
     exg = fetch_exg_grid(west, south, east, north, grille["width"], grille["height"])
     sol = fetch_sol_grid(west, south, east, north, grille["width"], grille["height"],
                          grille["source"])
+    # Le couvert au nuage classé, comme la scène depuis la v16 (vue3d/classes.py).
+    vegetation = fetch_vegetation_lidar(west, south, east, north, grille["width"], grille["height"])
     debut = time.perf_counter()
-    toits = toits_pour_emprise(west, south, east, north, bats, grille, exg, sol)["toits"]
+    toits = toits_pour_emprise(west, south, east, north, bats, grille, exg, sol,
+                               vegetation=vegetation)["toits"]
     duree = time.perf_counter() - debut
     pans = [p["pans"] for p in toits.values() if "pans" in p]
     surfaces = [p["surface"] for p in toits.values() if "surface" in p]

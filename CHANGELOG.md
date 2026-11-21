@@ -11,6 +11,26 @@ Les plus récents en premier. Les chiffres cités sont ceux mesurés au moment d
 changement, sur des lieux publics ; le détail et la méthode sont dans les
 messages de commit et dans les commentaires des modules.
 
+## Scène v16 — 21 novembre 2026
+
+### Changé
+
+- **Les toits sous les arbres jugés par le nuage LiDAR HD**, et non plus
+  par l'orthophoto : la carte des classes de l'IGN (`IGNF_LIDAR-HD_CLASS`,
+  la classification du nuage aplatie en 2D) dit où le nuage voit de la
+  végétation, en une requête de plus par scène (vue3d/classes.py). Le vert de
+  l'orthophoto (ExG ≥ 4) prenait des toits gris, des parvis et des routes pour
+  des feuillages : il rejetait 43 % de la surface des toits à Gordes et 39 % à
+  Strasbourg (zones de 1 000 m), dessinés en blocs pâles « hauteur inconnue »,
+  quand le nuage n'en met que 4 % et 0 % sous les arbres ; aucun seuil ExG ne
+  les séparait. Les cellules feuillues écartées d'un toit sont aussi celles du
+  nuage. Mesuré sur le nuage brut, écart de forme moyen de la vue pondéré par
+  la surface : 0,39 → 0,20 m à Gordes, 1,28 → 0,39 m à Strasbourg ; surface
+  des toits à plus de 30 cm : 44 → 23 %, 56 → 24 % ; toits en pans : 75 → 153,
+  251 → 410. Les vrais toits sous les arbres le restent (71 à Gordes, 9 à
+  Strasbourg). Hors couverture LiDAR HD, l'orthophoto reste le repli. Toutes
+  les scènes sont reconstruites à leur première ouverture.
+
 ## Scène v15 — 15 octobre 2026
 
 ### Ajouté

@@ -32,6 +32,9 @@ export const meshesToits = [];
 // Rempli avant construire() — le rendu s'en sert en priorité sur la BD TOPO.
 export let TOITS = {};
 export let TOITS_SOURCE = null;
+// Ce qui dit qu'un toit est sous les arbres : 'lidar_hd' (la carte des classes
+// du nuage, scène v16, vue3d/classes.py) ou 'orthophoto' (son vert, avant).
+export let TOITS_COUVERT = null;
 // Grille MNH dont les surfaces de toit sont des fenêtres : { bbox, width, height }.
 export let TOITS_GRILLE = null;
 // Monuments OSM : { parties, remplaces } ou null (vue3d/monuments.py). Dessinés
@@ -53,6 +56,7 @@ export let CIBLE = null;
 /** Les toitures de la scène : { toits, source, grille }. */
 export function poserToits(toits) {
     TOITS = toits.toits; TOITS_SOURCE = toits.source; TOITS_GRILLE = toits.grille || null;
+    TOITS_COUVERT = toits.couvert || (toits.ortho ? 'orthophoto' : null);
 }
 export function poserMonuments(m) { MONUMENTS = m; }
 export function basculerMonuments() { monumentsActifs = !monumentsActifs; }

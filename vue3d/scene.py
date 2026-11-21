@@ -40,7 +40,7 @@ toits de roofer (vue3d/roofer.py), pour comparer, une cinquième
 (`Cache.obtenir_roofer`, `VUE3D_ROOFER`).
 
 La construction coûte de quelques secondes à une demi-minute selon la zone et
-le lieu. Ses seize lectures partent ensemble (`_lire_ensemble`) : 3 s environ
+le lieu. Ses dix-sept lectures partent ensemble (`_lire_ensemble`) : 3 s environ
 pour une zone de 1 000 m, environ une seconde pour l'emprise par défaut — le
 temps de la plus longue, au lieu de 13 s et de 4 à 5 s une à une. Le
 résultat est mis en cache sur disque, par point arrondi à 4 décimales (une
@@ -99,6 +99,7 @@ from .releves import rectangle as rectangle_releve
 from .relief import ANNEAU_TAILLE, RELIEF_TAILLE, fetch_relief, fetch_relief_anneau
 from .solaire import SOLAIRE_VERSION, fetch_solaire, solaire_pour_emprise
 from .toits import TOITS_RESOLUTION_M, toits_pour_emprise
+from .classes import fetch_vegetation_lidar
 from .vehicules import (NAVIRES_VERSION, PISCINES_VERSION, VEHICULES_VERSION, fetch_mer,
                         navires_pour_emprise, piscines_pour_emprise, vehicules_pour_emprise)
 
@@ -125,7 +126,10 @@ journal = logging.getLogger(__name__)
 #      refroidissement (constructions.py).
 # 15 : toits-terrasses en pans, même proches du toit résumé
 #      (toits.TOITS_PLAT_PENTE_DEG) : le résumé n'a qu'une pente.
-SCENE_VERSION = 15
+# 16 : toits sous les arbres jugés par la carte des classes du LiDAR HD, et
+#      non plus par l'orthophoto (vue3d/classes.py) : l'ExG en rejetait 39 à
+#      43 % de l'aire des toits.
+SCENE_VERSION = 16
 # Demi-côté de l'emprise, en degrés : ~178 m de part et d'autre du point.
 SCENE_DELTA = 0.0016
 # Demi-côté de l'anneau, en mètres et non en degrés : carré sur le terrain.
@@ -150,13 +154,13 @@ ZONE_MAX_M = 2000
 # Côté nord-sud de l'emprise par défaut, en mètres.
 SCENE_COTE_M = 2 * SCENE_DELTA * 111320
 # Étapes d'une construction, que la page affiche pendant l'attente : les
-# seize lectures de construire(), puis les toitures et les houppiers
+# dix-sept lectures de construire(), puis les toitures et les houppiers
 # d'assembler(). Un compteur plutôt qu'un pourcentage : les étapes sont très
 # inégales (moins d'une seconde pour la plupart des lectures, plusieurs pour
 # la grille MNH et les deux calculs), une part du temps serait fausse.
 # Les lectures partent ensemble : l'étape k est alors « k − 1 lectures
 # finies », et son libellé dit celles qu'on attend encore.
-ETAPES_SCENE = 18
+ETAPES_SCENE = 19
 # Libellés des deux étapes de calcul d'assembler, toujours les dernières
 # annoncées : la page pondère sa barre d'attente d'après elles
 # (partConstruite), et outils/verifier-geometrie.mjs le contrôle.
@@ -178,6 +182,7 @@ RELIEF_POINTS_PAR_KM = 512
 SOURCE_PROBABLE = "lidar_hd"
 LECTURE_GRILLE = "hauteurs du sursol"
 LECTURE_TERRAIN = "terrain sous les toits"
+LECTURE_VEGETATION = "classes du LiDAR"
 NOM_SCENE = "scene.json.gz"
 NOM_ORTHO = "ortho.jpg"
 NOM_MONUMENTS = "monuments.json.gz"
@@ -363,7 +368,7 @@ def emprise_anneau(lat, lon, demi_m=ANNEAU_DEMI_M, zone=None):
 
 def assembler(west, south, east, north, batiments, vegetation, forets, routes,
               grille, exg, relief, anneau=None, sol=None, eau=None, lignes=None,
-              avancer=None, constructions=None):
+              avancer=None, constructions=None, vegetation_lidar=None):
     """Contenu de la scène à partir des sources déjà obtenues.
 
     Séparée de `construire` pour être testable sans réseau. Les grilles MNH,
@@ -373,7 +378,9 @@ def assembler(west, south, east, north, batiments, vegetation, forets, routes,
     de chaque calcul, toujours dans cet ordre : « toitures » au début des
     toitures, « houppiers » à leur fin — les houppiers ont alors pu commencer
     avec elles. `constructions` : les couches BD TOPO (réservoirs,
-    constructions ponctuelles), None sans elles.
+    constructions ponctuelles), None sans elles. `vegetation_lidar` : la
+    végétation de la carte des classes du LiDAR HD (vue3d/classes.py), que
+    les toitures lisent à la place de l'orthophoto ; None sans elle.
     """
     from .toits import toitures_au_bassin
     avancer = avancer or (lambda libelle: None)
@@ -430,11 +437,13 @@ def assembler(west, south, east, north, batiments, vegetation, forets, routes,
         with concurrent.futures.ThreadPoolExecutor(
                 max_workers=1, thread_name_prefix="houppiers") as fil:
             pendant = fil.submit(vegetation_et_constructions)
-            toits = toits_pour_emprise(west, south, east, north, decoupes, grille, exg, sol)
+            toits = toits_pour_emprise(west, south, east, north, decoupes, grille, exg, sol,
+                                       vegetation=vegetation_lidar)
             avancer(ETAPES_DE_CALCUL[1])
             construits, veg = pendant.result()
     else:
-        toits = toits_pour_emprise(west, south, east, north, decoupes, grille, exg, sol)
+        toits = toits_pour_emprise(west, south, east, north, decoupes, grille, exg, sol,
+                                   vegetation=vegetation_lidar)
         avancer(ETAPES_DE_CALCUL[1])
         construits, veg = vegetation_et_constructions()
     return {
@@ -524,6 +533,9 @@ def construire(lat, lon, avancer=None, zone=None):
         (LECTURE_GRILLE, functools.partial(fetch_mnh_grid, *bbox, resolution_m=TOITS_RESOLUTION_M,
                                            max_pixels=GRILLE_PIXELS_MAX)),
         ("orthophoto", functools.partial(fetch_exg_grid, *bbox, largeur, hauteur)),
+        # Les toits sous les arbres, au nuage classé plutôt qu'à l'orthophoto
+        # (vue3d/classes.py) : une image de la taille de la grille.
+        (LECTURE_VEGETATION, functools.partial(fetch_vegetation_lidar, *bbox, largeur, hauteur)),
         (LECTURE_TERRAIN, functools.partial(terrain, SOURCE_PROBABLE)),
         ("mosaïque d'orthophoto", functools.partial(fetch_ortho_jpeg, *bbox, **mosaique)),
         ("relief", functools.partial(fetch_relief, *bbox, taille=taille_relief)),
@@ -539,7 +551,8 @@ def construire(lat, lon, avancer=None, zone=None):
                       lu["BD Forêt"], lu["routes"], grille, lu["orthophoto"], lu["relief"],
                       lu["relief de l'anneau"], lu[LECTURE_TERRAIN],
                       (lu["étendues d'eau"], lu["cours d'eau"]), lignes, avancer,
-                      (lu["réservoirs"], lu["constructions ponctuelles"]))
+                      (lu["réservoirs"], lu["constructions ponctuelles"]),
+                      vegetation_lidar=lu[LECTURE_VEGETATION])
     journal.info("Scène %.4f, %.4f (zone %s) : %d bâtiment(s), %d houppier(s), source %s, "
                  "lectures en %.1f s",
                  lat, lon, zone or "par défaut", len(scene["batiments"].get("features", [])),
@@ -763,7 +776,7 @@ class Cache:
 
     # Une scène se reconstruit à la demande (bouton de la page) au plus une
     # fois par RECONSTRUIRE_APRES_S, comptées depuis son écriture : chaque
-    # reconstruction relit les seize sources de la scène, l'orthophoto à
+    # reconstruction relit les dix-sept sources de la scène, l'orthophoto à
     # 0,2 m des détections et les couches à part, une trentaine de requêtes
     # vers la Géoplateforme, qui limite chaque adresse IP (30 requêtes/s en
     # WFS). Un bouton pressé en boucle n'y gagnerait rien : l'IGN ne publie
