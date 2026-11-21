@@ -4554,6 +4554,10 @@ document.getElementById('t-plan').addEventListener('click', () => basculerFond('
 // affichées : l'orthophoto y figure toujours, car c'est elle qui classe la
 // végétation, même quand le fond affiché est le plan.
 let sourceRelief = null;
+const groupePostesEnedis = new THREE.Group();
+scene.add(groupePostesEnedis);
+let POSTES_ENEDIS = null;
+let postesEnedisConstruit = false;
 function majCredits() {
     const ign = ['BD TOPO', 'BD Forêt', 'LiDAR HD', 'Orthophotos'];
     if ((sourceRelief && /RGE ALTI/.test(sourceRelief)) || horizonMontre) ign.push('RGE ALTI');
@@ -7513,11 +7517,6 @@ const URL_POSTES_ENEDIS = `api/postes_enedis?${REQUETE}`;
 const MAT_POSTE_ENEDIS = new THREE.MeshStandardMaterial({
     color: 0xe8832c, roughness: 0.8, transparent: true, opacity: 0.8,
     polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
-
-const groupePostesEnedis = new THREE.Group();
-scene.add(groupePostesEnedis);
-let POSTES_ENEDIS = null;
-let postesEnedisConstruit = false;
 
 function construirePostesEnedis() {
     if (!POSTES_ENEDIS || !reliefRegle || postesEnedisConstruit) return;
