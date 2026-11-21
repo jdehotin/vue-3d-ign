@@ -7038,6 +7038,14 @@ const MAT_PISTE = new THREE.MeshStandardMaterial({
 const MAT_POSTE = new THREE.MeshStandardMaterial({
     color: 0xa08a63, roughness: 1, transparent: true, opacity: 0.5,
     polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+// Postes sources (importance 1-2, HTB/HTA) : orange vif pour les distinguer.
+const MAT_POSTE_SOURCE = new THREE.MeshStandardMaterial({
+    color: 0xe8832c, roughness: 0.8, transparent: true, opacity: 0.75,
+    polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+// Sous-stations HTA (importance 3) : orange intermédiaire.
+const MAT_POSTE_HTA = new THREE.MeshStandardMaterial({
+    color: 0xbf7030, roughness: 0.9, transparent: true, opacity: 0.6,
+    polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
 const MAT_HAIE = new THREE.MeshStandardMaterial({
     color: 0x3e6b33, roughness: 1, flatShading: true });
 
@@ -7091,8 +7099,16 @@ function construireEmprises() {
               + (p.fonction ? `<br>${p.fonction}` : '') + '<br><i>BD TOPO</i>');
     }
     for (const p of EMPRISES.postes) {
-        poser('poste', p, groupePostes, MAT_POSTE, EMPRISE_DECALAGE,
-              `<b>${p.nom || 'Poste de transformation'}</b><br><i>BD TOPO</i>`);
+        const imp = Number(p.importance) || 5;
+        const mat = imp <= 2 ? MAT_POSTE_SOURCE : imp === 3 ? MAT_POSTE_HTA : MAT_POSTE;
+        const type = imp === 1 ? 'Poste THT/HTA'
+                   : imp === 2 ? 'Poste source HTB/HTA'
+                   : imp === 3 ? 'Sous-station HTA'
+                   : 'Cabine HTA/BT';
+        poser('poste', p, groupePostes, mat, EMPRISE_DECALAGE,
+              `<b>${p.nom || type}</b>`
+              + (p.nom ? `<br>${type}` : '')
+              + `<br><i>BD TOPO</i>`);
     }
     // Comme l'eau, les routes et les ouvrages : les aplats restent à plat tant
     // que le relief n'est pas appliqué aux sommets qu'on vient d'ajouter.
