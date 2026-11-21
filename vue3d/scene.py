@@ -76,13 +76,9 @@ from .polygone import (M_PAR_DEGRE_LAT, Polygone, analyser as analyser_polygone,
                        decouper_features, decouper_sources)
 from .bornes import BORNES_VERSION, bornes_pour_emprise, fetch_bornes
 from .dpe import DPE_VERSION, dpe_pour_emprise, fetch_dpe
-from .dvf import DVF_VERSION, dvf_pour_emprise, fetch_dvf
 from .eau import (COUCHE_COURS_EAU, COUCHE_SURFACES_EAU, eau_pour_emprise,
                   masque_eau)
 from .emprises import EMPRISES_VERSION, emprises_pour_emprise, fetch_emprises
-from .foret import FORET_VERSION, foret_pour_emprise, fetch_foret
-from .rpg import RPG_VERSION, rpg_pour_emprise, fetch_rpg
-from .chemins import CHEMINS_VERSION, chemins_pour_emprise, fetch_chemins
 from .reseaux import RESEAUX_VERSION, reseaux_pour_emprise, fetch_reseaux
 from .postes_enedis import (POSTES_ENEDIS_VERSION, postes_enedis_pour_emprise,
                              fetch_postes_enedis)
@@ -258,9 +254,6 @@ NOM_MONUMENTS = "monuments.json.gz"
 # La version de la couche est dans son nom : la changer ne refait qu'elle.
 NOM_OUVRAGES = f"ouvrages-v{OUVRAGES_VERSION}.json.gz"
 NOM_EMPRISES = f"emprises-v{EMPRISES_VERSION}.json.gz"
-NOM_FORET = f"foret-v{FORET_VERSION}.json.gz"
-NOM_RPG = f"rpg-v{RPG_VERSION}.json.gz"
-NOM_CHEMINS = f"chemins-v{CHEMINS_VERSION}.json.gz"
 NOM_RESEAUX = f"reseaux-v{RESEAUX_VERSION}.json.gz"
 NOM_POSTES_ENEDIS = f"postes-enedis-v{POSTES_ENEDIS_VERSION}.json.gz"
 
@@ -270,10 +263,8 @@ NOM_PANNEAUX = f"panneaux-v{PANNEAUX_VERSION}.json.gz"
 NOM_NUAGE = f"nuage-v{NUAGE_VERSION}.json.gz"
 # La première des deux lectures du nuage, sur un carré autour du point.
 NOM_NUAGE_PROCHE = f"nuage-proche-v{NUAGE_VERSION}.json.gz"
-# DPE de l'ADEME, ventes DVF et bornes de recharge : lus seulement à la
-# demande de la page.
+# DPE de l'ADEME et bornes de recharge : lus seulement à la demande de la page.
 NOM_DPE = f"dpe-v{DPE_VERSION}.json.gz"
-NOM_DVF = f"dvf-v{DVF_VERSION}.json.gz"
 NOM_BORNES = f"bornes-v{BORNES_VERSION}.json.gz"
 
 
@@ -327,10 +318,6 @@ class DpeIndisponibles(RuntimeError):
     """L'API de l'ADEME n'a pas répondu : rien n'est mis en cache."""
 
 
-class DvfIndisponible(RuntimeError):
-    """Le cadastre ou les fichiers DVF n'ont pas répondu : rien n'est mis en cache."""
-
-
 class BornesIndisponibles(RuntimeError):
     """La base des bornes de recharge n'a pas répondu : rien n'est mis en cache."""
 
@@ -357,21 +344,6 @@ class OuvragesIndisponibles(RuntimeError):
 class EmprisesIndisponibles(RuntimeError):
     """Une couche d'emprises de l'IGN n'a pas répondu : rien n'est mis en
     cache, la scène reste affichée sans elles, réessayer plus tard."""
-
-
-class ForetIndisponible(RuntimeError):
-    """La couche BD Forêt v2 de l'IGN n'a pas répondu : rien n'est mis en
-    cache, la scène reste affichée sans elle, réessayer plus tard."""
-
-
-class RpgIndisponible(RuntimeError):
-    """La couche RPG de l'IGN n'a pas répondu : rien n'est mis en cache,
-    la scène reste affichée sans elle, réessayer plus tard."""
-
-
-class CheminsIndisponibles(RuntimeError):
-    """La couche des voies piétonnes et cyclables n'a pas pu être lue : rien
-    n'est mis en cache, la scène reste affichée sans eux, réessayer plus tard."""
 
 
 class ReseauxIndisponibles(RuntimeError):
@@ -956,11 +928,10 @@ class Cache:
     GRANDES_ZONES_ENSEMBLE = 1
 
     def __init__(self, dossier, lire_monuments=fetch_monuments, lire_ouvrages=fetch_ouvrages,
-                 lire_emprises=fetch_emprises, lire_foret=fetch_foret, lire_rpg=fetch_rpg,
-                 lire_chemins=fetch_chemins, lire_reseaux=fetch_reseaux,
+                 lire_emprises=fetch_emprises, lire_reseaux=fetch_reseaux,
                  lire_postes_enedis=fetch_postes_enedis,
                  lire_vehicules=None, lire_panneaux=None, lire_nuage=fetch_nuage,
-                 lire_dpe=fetch_dpe, lire_dvf=fetch_dvf, lire_mer=fetch_mer,
+                 lire_dpe=fetch_dpe, lire_mer=fetch_mer,
                  lire_bornes=fetch_bornes):
         """`lire_vehicules` : de `vehicules.lecteur()`, ou une doublure qui a
         la même forme — `mode`, `detecteurs`, `orthophoto(emprise)` -> tableau
@@ -993,9 +964,6 @@ class Cache:
         self.lire_monuments = lire_monuments
         self.lire_ouvrages = lire_ouvrages
         self.lire_emprises = lire_emprises
-        self.lire_foret = lire_foret
-        self.lire_rpg = lire_rpg
-        self.lire_chemins = lire_chemins
         self.lire_reseaux = lire_reseaux
         self.lire_postes_enedis = lire_postes_enedis
         self.lire_vehicules = self._qui_cede(lire_vehicules)
@@ -1003,7 +971,6 @@ class Cache:
         self.lire_panneaux = lire_panneaux
         self.lire_nuage = lire_nuage
         self.lire_dpe = lire_dpe
-        self.lire_dvf = lire_dvf
         self.lire_mer = lire_mer
         self.lire_bornes = lire_bornes
         self._lectures = {}
@@ -1012,15 +979,9 @@ class Cache:
                 max_workers=2, thread_name_prefix="overpass"),
             NOM_OUVRAGES: concurrent.futures.ThreadPoolExecutor(
                 max_workers=2, thread_name_prefix="ouvrages"),
-            # Cinq petites lectures WFS, comme les ouvrages.
+            # Petites lectures WFS, comme les ouvrages.
             NOM_EMPRISES: concurrent.futures.ThreadPoolExecutor(
                 max_workers=2, thread_name_prefix="emprises"),
-            NOM_FORET: concurrent.futures.ThreadPoolExecutor(
-                max_workers=2, thread_name_prefix="foret"),
-            NOM_RPG: concurrent.futures.ThreadPoolExecutor(
-                max_workers=2, thread_name_prefix="rpg"),
-            NOM_CHEMINS: concurrent.futures.ThreadPoolExecutor(
-                max_workers=2, thread_name_prefix="chemins"),
             NOM_RESEAUX: concurrent.futures.ThreadPoolExecutor(
                 max_workers=2, thread_name_prefix="reseaux"),
             NOM_POSTES_ENEDIS: concurrent.futures.ThreadPoolExecutor(
@@ -1379,63 +1340,6 @@ class Cache:
             lambda message: EmprisesIndisponibles(f"emprises illisibles : {message}"),
             lambda bbox, brut, scene: emprises_pour_emprise(*bbox, brut), zone=zone)
 
-    def prelire_foret(self, lat, lon, zone=None):
-        """Lance la lecture de la BD Forêt v2 en tâche de fond."""
-        self._prelire(NOM_FORET, lat, lon, self.lire_foret, zone)
-
-    def obtenir_foret(self, lat, lon, construire=construire, zone=None):
-        """Chemin du dossier où la couche BD Forêt v2 du point est écrite.
-
-        La couche ne lit rien de la scène : ses massifs sont drapés par la vue
-        sur le relief.
-
-        Raises:
-            ForetIndisponible si la couche de l'IGN n'a pas répondu : rien
-            n'est écrit, la demande suivante réessaie.
-        """
-        return self._obtenir_couche(
-            NOM_FORET, lat, lon, construire, self.lire_foret,
-            lambda message: ForetIndisponible(f"BD Forêt illisible : {message}"),
-            lambda bbox, brut, scene: foret_pour_emprise(*bbox, brut), zone=zone)
-
-    def prelire_rpg(self, lat, lon, zone=None):
-        """Lance la lecture du RPG en tâche de fond."""
-        self._prelire(NOM_RPG, lat, lon, self.lire_rpg, zone)
-
-    def obtenir_rpg(self, lat, lon, construire=construire, zone=None):
-        """Chemin du dossier où la couche RPG du point est écrite.
-
-        La couche ne lit rien de la scène : ses parcelles sont drapées par la
-        vue sur le relief.
-
-        Raises:
-            RpgIndisponible si la couche de l'IGN n'a pas répondu : rien
-            n'est écrit, la demande suivante réessaie.
-        """
-        return self._obtenir_couche(
-            NOM_RPG, lat, lon, construire, self.lire_rpg,
-            lambda message: RpgIndisponible(f"RPG illisible : {message}"),
-            lambda bbox, brut, scene: rpg_pour_emprise(*bbox, brut), zone=zone)
-
-    def prelire_chemins(self, lat, lon, zone=None):
-        """Lance la lecture des voies piétonnes et cyclables en tâche de fond."""
-        self._prelire(NOM_CHEMINS, lat, lon, self.lire_chemins, zone)
-
-    def obtenir_chemins(self, lat, lon, construire=construire, zone=None):
-        """Chemin du dossier où la couche des chemins et pistes du point est écrite.
-
-        La couche ne lit rien de la scène : ses segments sont drapés par la
-        vue sur le relief.
-
-        Raises:
-            CheminsIndisponibles si la couche de l'IGN n'a pas répondu : rien
-            n'est écrit, la demande suivante réessaie.
-        """
-        return self._obtenir_couche(
-            NOM_CHEMINS, lat, lon, construire, self.lire_chemins,
-            lambda message: CheminsIndisponibles(f"Chemins illisibles : {message}"),
-            lambda bbox, brut, scene: chemins_pour_emprise(*bbox, brut), zone=zone)
-
     def prelire_reseaux(self, lat, lon, zone=None):
         """Lance la lecture des canalisations en tâche de fond."""
         self._prelire(NOM_RESEAUX, lat, lon, self.lire_reseaux, zone)
@@ -1572,21 +1476,6 @@ class Cache:
                 *bbox, brut, scene.get("batiments"),
                 polygone=zone if isinstance(zone, Polygone) else None),
             zone=zone)
-
-    def obtenir_dvf(self, lat, lon, construire=construire, zone=None):
-        """Chemin du dossier où la couche des ventes DVF du point est écrite.
-
-        Jamais lue d'avance, datée, relue par « Reconstruire la scène »,
-        comme les DPE ; elle ne lit rien de la scène (vue3d/dvf.py).
-
-        Raises:
-            DvfIndisponible si le cadastre ou les fichiers DVF n'ont pas
-            répondu : rien n'est écrit, la demande suivante réessaie.
-        """
-        return self._obtenir_couche(
-            NOM_DVF, lat, lon, construire, self.lire_dvf,
-            lambda message: DvfIndisponible(f"ventes DVF illisibles : {message}"),
-            lambda bbox, brut, scene: dvf_pour_emprise(*bbox, brut), zone=zone)
 
     def obtenir_bornes(self, lat, lon, construire=construire, zone=None):
         """Chemin du dossier où la couche des bornes de recharge du point est

@@ -55,7 +55,6 @@ journal = logging.getLogger(__name__)
 EMPRISES_VERSION = 1
 
 COUCHES = {
-    "cimetieres": "BDTOPO_V3:cimetiere",
     "aerodromes": "BDTOPO_V3:aerodrome",
     "pistes": "BDTOPO_V3:piste_d_aerodrome",
     "postes": "BDTOPO_V3:poste_de_transformation",
@@ -167,8 +166,6 @@ def emprises_pour_emprise(west, south, east, north, brut):
     brut = brut or {}
     cadre = box(west, south, east, north)
 
-    cimetieres = _aplats(brut.get("cimetieres"), cadre, lambda p: {
-        "nom": p.get("toponyme"), "nature": p.get("nature")})
     aerodromes = _aplats(brut.get("aerodromes"), cadre, lambda p: {
         "nom": p.get("toponyme"), "nature": p.get("nature"),
         "categorie": p.get("categorie"), "usage": p.get("usage"),
@@ -179,11 +176,10 @@ def emprises_pour_emprise(west, south, east, north, brut):
         "nom": p.get("toponyme"), "importance": p.get("importance")})
     haies = _haies(brut.get("haies"), cadre)
 
-    if not (cimetieres or aerodromes or pistes or postes or haies):
+    if not (aerodromes or pistes or postes or haies):
         return None
-    journal.info("Emprises : %d cimetière(s), %d aérodrome(s), %d piste(s), "
-                 "%d poste(s), %d haie(s)",
-                 len(cimetieres), len(aerodromes), len(pistes), len(postes), len(haies))
-    return {"version": EMPRISES_VERSION, "cimetieres": cimetieres,
+    journal.info("Emprises : %d aérodrome(s), %d piste(s), %d poste(s), %d haie(s)",
+                 len(aerodromes), len(pistes), len(postes), len(haies))
+    return {"version": EMPRISES_VERSION,
             "aerodromes": aerodromes, "pistes": pistes, "postes": postes,
             "haies": haies}

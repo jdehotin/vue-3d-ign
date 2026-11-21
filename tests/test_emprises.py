@@ -1,4 +1,4 @@
-"""Emprises BD TOPO (vue3d/emprises.py) : cimetières, aérodromes et leurs
+"""Emprises BD TOPO (vue3d/emprises.py) : aérodromes et leurs
 pistes, postes de transformation et haies — sans réseau."""
 import pytest
 
@@ -30,35 +30,23 @@ def _carre(fx0, fy0, fx1, fy1, **props):
     return _polygone([_pt(fx0, fy0), _pt(fx1, fy0), _pt(fx1, fy1), _pt(fx0, fy1)], **props)
 
 
-def _emprises(cimetieres=(), aerodromes=(), pistes=(), postes=(), haies=()):
-    brut = {"cimetieres": {"features": list(cimetieres)},
-            "aerodromes": {"features": list(aerodromes)},
+def _emprises(aerodromes=(), pistes=(), postes=(), haies=()):
+    brut = {"aerodromes": {"features": list(aerodromes)},
             "pistes": {"features": list(pistes)},
             "postes": {"features": list(postes)},
             "haies": {"features": list(haies)}}
     return emprises_pour_emprise(*EMPRISE, brut)
 
 
-def test_un_cimetiere_est_un_aplat_decoupe_et_nomme():
-    c = _emprises(cimetieres=[_carre(0.2, 0.4, 0.8, 0.6, toponyme="Cimetière du Sud",
-                                     nature="Militaire")])
-    (cimetiere,) = c["cimetieres"]
-    assert cimetiere["nom"] == "Cimetière du Sud"
-    assert cimetiere["nature"] == "Militaire"
-    assert cimetiere["geometrie"]["type"] == "MultiPolygon"
-    assert c["version"] == EMPRISES_VERSION
-    assert c["aerodromes"] == [] and c["haies"] == []
-
-
 def test_un_aplat_qui_sort_de_l_emprise_est_coupe_a_son_bord():
-    (cimetiere,) = _emprises(cimetieres=[_carre(0.5, 0.4, 1.5, 0.6)])["cimetieres"]
-    lons = [p[0] for poly in cimetiere["geometrie"]["coordinates"] for p in poly[0]]
+    (aerodrome,) = _emprises(aerodromes=[_carre(0.5, 0.4, 1.5, 0.6)])["aerodromes"]
+    lons = [p[0] for poly in aerodrome["geometrie"]["coordinates"] for p in poly[0]]
     assert max(lons) == pytest.approx(EMPRISE[2])
 
 
 def test_un_aplat_dont_seule_la_boite_touche_l_emprise_est_ecarte():
     """Le WFS le rend quand même : constaté sur des emprises de bord."""
-    assert _emprises(cimetieres=[_carre(-0.9, 0.4, 0.0, 0.6)]) is None
+    assert _emprises(aerodromes=[_carre(-0.9, 0.4, 0.0, 0.6)]) is None
 
 
 def test_les_emprises_en_projet_et_fictives_ne_sont_pas_dessinees():

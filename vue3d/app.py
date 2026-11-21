@@ -19,7 +19,6 @@
     GET /api/vehicules?lat=…&lon=…&detecteur=…   les véhicules vus d'un détecteur du service
     GET /api/panneaux?lat=…&lon=…    les panneaux solaires du registre, si le service en a un
     GET /api/dpe?lat=…&lon=…         les DPE de l'ADEME, à la demande de la page seulement
-    GET /api/dvf?lat=…&lon=…         les ventes DVF des parcelles, de même
     GET /api/bornes?lat=…&lon=…      les bornes de recharge (IRVE, data.gouv.fr), de même
     GET /api/avancement?lat=…&lon=…  l'étape de la construction en cours
     GET /api/tuile/<couche>/<z>/<x>/<y>  une tuile WMTS de l'IGN (ortho, plan) : du
@@ -65,32 +64,27 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 
 from .bornes import fetch_bornes
 from .dpe import fetch_dpe
-from .dvf import fetch_dvf
 from .emprises import fetch_emprises
-from .chemins import fetch_chemins
-from .foret import fetch_foret
 from .monuments import fetch_monuments
 from .nuage import fetch_nuage
 from .ouvrages import fetch_ouvrages
 from .reseaux import fetch_reseaux
 from .postes_enedis import fetch_postes_enedis
-from .rpg import fetch_rpg
 from .panneaux import REGISTRE_LICENCE
 from .polygone import Polygone
 from .panneaux import lecteur as lecteur_panneaux
-from .scene import (NOM_BORNES, NOM_CHEMINS, NOM_DPE, NOM_DVF, NOM_EMPRISES, NOM_FORET,
+from .scene import (NOM_BORNES, NOM_DPE, NOM_EMPRISES,
                     NOM_MONUMENTS,
                     NOM_NUAGE, NOM_NUAGE_PROCHE, NOM_ORTHO,
                     NOM_OUVRAGES, NOM_PANNEAUX, NOM_POSTES_ENEDIS, NOM_RESEAUX,
-                    NOM_RPG, NOM_SCENE,
-                    BornesIndisponibles, Cache, CheminsIndisponibles,
+                    NOM_SCENE,
+                    BornesIndisponibles, Cache,
                     DpeIndisponibles,
-                    DvfIndisponible, EmprisesIndisponibles, ForetIndisponible,
+                    EmprisesIndisponibles,
                     HorsEmprise, MonumentsIndisponibles, NuageIndisponible,
                     OuvragesIndisponibles,
                     PanneauxIndisponibles, PostesEnedisIndisponibles,
                     ReconstructionRefusee, ReseauxIndisponibles,
-                    RpgIndisponible,
                     SceneIncomplete,
                     VehiculesDesactives, VehiculesIndisponibles, point_normalise,
                     zone_normalisee)
@@ -455,18 +449,16 @@ class Quota:
 
 def creer_app(dossier_cache=None, construire=construire_scene, lire_monuments=fetch_monuments,
               lire_ouvrages=fetch_ouvrages, lire_emprises=fetch_emprises,
-              lire_foret=fetch_foret, lire_rpg=fetch_rpg,
-              lire_chemins=fetch_chemins, lire_reseaux=fetch_reseaux,
+              lire_reseaux=fetch_reseaux,
               lire_postes_enedis=fetch_postes_enedis,
               lire_vehicules=None,
               lire_panneaux=None,
-              lire_nuage=fetch_nuage, lire_dpe=fetch_dpe, lire_dvf=fetch_dvf, lire_mer=fetch_mer,
+              lire_nuage=fetch_nuage, lire_dpe=fetch_dpe, lire_mer=fetch_mer,
               lire_tuile=fetch_tuile, quota=None, proxy=None, relectures=None,
               lire_bornes=fetch_bornes):
     """`construire`, `lire_monuments`, `lire_ouvrages`, `lire_emprises`,
-    `lire_foret`, `lire_rpg`, `lire_chemins`, `lire_reseaux`,
-    `lire_postes_enedis`, `lire_vehicules`,
-    `lire_panneaux`, `lire_nuage`, `lire_dpe`, `lire_dvf`, `lire_mer` et
+    `lire_reseaux`, `lire_postes_enedis`, `lire_vehicules`,
+    `lire_panneaux`, `lire_nuage`, `lire_dpe`, `lire_mer` et
     `lire_bornes` sont injectables
     pour les tests, qui n'appellent ni l'IGN, ni Overpass, ni l'ADEME, ni
     data.gouv, et ne chargent aucun réseau ni registre. `lire_vehicules` :
@@ -497,11 +489,10 @@ def creer_app(dossier_cache=None, construire=construire_scene, lire_monuments=fe
     # VUE3D_CACHE=./cache, l'orthophoto répondait 404.
     cache = Cache(os.path.abspath(dossier_cache or os.environ.get("VUE3D_CACHE", "/tmp/vue3d-cache")),
                   lire_monuments=lire_monuments, lire_ouvrages=lire_ouvrages,
-                  lire_emprises=lire_emprises, lire_foret=lire_foret, lire_rpg=lire_rpg,
-                  lire_chemins=lire_chemins, lire_reseaux=lire_reseaux,
+                  lire_emprises=lire_emprises, lire_reseaux=lire_reseaux,
                   lire_postes_enedis=lire_postes_enedis,
                   lire_vehicules=lire_vehicules, lire_panneaux=lire_panneaux,
-                  lire_nuage=lire_nuage, lire_dpe=lire_dpe, lire_dvf=lire_dvf,
+                  lire_nuage=lire_nuage, lire_dpe=lire_dpe,
                   lire_mer=lire_mer, lire_bornes=lire_bornes)
     # Hors du dossier des versions de scène : une tuile ne dépend pas de
     # SCENE_VERSION.
@@ -637,8 +628,6 @@ def creer_app(dossier_cache=None, construire=construire_scene, lire_monuments=fe
                 return cache.obtenir_nuage_proche(*p, construire=construire, zone=zone), None
             if couche == NOM_DPE:
                 return cache.obtenir_dpe(*p, construire=construire, zone=zone), None
-            if couche == NOM_DVF:
-                return cache.obtenir_dvf(*p, construire=construire, zone=zone), None
             if couche == NOM_BORNES:
                 return cache.obtenir_bornes(*p, construire=construire, zone=zone), None
             if couche == COUCHE_PISCINES:
@@ -657,9 +646,6 @@ def creer_app(dossier_cache=None, construire=construire_scene, lire_monuments=fe
                 cache.prelire_monuments(*p, zone=zone)
                 cache.prelire_ouvrages(*p, zone=zone)
                 cache.prelire_emprises(*p, zone=zone)
-                cache.prelire_foret(*p, zone=zone)
-                cache.prelire_rpg(*p, zone=zone)
-                cache.prelire_chemins(*p, zone=zone)
                 cache.prelire_reseaux(*p, zone=zone)
                 cache.prelire_postes_enedis(*p, zone=zone)
                 cache.prelire_vehicules(*p, zone=zone)
@@ -688,21 +674,6 @@ def creer_app(dossier_cache=None, construire=construire_scene, lire_monuments=fe
             return None, erreur(503, "Un service de l'IGN n'a pas répondu ("
                                 f"{exc}). Rien n'a été mis en cache : réessayez "
                                 "dans quelques instants.")
-        except ForetIndisponible as exc:
-            app.logger.warning("BD Forêt indisponible pour %s : %s", p, exc)
-            return None, erreur(503, "Un service de l'IGN n'a pas répondu ("
-                                f"{exc}). Rien n'a été mis en cache : réessayez "
-                                "dans quelques instants.")
-        except RpgIndisponible as exc:
-            app.logger.warning("RPG indisponible pour %s : %s", p, exc)
-            return None, erreur(503, "Un service de l'IGN n'a pas répondu ("
-                                f"{exc}). Rien n'a été mis en cache : réessayez "
-                                "dans quelques instants.")
-        except CheminsIndisponibles as exc:
-            app.logger.warning("Chemins indisponibles pour %s : %s", p, exc)
-            return None, erreur(503, "Un service de l'IGN n'a pas répondu ("
-                                f"{exc}). Rien n'a été mis en cache : réessayez "
-                                "dans quelques instants.")
         except ReseauxIndisponibles as exc:
             app.logger.warning("Réseaux indisponibles pour %s : %s", p, exc)
             return None, erreur(503, "Un service de l'IGN n'a pas répondu ("
@@ -726,11 +697,6 @@ def creer_app(dossier_cache=None, construire=construire_scene, lire_monuments=fe
         except DpeIndisponibles as exc:
             app.logger.warning("DPE indisponibles pour %s : %s", p, exc)
             return None, erreur(503, "L'API des DPE de l'ADEME n'a pas répondu ("
-                                f"{exc}). Rien n'a été mis en cache : réessayez "
-                                "dans quelques instants.")
-        except DvfIndisponible as exc:
-            app.logger.warning("DVF indisponible pour %s : %s", p, exc)
-            return None, erreur(503, "Le cadastre ou les fichiers DVF n'ont pas répondu ("
                                 f"{exc}). Rien n'a été mis en cache : réessayez "
                                 "dans quelques instants.")
         except BornesIndisponibles as exc:
@@ -853,33 +819,6 @@ def creer_app(dossier_cache=None, construire=construire_scene, lire_monuments=fe
             return err
         return servir_gzip(dossier, NOM_EMPRISES)
 
-    @app.get("/api/foret")
-    def foret():
-        """Massifs forestiers BD Forêt v2, demandés par la page une fois la
-        scène affichée : `null` quand l'emprise n'en a aucun."""
-        dossier, err = dossier_scene(couche=NOM_FORET)
-        if err:
-            return err
-        return servir_gzip(dossier, NOM_FORET)
-
-    @app.get("/api/rpg")
-    def rpg():
-        """Parcelles agricoles RPG, demandées par la page une fois la scène
-        affichée : `null` quand l'emprise n'en a aucune."""
-        dossier, err = dossier_scene(couche=NOM_RPG)
-        if err:
-            return err
-        return servir_gzip(dossier, NOM_RPG)
-
-    @app.get("/api/chemins")
-    def chemins():
-        """Voies piétonnes et cyclables BD TOPO, demandées par la page une
-        fois la scène affichée : `null` quand l'emprise n'en a aucune."""
-        dossier, err = dossier_scene(couche=NOM_CHEMINS)
-        if err:
-            return err
-        return servir_gzip(dossier, NOM_CHEMINS)
-
     @app.get("/api/reseaux")
     def reseaux():
         """Canalisations BD TOPO (réseaux souterrains), demandées par la page
@@ -984,15 +923,6 @@ def creer_app(dossier_cache=None, construire=construire_scene, lire_monuments=fe
         if err:
             return err
         return servir_gzip(dossier, NOM_DPE)
-
-    @app.get("/api/dvf")
-    def dvf():
-        """Les ventes DVF des parcelles autour du point : au clic, comme les
-        DPE. Sans DVF ici (Alsace-Moselle), la couche le dit (`absent`)."""
-        dossier, err = dossier_scene(couche=NOM_DVF)
-        if err:
-            return err
-        return servir_gzip(dossier, NOM_DVF)
 
     @app.get("/api/bornes")
     def bornes():

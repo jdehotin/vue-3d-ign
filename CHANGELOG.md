@@ -13,6 +13,33 @@ messages de commit et dans les commentaires des modules.
 
 ## Scène v16 — 26 octobre 2026
 
+- **Couches BD Forêt (polygones), RPG et Chemins/pistes retirées** de l'affichage
+  et de l'export : ces couches à part n'étaient plus proposées. Le module
+  `foret.py` reste utilisé pour la segmentation des houppiers.
+
+- **Source systématique dans chaque infobulle** : aérodromes, haies, pylônes
+  (BD TOPO), monuments (OpenStreetMap) et bornes de recharge (Base nationale
+  IRVE, data.gouv.fr) affichent désormais leur source en italique, comme les
+  cimetières, pistes, postes BD TOPO, réseaux et panneaux le faisaient déjà.
+  Les boutons Relief, Bâtiments, Arbres et Masses de sursol du module d'export
+  portent également leur source dans leur infobulle.
+
+- **Nouvelles couches dans le module d'export** : Monuments OSM, Panneaux
+  solaires (OpenPVMapper) et Postes HTA/BT Enedis sont désormais proposés à
+  l'export IFC et CityGML, aux côtés des couches déjà présentes.
+
+- **Survol des postes HTA/BT Enedis corrigé** : les cubes des postes Enedis
+  répondent maintenant au survol de la souris (infobulle avec commune,
+  département et source).
+
+- **Couches Ventes DVF et Cimetières retirées** : la couche des ventes
+  immobilières (DVF/DGFiP) et celle des cimetières BD TOPO sont supprimées de
+  la page, du serveur et des exports IFC et CityGML. Les imports `dvf.py`
+  disparaissent de `scene.py` et `app.py` ; `emprises.py` ne lit plus
+  `BDTOPO_V3:cimetiere`.
+
+
+
 - **Nouvelle charte graphique** : orange `#e07b00` → `#FFB100`, fond sombre
   `#1f2328`/`#2b3138`/`#3a4149` → bleu `#264FC4` (et ses deux teintes dérivées,
   même méthode que la luminance de `--muted`, plus bas), vert de l'emprise du
