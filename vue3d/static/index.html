@@ -657,6 +657,7 @@
                 <button class="toggle" id="t-rpg" disabled title="Parcelles agricoles du Registre Parcellaire Graphique (RPG), drapées sur le relief">Parcelles RPG</button>
                 <button class="toggle" id="t-chemins" disabled title="Chemins, sentiers, pistes cyclables et voies vertes de la BD TOPO, drapés sur le relief">Chemins et pistes</button>
                 <button class="toggle" id="t-reseaux" disabled title="Canalisations de la BD TOPO (eau, gaz, électricité…), drapées sur le relief">Réseaux souterrains</button>
+                <button class="toggle" id="t-postes-enedis" disabled title="Postes de transformation HTA/BT du réseau Enedis (opendata.enedis.fr, Licence Ouverte 2.0)">Postes HTA/BT</button>
                 <button class="toggle" id="t-nuage" hidden title="Tout le bâti en points du nuage LiDAR HD ; les ouvrages ajourés, comme la tour Eiffel, y sont toujours">Nuage LiDAR</button>
                 <button class="toggle on" id="t-vehicules" hidden title="Véhicules vus sur l'orthophoto, le jour de la prise de vue">Véhicules</button>
                 <button class="toggle on" id="t-piscines" hidden title="Piscines vues sur l'orthophoto">Piscines</button>
@@ -816,6 +817,7 @@
             <div id="etat-rpg" class="etat-couche" role="status" hidden><i class="roue"></i><span></span></div>
             <div id="etat-chemins" class="etat-couche" role="status" hidden><i class="roue"></i><span></span></div>
             <div id="etat-reseaux" class="etat-couche" role="status" hidden><i class="roue"></i><span></span></div>
+            <div id="etat-postes-enedis" class="etat-couche" role="status" hidden><i class="roue"></i><span></span></div>
             <div id="etat-nuage" class="etat-couche" role="status" hidden><i class="roue"></i><span></span></div>
             <div id="etat-vehicules" class="etat-couche" role="status" hidden><i class="roue"></i><span></span></div>
             <div id="etat-foncier" class="etat-couche" role="status" hidden><i class="roue"></i><span></span></div>
@@ -2339,6 +2341,7 @@ const demandesAnticipees = new Map();
 function demanderSuite() {
     for (const [url, options] of [
         [URL_MONUMENTS], [URL_OUVRAGES], [URL_FORET], [URL_RPG], [URL_CHEMINS], [URL_RESEAUX],
+        [URL_POSTES_ENEDIS],
         ['api/sante', { cache: 'no-store' }],
         [URL_PISCINES, { cache: 'no-cache' }], [URL_PANNEAUX, { cache: 'no-cache' }]]) {
         const reponse = fetch(url, options);
@@ -4207,6 +4210,7 @@ const sceneConstruite = chargerScene()
         chargerRpg();
         chargerChemins();
         chargerReseaux();
+        chargerPostesEnedis();
         chargerNuage();
         chargerDetections();
         chargerPanneaux();
@@ -4582,6 +4586,10 @@ function majCredits() {
     if (bornesActif) {
         html += ' · Bornes de recharge : <a href="https://www.data.gouv.fr/fr/datasets/5448d3e0c751df01f85d0572/"'
             + ' target="_blank" rel="noopener">base nationale des IRVE</a> (data.gouv.fr)';
+    }
+    if (POSTES_ENEDIS && groupePostesEnedis.visible) {
+        html += ' · Postes HTA/BT : <a href="https://opendata.enedis.fr/explore/dataset/poste-electrique/information/"'
+            + ' target="_blank" rel="noopener">Enedis</a> (Licence Ouverte 2.0)';
     }
     document.getElementById('credits').innerHTML = html;
 }
@@ -5051,6 +5059,7 @@ function appliquerExageration() {
     if (piscinesPosees) placerPiscines();
     if (naviresPoses && naviresPoses.length) placerNavires();
     if (bornesPosees) placerBornes();
+    if (POSTES_ENEDIS && postesEnedisConstruit) placerPostesEnedis();
     // Le grand plan gris sert de fond au-delà de l'emprise, et sous les trous
     // de l'anneau : on le glisse sous le point le plus bas du terrain pour
     // qu'il ne le traverse pas.
@@ -5158,6 +5167,7 @@ async function chargerRelief() {
         construireRpg();
         construireChemins();
         construireReseaux();
+        construirePostesEnedis();
         construireNuage();
         construireVehicules();
         construirePiscines();
@@ -5248,6 +5258,7 @@ async function chargerRelief() {
     construireRpg();
     construireChemins();
     construireReseaux();
+    construirePostesEnedis();
     construireNuage();
     construireVehicules();
     construirePiscines();
@@ -7490,6 +7501,89 @@ async function chargerReseaux(essai = 1) {
         etatCouche('etat-reseaux',
                    `Réseaux indisponibles : nouvel essai dans ${ATTENTE_MONUMENTS_S} s.`, true);
         setTimeout(() => chargerReseaux(essai + 1), ATTENTE_MONUMENTS_S * 1000);
+    }
+}
+
+// --- Postes HTA/BT Enedis ------------------------------------------------------
+// Postes de transformation du réseau Enedis (/api/postes_enedis,
+// vue3d/postes_enedis.py), chargés après la scène. Chaque poste est un petit
+// cube ambre posé sur le terrain. Données : opendata.enedis.fr, Licence Ouverte
+// 2.0. Attributs : position, commune, IRIS, département.
+const URL_POSTES_ENEDIS = `api/postes_enedis?${REQUETE}`;
+const MAT_POSTE_ENEDIS = new THREE.MeshStandardMaterial({
+    color: 0xe8832c, roughness: 0.8, transparent: true, opacity: 0.8,
+    polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+
+const groupePostesEnedis = new THREE.Group();
+scene.add(groupePostesEnedis);
+let POSTES_ENEDIS = null;
+let postesEnedisConstruit = false;
+
+function construirePostesEnedis() {
+    if (!POSTES_ENEDIS || !reliefRegle || postesEnedisConstruit) return;
+    postesEnedisConstruit = true;
+    const liste = POSTES_ENEDIS.postes;
+    const bouton = document.getElementById('t-postes-enedis');
+    if (!liste.length) {
+        bouton.disabled = true;
+        return;
+    }
+    // Cabinet HTA/BT : ~1 m × 2 m de base, 1,5 m de haut.
+    const geom = new THREE.BoxGeometry(1.0, 1.5, 0.6);
+    geom.translate(0, 0.75, 0);   // pied à y = 0
+    const mesh = new THREE.InstancedMesh(geom, MAT_POSTE_ENEDIS, liste.length);
+    mesh.castShadow = true;
+    mesh.userData = { postesEnedis: liste };
+    groupePostesEnedis.add(mesh);
+    placerPostesEnedis();
+    bouton.disabled = false;
+    bouton.classList.add('on');
+    bouton.addEventListener('click', e => {
+        groupePostesEnedis.visible = !groupePostesEnedis.visible;
+        e.currentTarget.classList.toggle('on', groupePostesEnedis.visible);
+        majCiblesSurvol();
+        majCredits();
+    });
+    majCiblesSurvol();
+}
+
+function placerPostesEnedis() {
+    const [mesh] = groupePostesEnedis.children;
+    if (!mesh) return;
+    const liste = POSTES_ENEDIS.postes;
+    const matrice = new THREE.Matrix4();
+    liste.forEach((p, i) => {
+        const [x, y] = toLocal(p.lon, p.lat);
+        const sol = ySol(p.lon, p.lat);
+        mesh.setMatrixAt(i, matrice.makeTranslation(x, sol, -y));
+    });
+    mesh.instanceMatrix.needsUpdate = true;
+    mesh.computeBoundingSphere();
+}
+
+async function chargerPostesEnedis(essai = 1) {
+    const retard = setTimeout(
+        () => etatCouche('etat-postes-enedis', 'Postes HTA/BT : chargement…', true),
+        essai === 1 ? RETARD_ETAT_MONUMENTS_MS : 0);
+    try {
+        const r = await requete(URL_POSTES_ENEDIS);
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const pe = await r.json();
+        clearTimeout(retard);
+        etatCouche('etat-postes-enedis', null);
+        if (!pe) return;
+        POSTES_ENEDIS = pe;
+        construirePostesEnedis();
+    } catch (err) {
+        clearTimeout(retard);
+        if (essai >= ESSAIS_MONUMENTS) {
+            etatCouche('etat-postes-enedis',
+                       'Postes HTA/BT indisponibles : recharger la page pour réessayer.');
+            return;
+        }
+        etatCouche('etat-postes-enedis',
+                   `Postes HTA/BT indisponibles : nouvel essai dans ${ATTENTE_MONUMENTS_S} s.`, true);
+        setTimeout(() => chargerPostesEnedis(essai + 1), ATTENTE_MONUMENTS_S * 1000);
     }
 }
 
@@ -12905,6 +12999,16 @@ function objetSous(touche) {
     const b = ud.borne || (ud.bornes && touche.instanceId != null ? ud.bornes[touche.instanceId] : null);
     if (b) {
         return { html: infobulleBorne(b), centre: [b.lon, b.lat], quoi: 'sur cette station', yAller: true };
+    }
+    if (ud.postesEnedis && touche.instanceId != null) {
+        const pe = ud.postesEnedis[touche.instanceId];
+        const lieu = [pe.commune, pe.iris && pe.iris !== pe.commune ? pe.iris : null]
+            .filter(Boolean).map(echapper).join(' · ');
+        return { html: '<b>Poste HTA/BT</b>'
+            + (lieu ? `<br>${lieu}` : '')
+            + (pe.departement ? `<br>Dép. ${echapper(pe.departement)}` : '')
+            + '<br><i>Enedis</i>',
+                 centre: [pe.lon, pe.lat], quoi: 'sur ce poste' };
     }
     return null;
 }

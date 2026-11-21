@@ -84,6 +84,8 @@ from .foret import FORET_VERSION, foret_pour_emprise, fetch_foret
 from .rpg import RPG_VERSION, rpg_pour_emprise, fetch_rpg
 from .chemins import CHEMINS_VERSION, chemins_pour_emprise, fetch_chemins
 from .reseaux import RESEAUX_VERSION, reseaux_pour_emprise, fetch_reseaux
+from .postes_enedis import (POSTES_ENEDIS_VERSION, postes_enedis_pour_emprise,
+                             fetch_postes_enedis)
 from .geopf import Groupe
 from .lignes import COUCHE_LIGNES, COUCHE_PYLONES, lignes_pour_emprise
 from .houppiers import houppiers_pour_emprise
@@ -260,6 +262,7 @@ NOM_FORET = f"foret-v{FORET_VERSION}.json.gz"
 NOM_RPG = f"rpg-v{RPG_VERSION}.json.gz"
 NOM_CHEMINS = f"chemins-v{CHEMINS_VERSION}.json.gz"
 NOM_RESEAUX = f"reseaux-v{RESEAUX_VERSION}.json.gz"
+NOM_POSTES_ENEDIS = f"postes-enedis-v{POSTES_ENEDIS_VERSION}.json.gz"
 
 
 # Les panneaux solaires ont une seule source : le registre, à sa version.
@@ -374,6 +377,11 @@ class CheminsIndisponibles(RuntimeError):
 class ReseauxIndisponibles(RuntimeError):
     """La couche des canalisations de la BD TOPO n'a pas pu être lue : rien
     n'est mis en cache, la scène reste affichée sans eux, réessayer plus tard."""
+
+
+class PostesEnedisIndisponibles(RuntimeError):
+    """L'API Enedis (postes HTA/BT) n'a pas répondu : rien n'est mis en cache,
+    la scène reste affichée sans eux, réessayer plus tard."""
 
 
 class ReconstructionRefusee(RuntimeError):
@@ -950,6 +958,7 @@ class Cache:
     def __init__(self, dossier, lire_monuments=fetch_monuments, lire_ouvrages=fetch_ouvrages,
                  lire_emprises=fetch_emprises, lire_foret=fetch_foret, lire_rpg=fetch_rpg,
                  lire_chemins=fetch_chemins, lire_reseaux=fetch_reseaux,
+                 lire_postes_enedis=fetch_postes_enedis,
                  lire_vehicules=None, lire_panneaux=None, lire_nuage=fetch_nuage,
                  lire_dpe=fetch_dpe, lire_dvf=fetch_dvf, lire_mer=fetch_mer,
                  lire_bornes=fetch_bornes):
@@ -988,6 +997,7 @@ class Cache:
         self.lire_rpg = lire_rpg
         self.lire_chemins = lire_chemins
         self.lire_reseaux = lire_reseaux
+        self.lire_postes_enedis = lire_postes_enedis
         self.lire_vehicules = self._qui_cede(lire_vehicules)
         self.mode_vehicules = lire_vehicules.mode if lire_vehicules else None
         self.lire_panneaux = lire_panneaux
@@ -1013,6 +1023,8 @@ class Cache:
                 max_workers=2, thread_name_prefix="chemins"),
             NOM_RESEAUX: concurrent.futures.ThreadPoolExecutor(
                 max_workers=2, thread_name_prefix="reseaux"),
+            NOM_POSTES_ENEDIS: concurrent.futures.ThreadPoolExecutor(
+                max_workers=2, thread_name_prefix="postes-enedis"),
             # Une lecture SQLite de quelques millisecondes.
             NOM_PANNEAUX: concurrent.futures.ThreadPoolExecutor(
                 max_workers=1, thread_name_prefix="panneaux"),
@@ -1442,6 +1454,27 @@ class Cache:
             NOM_RESEAUX, lat, lon, construire, self.lire_reseaux,
             lambda message: ReseauxIndisponibles(f"Réseaux illisibles : {message}"),
             lambda bbox, brut, scene: reseaux_pour_emprise(*bbox, brut), zone=zone)
+
+    def prelire_postes_enedis(self, lat, lon, zone=None):
+        """Lance la lecture des postes HTA/BT Enedis en tâche de fond."""
+        self._prelire(NOM_POSTES_ENEDIS, lat, lon, self.lire_postes_enedis, zone)
+
+    def obtenir_postes_enedis(self, lat, lon, construire=construire, zone=None):
+        """Chemin du dossier où la couche des postes HTA/BT Enedis est écrite.
+
+        La couche ne lit rien de la scène : chaque poste est posé sur le
+        relief par la vue.
+
+        Raises:
+            PostesEnedisIndisponibles si l'API Enedis n'a pas répondu : rien
+            n'est écrit, la demande suivante réessaie.
+        """
+        return self._obtenir_couche(
+            NOM_POSTES_ENEDIS, lat, lon, construire, self.lire_postes_enedis,
+            lambda message: PostesEnedisIndisponibles(
+                f"Postes Enedis illisibles : {message}"),
+            lambda bbox, brut, scene: postes_enedis_pour_emprise(*bbox, brut),
+            zone=zone)
 
     def obtenir_nuage(self, lat, lon, construire=construire, zone=None):
         """Chemin du dossier où la couche du nuage LiDAR HD du point est écrite.
