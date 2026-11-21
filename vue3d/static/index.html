@@ -12018,7 +12018,7 @@ const COUCHES_PRESENTES = {
     aerodromes: () => groupeAerodromes.children.length > 0,
     postes: () => groupePostes.children.length > 0,
     haies: () => groupeHaies.children.length > 0,
-    monuments: () => groupeMonuments.children.length > 0,
+    monuments: () => MONUMENTS !== null,
     reseaux: () => reseauxPoses.length > 0,
     panneaux: () => groupePanneaux.children.length > 0,
     postes_enedis: () => groupePostesEnedis.children.length > 0,
