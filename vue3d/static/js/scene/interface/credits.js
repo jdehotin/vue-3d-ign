@@ -37,6 +37,10 @@ export function majCredits() {
         html += ' · Panneaux solaires © <a href="https://doi.org/10.5281/zenodo.19188878"'
             + ' target="_blank" rel="noopener">OpenPVMapper</a> (G. Kasmi), CC-BY 4.0';
     }
+    if (cite('roofer')) {
+        html += ' · Bâtiments reconstruits par <a href="https://github.com/3DBAG/roofer"'
+            + ' target="_blank" rel="noopener">roofer</a> (3DBAG, GPLv3)';
+    }
     if (cite('dpe')) {
         html += ' · DPE © <a href="https://data.ademe.fr/datasets/dpe03existant"'
             + ' target="_blank" rel="noopener">ADEME</a>';

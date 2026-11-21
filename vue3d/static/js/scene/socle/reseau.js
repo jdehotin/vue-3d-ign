@@ -14,6 +14,7 @@ export const URL_PISCINES = `api/piscines?${REQUETE}`;
 export const urlVehicules = detecteur => `api/vehicules?${REQUETE}&detecteur=${detecteur}`;
 export const URL_NAVIRES = `api/navires?${REQUETE}`;
 export const URL_PANNEAUX = `api/panneaux?${REQUETE}`;
+export const URL_ROOFER = `api/roofer?${REQUETE}`;
 export const URL_DPE = `api/dpe?${REQUETE}`;
 export const URL_DVF = `api/dvf?${REQUETE}`;
 export const URL_BORNES = `api/bornes?${REQUETE}`;

@@ -1,7 +1,7 @@
 // Les cibles du survol et du clic : bâtiments, végétation, et ce que chaque
 // couche y inscrit.
 
-import { meshes } from '../batiments/etat.js';
+import { groupeBatiments, meshes } from '../batiments/etat.js';
 import { groupeVegetation } from '../vegetation/etat.js';
 
 // Cibles du raycaster de survol, recalculées à chaque reconstruction plutôt
@@ -25,8 +25,10 @@ export function ajouterCiblesSurvol(source) {
 export function majCiblesSurvol() {
     ciblesSurvol.length = 0;
     // Les volumes restent toujours là : ils ne répondent pas au survol, mais ils
-    // font écran aux repères qui passent derrière eux.
-    ciblesSurvol.push(...meshes);
+    // font écran aux repères qui passent derrière eux. Sauf masqués, quand les
+    // bâtiments de roofer (couches/roofer) les remplacent : invisibles, ils
+    // prendraient le survol des leurs, qui font alors écran à leur place.
+    if (groupeBatiments.visible) ciblesSurvol.push(...meshes);
     // Un calque masqué ne doit pas répondre au survol : three.js ne teste pas la
     // visibilité au lancer de rayon, une pastille cachée resterait sensible.
     // Même règle pour la végétation : masquée, elle ne doit pas rester sensible.

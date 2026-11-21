@@ -15,6 +15,7 @@ VUE3D_CACHE=./cache flask --app vue3d.app run --port 8080   # serveur local
 docker compose up -d --build                     # conteneur, port 8080 (VUE3D_PORT)
 VUE3D_VEHICULES=rtmdet docker compose up -d --build   # avec la couche des véhicules (aucun | rtmdet | yolo | tous)
 VUE3D_PANNEAUX=oui docker compose up -d --build        # avec les panneaux solaires du registre OpenPVMapper (CC-BY 4.0)
+VUE3D_ROOFER=docker VUE3D_CACHE=./cache flask --app vue3d.app run --port 8080   # avec les toits de roofer (3DBAG), bouton « Toits roofer » ; hors Docker (roofer tourne dans le sien)
 ./run_macOS_CoreML.sh                            # sans Docker, les deux détecteurs sur CoreML (Mac)
 ./run_container.sh                               # l'image sous container d'Apple (macOS 26) au lieu de Docker ; pas de CoreML
 node outils/verifier-geometrie.mjs               # géométrie de la page, exécutée sous Node
@@ -40,7 +41,7 @@ node outils/film-voiture.mjs "http://localhost:8080/voiture?simu=1&lat=48.8532&l
 ```
 vue3d/
   app.py        l'application Flask et l'état du service (cache, stocks, quotas) ; quota de scènes neuves par IP (VUE3D_QUOTA, VUE3D_PROXY derrière un proxy)
-  routes/       les routes, un blueprint par page : scene.py (/, /api/scene, /api/ortho, /api/monuments, /api/eoliennes, /api/ouvrages, /api/nuage, /api/piscines, /api/navires, /api/vehicules, /api/panneaux, /api/dpe, /api/dvf, /api/bornes, /api/solaire, /api/avancement, POST /api/reconstruire, GET et POST /api/avis), voiture.py (/voiture, /api/carre, /api/vegetation, /api/vitesses, /api/signalisation, /api/bornes-bloc, POST /api/signalement), service.py (/api/tuile, /api/sante)
+  routes/       les routes, un blueprint par page : scene.py (/, /api/scene, /api/ortho, /api/monuments, /api/eoliennes, /api/ouvrages, /api/nuage, /api/piscines, /api/navires, /api/vehicules, /api/panneaux, /api/roofer, /api/dpe, /api/dvf, /api/bornes, /api/solaire, /api/avancement, POST /api/reconstruire, GET et POST /api/avis), voiture.py (/voiture, /api/carre, /api/vegetation, /api/vitesses, /api/signalisation, /api/bornes-bloc, POST /api/signalement), service.py (/api/tuile, /api/sante)
   scene.py      assemblage d'une scène, cache disque par point arrondi
   couches.py    lecture WFS (bâtiments, végétation, BD Forêt, routes)
   batiments.py  bâtiments découpés sur l'emprise, en retrait du bord
@@ -61,6 +62,7 @@ vue3d/
   releves.py    détections gardées par rectangle de terrain (cache/releves/) : un point décalé ne détecte que la bande nouvelle
   solaire.py    année type de PVGIS (direct, diffus, global des 8 760 heures) : couche à part, lue au clic seulement, datée ; l'ensoleillement des toits se calcule dans la page, sur le GPU (couches/solaire.js)
   panneaux.py   panneaux solaires du registre OpenPVMapper (SQLite R-tree) : couche à part, optionnelle (VUE3D_PANNEAUX)
+  roofer.py     toits de roofer (3DBAG, GPLv3, lancé à part : image Docker ou exécutable) sur le nuage LiDAR HD (sol et bâti) et les emprises de la scène, pour comparer : couche à part, optionnelle (VUE3D_ROOFER), zones de 1 000 m au plus
   osm_local.py  OpenStreetMap sans Overpass : base SQLite R-tree des parties, des limites et de la signalisation, aux réponses de la forme d'Overpass ; optionnelle (VUE3D_OSM), sans elle le service interroge Overpass
   dpe.py        DPE de l'ADEME rattachés aux bâtiments (RNB, sinon adresse à 5 m) : couche à part, lue au clic seulement, datée
   dvf.py        ventes DVF (fichiers Etalab) jointes aux parcelles du cadastre IGN : couche à part, lue au clic seulement, datée
@@ -85,9 +87,10 @@ docs/logo/      le logo « Tuile » : SVG avec et sans le nom (vectorisé), icô
 Pas de base de données, pas de clé d'API, pas de build front : les pages sont
 des fichiers statiques, modules ES compris, et lisent le point dans leur URL.
 
-Les couches des véhicules et des panneaux et la base OpenStreetMap sont les
-seules dépendances optionnelles : sans `VUE3D_VEHICULES`, ni onnxruntime ni
-réseau ne sont chargés ; sans `VUE3D_PANNEAUX`, aucune base n'est lue ; sans
+Les couches des véhicules, des panneaux et de roofer et la base OpenStreetMap
+sont les seules dépendances optionnelles : sans `VUE3D_VEHICULES`, ni
+onnxruntime ni réseau ne sont chargés ; sans `VUE3D_PANNEAUX`, aucune base
+n'est lue ; sans `VUE3D_ROOFER`, roofer n'est jamais lancé ; sans
 `VUE3D_OSM`, OpenStreetMap se lit à Overpass ; les tests ne demandent jamais
 rien de tout cela (`/donnees/` est ignoré par git). Les poids (RTMDet-R, Apache-2.0 ; YOLO11-OBB, AGPL-3.0 ;
 tous deux entraînés sur DOTA, usage académique) ne doivent **jamais** entrer

@@ -41,6 +41,7 @@ from .nuage import fetch_nuage
 from .osm_local import lecteur as lecteur_osm
 from .ouvrages import fetch_ouvrages
 from .panneaux import lecteur as lecteur_panneaux
+from .roofer import lecteur as lecteur_roofer
 from .routes import scene as routes_scene
 from .routes import service as routes_service
 from .routes import voiture as routes_voiture
@@ -130,7 +131,7 @@ def creer_app(dossier_cache=None, construire=construire_scene, lire_monuments=No
               dossier_tuiles=None,
               lire_bornes=fetch_bornes, lire_carre=fetch_carre, quota_carres=None,
               lire_vegetation=fetch_vegetation, lire_vitesses=None, lire_signalisation=None,
-              lire_solaire=fetch_solaire, osm=None, lire_eoliennes=None):
+              lire_solaire=fetch_solaire, osm=None, lire_eoliennes=None, lire_roofer=None):
     """`construire`, `lire_monuments`, `lire_eoliennes`, `lire_ouvrages`, `lire_vehicules`,
     `lire_panneaux`, `lire_nuage`, `lire_dpe`, `lire_dvf`, `lire_mer`,
     `lire_bornes` et `lire_solaire` sont injectables
@@ -139,6 +140,7 @@ def creer_app(dossier_cache=None, construire=construire_scene, lire_monuments=No
     de `vehicules.lecteur()` ; None, le service n'a ni véhicules, ni piscines,
     ni navires.
     `lire_panneaux` : de `panneaux.lecteur()` ; None, pas de panneaux.
+    `lire_roofer` : de `roofer.lecteur()` ; None, pas de toits de roofer.
     `osm` : de `osm_local.lecteur()`, à la place d'Overpass ; None, Overpass.
     `lire_eoliennes` : (emprise) -> réponse Overpass des éoliennes ; None : de
     la base `osm` si elle les a, sinon d'Overpass, par bloc gardé dans le cache.
@@ -190,7 +192,8 @@ def creer_app(dossier_cache=None, construire=construire_scene, lire_monuments=No
     cache = Cache(dossier, lire_monuments=lire_monuments, lire_eoliennes=lire_eoliennes,
                   lire_ouvrages=lire_ouvrages, lire_vehicules=lire_vehicules, lire_panneaux=lire_panneaux,
                   lire_nuage=lire_nuage, lire_dpe=lire_dpe, lire_dvf=lire_dvf,
-                  lire_mer=lire_mer, lire_bornes=lire_bornes, lire_solaire=lire_solaire)
+                  lire_mer=lire_mer, lire_bornes=lire_bornes, lire_solaire=lire_solaire,
+                  lire_roofer=lire_roofer)
     # Hors du dossier des versions de scène : une tuile ne dépend pas de
     # SCENE_VERSION. Sur un disque externe, le dossier n'est jamais créé ici
     # (tuiles.Stock, `creer`).
@@ -272,4 +275,7 @@ if lire_vehicules:
     threading.Thread(target=lire_vehicules.essayer, name="essai-detecteurs", daemon=True).start()
 lire_panneaux = lecteur_panneaux()
 osm = lecteur_osm()
-app = creer_app(lire_vehicules=lire_vehicules, lire_panneaux=lire_panneaux, osm=osm)
+# roofer, de VUE3D_ROOFER : rien n'est lancé avant la première demande.
+lire_roofer = lecteur_roofer()
+app = creer_app(lire_vehicules=lire_vehicules, lire_panneaux=lire_panneaux, osm=osm,
+                lire_roofer=lire_roofer)

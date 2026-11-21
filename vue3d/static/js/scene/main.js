@@ -33,6 +33,7 @@ import { chargerNuage } from './couches/nuage.js';
 import './couches/ecarts-toits.js';
 import { chargerDetections } from './couches/detections.js';
 import { chargerPanneaux } from './couches/panneaux.js';
+import { chargerRoofer } from './couches/roofer.js';
 import './couches/foncier.js';
 import './couches/bornes.js';
 import './couches/solaire.js';
@@ -82,4 +83,5 @@ quandLesBatimentsArrivent(features => {
     chargerNuage();
     chargerDetections();
     chargerPanneaux();
+    chargerRoofer();
 });

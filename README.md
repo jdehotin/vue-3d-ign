@@ -319,6 +319,30 @@ année. Ni centrales au sol ni grandes toitures : le registre s'arrête à
 36 kWc. Le registre ne dit pas la hauteur : chaque polygone est posé sur le
 toit tel que la vue le dessine.
 
+### Les toits de roofer, pour comparer
+
+Une troisième option montre, à la place des bâtiments de la vue, ceux que
+[roofer](https://github.com/3DBAG/roofer) reconstruit sur les mêmes emprises
+à partir du nuage LiDAR HD classé : l'outil du 3DBAG néerlandais, que l'IGN
+essaie dans son démonstrateur de bâtiments 3D. Un bouton « Toits roofer »
+passe de l'un à l'autre, au même endroit, aux mêmes couleurs, la photo
+aérienne sur les toits : seule la géométrie change. Mesuré sur le nuage brut
+à Gordes et à Strasbourg (zones de 1 000 m), l'écart de forme médian de ses
+toits est de 2 à 7 cm, quand celui de nos toits en pans est de 7 à 18 cm.
+
+roofer tourne dans son image Docker (`3dgi/3dbag-pipeline-tools`, amd64,
+émulée sur un Mac M) ou en exécutable local ; le service, lui, tourne hors de
+Docker, par `flask` ou `./run_macOS_CoreML.sh`. La couche lit les dalles
+COPC du LiDAR HD sur la zone (jusqu'à 1 000 m) : 45 s environ la première
+fois pour une zone de 1 000 m à Gordes, gardée ensuite avec la scène.
+
+```bash
+VUE3D_ROOFER=docker ./run_macOS_CoreML.sh                 # roofer dans son image
+VUE3D_ROOFER=/chemin/vers/roofer ./run_macOS_CoreML.sh    # ou un roofer compilé
+```
+
+Une page ouverte avec `roofer=1` dans l'adresse s'affiche d'emblée avec eux.
+
 À la main, sans le script ni Docker, **avec Python 3.12**, celui de l'image :
 
 ```bash
@@ -646,6 +670,9 @@ Chaque premier chargement construit la scène, en quelques secondes.
 - **Les panneaux solaires**, avec une seconde option : les installations
   du registre OpenPVMapper, posées sur les toits tels qu'ils sont dessinés,
   avec leur surface, leur puissance estimée et l'année de la photo.
+- **Les bâtiments de roofer**, avec une troisième option : les mêmes
+  emprises reconstruites par roofer (3DBAG) sur le nuage LiDAR HD, à la
+  place de celles de la vue, pour comparer.
 - **Les bateaux**, avec la même option : ceux que l'orthophoto montre sur
   l'eau — bassins des ports, lacs, rivières, et la mer, que la BD TOPO ne
   dessine pas —, à flot, dans la couleur de leur pont. 433 au port Hercule
@@ -718,7 +745,9 @@ Plans (iPhone, iPad) ou Google Maps.
 
 La couche optionnelle des panneaux solaires lit le registre
 [OpenPVMapper](https://doi.org/10.5281/zenodo.19188878) (G. Kasmi, CC-BY 4.0),
-téléchargé à la construction de l'image. La couche optionnelle des véhicules,
+téléchargé à la construction de l'image. Celle des toits de roofer lance
+[roofer](https://github.com/3DBAG/roofer) (3DBAG, GPLv3) comme un programme à
+part, sur le nuage LiDAR HD et les emprises BD TOPO de la scène. La couche optionnelle des véhicules,
 des piscines et des bateaux n'ajoute pas de source : elle relit
 l'orthophoto, à 0,2 m par pixel, avec un réseau de neurones — RTMDet-R
 ([MMRotate](https://github.com/open-mmlab/mmrotate)) ou YOLO11-OBB

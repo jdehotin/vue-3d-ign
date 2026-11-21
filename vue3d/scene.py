@@ -35,7 +35,9 @@ Les véhicules, les piscines et les navires de l'orthophoto (vue3d/vehicules.py)
 sont une troisième couche à part, optionnelle : elle n'existe que si le service a été
 lancé avec un détecteur (`Cache.obtenir_vehicules`, `VUE3D_VEHICULES`). Les
 panneaux solaires du registre OpenPVMapper (vue3d/panneaux.py) en sont une
-quatrième, optionnelle aussi (`Cache.obtenir_panneaux`, `VUE3D_PANNEAUX`).
+quatrième, optionnelle aussi (`Cache.obtenir_panneaux`, `VUE3D_PANNEAUX`), et les
+toits de roofer (vue3d/roofer.py), pour comparer, une cinquième
+(`Cache.obtenir_roofer`, `VUE3D_ROOFER`).
 
 La construction coûte de quelques secondes à une demi-minute selon la zone et
 le lieu. Ses seize lectures partent ensemble (`_lire_ensemble`) : 3 s environ
@@ -90,6 +92,7 @@ from .nuage import (NUAGE_COTE_MAX_M, NUAGE_PROCHE_COTE_M, NUAGE_PROCHE_ZONE_MIN
                     fetch_nuage, nuage_pour_emprise)
 from .ouvrages import OUVRAGES_VERSION, fetch_ouvrages, ouvrages_pour_emprise
 from .panneaux import PANNEAUX_VERSION, panneaux_pour_emprise
+from .roofer import ROOFER_VERSION, RooferDesactive, RooferIndisponible, roofer_pour_emprise
 from .releves import (MARGE_NAVIRES_PX, MARGE_PISCINES_PX, MARGE_VEHICULES_PX, Releves,
                       emprise_image)
 from .releves import rectangle as rectangle_releve
@@ -186,6 +189,8 @@ NOM_OUVRAGES = f"ouvrages-v{OUVRAGES_VERSION}.json.gz"
 
 # Les panneaux solaires ont une seule source : le registre, à sa version.
 NOM_PANNEAUX = f"panneaux-v{PANNEAUX_VERSION}.json.gz"
+# Les toits de roofer, pour comparer : le nuage et les bâtiments de la scène.
+NOM_ROOFER = f"roofer-v{ROOFER_VERSION}.json.gz"
 NOM_NUAGE = f"nuage-v{NUAGE_VERSION}.json.gz"
 # La première des deux lectures du nuage, sur un carré autour du point.
 NOM_NUAGE_PROCHE = f"nuage-proche-v{NUAGE_VERSION}.json.gz"
@@ -790,7 +795,7 @@ class Cache:
                  lire_vehicules=None, lire_panneaux=None, lire_nuage=fetch_nuage,
                  lire_dpe=fetch_dpe, lire_dvf=fetch_dvf, lire_mer=fetch_mer,
                  lire_bornes=fetch_bornes, lire_solaire=fetch_solaire,
-                 lire_eoliennes=fetch_eoliennes):
+                 lire_eoliennes=fetch_eoliennes, lire_roofer=None):
         """`lire_vehicules` : de `vehicules.lecteur()`, ou une doublure qui a
         la même forme — `mode`, `detecteurs`, `orthophoto(emprise)` -> tableau
         RGB, `piscines(emprise, rgb=None)`, `navires(emprise, rgb=None)` et
@@ -804,7 +809,10 @@ class Cache:
         `lire_panneaux` : de `panneaux.lecteur()`, (emprise) -> installations ;
         None, et la couche des panneaux n'existe pas.
         `lire_eoliennes` : (emprise de l'anneau) -> réponse Overpass des
-        éoliennes (vue3d/eoliennes.py)."""
+        éoliennes (vue3d/eoliennes.py).
+        `lire_roofer` : de `roofer.lecteur()`, ou une doublure de même forme —
+        appelable (emprise) -> nuage, et `lancer(dossier)` -> CityJSONSeq ;
+        None, et la couche des toits de roofer n'existe pas."""
         self.dossier = dossier
         os.makedirs(dossier, exist_ok=True)
         self._verrous = {}
@@ -827,6 +835,7 @@ class Cache:
         self.lire_vehicules = self._qui_cede(lire_vehicules)
         self.mode_vehicules = lire_vehicules.mode if lire_vehicules else None
         self.lire_panneaux = lire_panneaux
+        self.lire_roofer = lire_roofer
         self.lire_nuage = lire_nuage
         self.lire_dpe = lire_dpe
         self.lire_dvf = lire_dvf
@@ -1276,6 +1285,33 @@ class Cache:
             NOM_PANNEAUX, lat, lon, construire, self.lire_panneaux,
             lambda message: PanneauxIndisponibles(f"panneaux solaires illisibles : {message}"),
             lambda bbox, brut, scene: panneaux_pour_emprise(*bbox, brut), zone=zone)
+
+    def obtenir_roofer(self, lat, lon, construire=construire, zone=None):
+        """Chemin du dossier où la couche des toits de roofer du point est
+        écrite. Jamais lue d'avance : la page la demande, une fois la scène
+        affichée, si le service l'a. Elle lit les bâtiments de la scène.
+
+        Raises:
+            RooferDesactive si le service tourne sans roofer.
+            RooferIndisponible si le nuage n'a pu être lu ou roofer n'a pas
+            abouti, ou si trop de nuages sont déjà en lecture : rien n'est
+            écrit, la demande suivante réessaie.
+        """
+        if not self.lire_roofer:
+            raise RooferDesactive("service lancé sans roofer (VUE3D_ROOFER)")
+
+        def indisponible(message):
+            return RooferIndisponible(f"toits de roofer impossibles : {message}")
+
+        def assembler(bbox, brut, scene):
+            try:
+                return roofer_pour_emprise(*bbox, brut, scene, self.lire_roofer.lancer)
+            except RooferIndisponible as exc:
+                raise indisponible(str(exc)) from exc
+        # Le nuage se lit comme celui de la couche du même nom : dans ses places.
+        return self._obtenir_couche(
+            NOM_ROOFER, lat, lon, construire, self.lire_roofer, indisponible, assembler,
+            zone=zone, attente=lambda: attente_nuage(indisponible))
 
     def obtenir_dpe(self, lat, lon, construire=construire, zone=None):
         """Chemin du dossier où la couche des DPE du point est écrite.

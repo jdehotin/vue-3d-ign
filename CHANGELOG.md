@@ -15,6 +15,18 @@ messages de commit et dans les commentaires des modules.
 
 ### Ajouté
 
+- **Les toits de roofer, pour comparer** (21 novembre 2026) : une couche
+  optionnelle (`VUE3D_ROOFER=docker`, ou le chemin d'un roofer compilé)
+  reconstruit les bâtiments de la scène avec [roofer](https://github.com/3DBAG/roofer),
+  l'outil du 3DBAG néerlandais, sur les mêmes emprises et le nuage LiDAR HD
+  (sol et bâti, classe 67 comprise) ; le bouton « Toits roofer » les montre à
+  la place de ceux de la vue, posés de même, la photo aérienne sur les toits,
+  et `roofer=1` ouvre la page sur eux. Mesuré sur le nuage brut (zones de
+  1 000 m) : écart de forme médian de 0,02 m à Gordes et 0,07 m à Strasbourg
+  pour roofer, contre 0,07 et 0,18 m pour nos toits en pans là où il y en a,
+  et 0,39 et 1,28 m pour la vue entière, pondérée par la surface ; roofer
+  reconstruit 650 bâtiments sur 664 à Gordes, en 45 s la première fois.
+  Zones de 1 000 m au plus : au-delà, le nuage ne tient plus en mémoire.
 - **Des points de passage dans la conduite simulée** (18 novembre 2026) :
   `par=lat,lon;lat,lon` mène la voiture de `/voiture?simu=1` par ces points,
   dans l'ordre, avant `vers` ; chaque étape a son plus court chemin et ses

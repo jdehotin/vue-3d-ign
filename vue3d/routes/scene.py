@@ -13,6 +13,7 @@
     GET /api/navires?lat=…&lon=…     les navires de l'orthophoto, sur l'eau, de même
     GET /api/vehicules?lat=…&lon=…&detecteur=…   les véhicules vus d'un détecteur du service
     GET /api/panneaux?lat=…&lon=…    les panneaux solaires du registre, si le service en a un
+    GET /api/roofer?lat=…&lon=…      les toits de roofer (3DBAG), pour comparer, si le service l'a
     GET /api/dpe?lat=…&lon=…         les DPE de l'ADEME, à la demande de la page seulement
     GET /api/dvf?lat=…&lon=…         les ventes DVF des parcelles, de même
     GET /api/bornes?lat=…&lon=…      les bornes de recharge (IRVE, data.gouv.fr), de même
@@ -35,11 +36,11 @@ from flask import Blueprint, current_app, jsonify, request, send_from_directory
 
 from ..avis import AVIS_OCTETS_MAX, AvisComplets, AvisInvalide
 from ..scene import (NOM_BORNES, NOM_DPE, NOM_DVF, NOM_EOLIENNES, NOM_MONUMENTS, NOM_NUAGE, NOM_NUAGE_PROCHE,
-                     NOM_ORTHO, NOM_OUVRAGES, NOM_PANNEAUX, NOM_SCENE, NOM_SOLAIRE, BornesIndisponibles,
+                     NOM_ORTHO, NOM_OUVRAGES, NOM_PANNEAUX, NOM_ROOFER, NOM_SCENE, NOM_SOLAIRE, BornesIndisponibles,
                      DpeIndisponibles, DvfIndisponible, EoliennesIndisponibles, HorsEmprise,
                      MonumentsIndisponibles,
                      NuageIndisponible, OuvragesIndisponibles, PanneauxIndisponibles,
-                     ReconstructionRefusee, SceneIncomplete, SolaireIndisponible, VehiculesDesactives,
+                     ReconstructionRefusee, RooferIndisponible, SceneIncomplete, SolaireIndisponible, VehiculesDesactives,
                      VehiculesIndisponibles, nom_scene, point_normalise, zone_normalisee)
 from ..vehicules import MODE_PAR_DEFAUT
 from .reponses import erreur, refus_intersite, servir_gzip
@@ -135,6 +136,8 @@ def blueprint(cache, construire, quota, avis, quota_avis):
                 return cache.obtenir_navires(*p, construire=construire, zone=zone), None
             if couche == NOM_PANNEAUX:
                 return cache.obtenir_panneaux(*p, construire=construire, zone=zone), None
+            if couche == NOM_ROOFER:
+                return cache.obtenir_roofer(*p, construire=construire, zone=zone), None
             if couche == COUCHE_VEHICULES:
                 return cache.obtenir_vehicules(*p, detecteur, construire=construire,
                                               zone=zone), None
@@ -205,6 +208,10 @@ def blueprint(cache, construire, quota, avis, quota_avis):
         except PanneauxIndisponibles as exc:
             log.warning("Panneaux indisponibles pour %s : %s", p, exc)
             return None, erreur(503, f"Le registre des panneaux solaires n'a pas pu être lu ({exc}). "
+                                "Rien n'a été mis en cache : réessayez dans quelques instants.")
+        except RooferIndisponible as exc:
+            log.warning("Toits de roofer indisponibles pour %s : %s", p, exc)
+            return None, erreur(503, f"Les toits de roofer n'ont pas pu être calculés ({exc}). "
                                 "Rien n'a été mis en cache : réessayez dans quelques instants.")
         except VehiculesDesactives as exc:
             return None, erreur(400, f"{exc} : détecteurs de ce service : "
@@ -318,6 +325,17 @@ def blueprint(cache, construire, quota, avis, quota_avis):
             reponse.headers["Cache-Control"] = "no-store"
             return reponse
         return couche(NOM_PANNEAUX)
+
+    @bp.get("/api/roofer")
+    def roofer():
+        """Les bâtiments de la scène reconstruits par roofer, demandés par la
+        page une fois la scène affichée, pour comparer. Sans roofer, la
+        réponse le dit (`actif: false`) : ce n'est pas une erreur."""
+        if not cache.lire_roofer:
+            reponse = jsonify({"actif": False})
+            reponse.headers["Cache-Control"] = "no-store"
+            return reponse
+        return couche(NOM_ROOFER)
 
     @bp.get("/api/dpe")
     def dpe():
