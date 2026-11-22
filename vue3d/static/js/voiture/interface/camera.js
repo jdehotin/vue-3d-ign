@@ -16,10 +16,15 @@ import { montrerRoutesAuSol } from '../carres/routes.js';
 // geste, elle revient derrière.
 const RETOUR_GESTE_S = 8;
 // La voiture sous le centre de l'écran, à cette part de sa demi-hauteur :
-// vers 71 % de la hauteur depuis le haut, plus bas qu'à l'origine (60 %),
-// à la demande de Yannick ; la route devant elle a la place.
-const POSITION_VOITURE = 0.42;
-export const RECUL = [15, 600], HAUTEUR = [60, 3000];
+// vers 80 % de la hauteur depuis le haut, plus bas qu'à l'origine (60 %),
+// puis qu'en octobre 2026 (71 %), à la demande de Yannick ; la route devant
+// elle a la place. Avec le recul par défaut (socle/etat), la caméra vise
+// alors 2 à 3° sous l'horizontale, au plus bas permis (`visee`) à 130 km/h,
+// où la voiture remonte vers 79 % : l'horizon vers 44 à 47 % de l'écran,
+// contre 36 % avant.
+const POSITION_VOITURE = 0.6;
+// Le recul permis au doigt : 10 m, la voiture en grand, à 5 m au-dessus d'elle.
+export const RECUL = [10, 600], HAUTEUR = [60, 3000];
 const coupe = new THREE.Plane(new THREE.Vector3(0, -1, 0), 0);
 function sousTerre(oui, altitude = 0) {
     ciel.visible = !oui;

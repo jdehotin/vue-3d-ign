@@ -237,7 +237,8 @@ async function tourner(troncon, n) {
             const c = V.camVue, ecart = ((o.pano.cap - c.cap) % 360 + 540) % 360 - 180;
             c.lacet = ecart * o.pano.u;
             c.tangage = o.pano.tangage * o.pano.u;
-            if (o.pano.recul) c.recul = 45 + (o.pano.recul - 45) * o.pano.u;
+            const r0 = V.reculDefaut ?? 45;
+            if (o.pano.recul) c.recul = r0 + (o.pano.recul - r0) * o.pano.u;
             c.dernierGeste = performance.now();
         }
         window.__pas(dt);

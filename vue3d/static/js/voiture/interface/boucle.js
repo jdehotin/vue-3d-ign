@@ -2,7 +2,7 @@
 
 import { SIMU } from '../socle/parametres.js';
 import { renderer, ratio, reduireRatio, camera } from '../socle/rendu.js';
-import { voiture, camVue, itineraire } from '../socle/etat.js';
+import { voiture, camVue, itineraire, RECUL_DEFAUT } from '../socle/etat.js';
 import { tuilesSol } from '../sol/tuiles.js';
 import { manquees } from '../sol/manquees.js';
 import { statsCache } from '../sol/cache.js';
@@ -78,6 +78,7 @@ export function boucle(maintenant) {
 
 // Pour les essais (outils/essai-voiture.mjs) : l'état, en lecture.
 window.__voiture = { voiture, carres, tuilesSol, aretes, camVue, camera, renderer, durees, dureesArbres, statsCache, simu,
+                     reculDefaut: RECUL_DEFAUT,
                      get itineraire() { return itineraire; }, partir: partirSimu, limites, signaux,
                      manquees, statsPrecharge, diagnostic: etatDiagnostic, signaler, blocsBornes,
                      get budget() { return budgetConstruction; }, get detailArbres() { return seuilDetailArbres(); } };

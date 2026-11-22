@@ -30,6 +30,13 @@ messages de commit et dans les commentaires des modules.
   251 → 410. Les vrais toits sous les arbres le restent (71 à Gordes, 9 à
   Strasbourg). Hors couverture LiDAR HD, l'orthophoto reste le repli. Toutes
   les scènes sont reconstruites à leur première ouverture.
+- **La caméra de la vue en voiture plus basse et plus proche** (22 novembre) :
+  20 m de recul sous 15° au lieu de 45 m sous 18°, soit 8 m au-dessus de la
+  voiture à l'arrêt et 10 m à 130 km/h, contre 17 et 22 m ; la voiture, deux
+  fois plus grande à l'écran, descend vers 80 % de sa hauteur (71 % avant),
+  et l'horizon vers 44 à 47 % (36 %). La molette, le pincement et les
+  boutons − et + règlent toujours le recul, désormais jusqu'à 10 m (15 m
+  avant).
 
 ## Scène v15 — 15 octobre 2026
 

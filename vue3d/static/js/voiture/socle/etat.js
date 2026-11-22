@@ -15,8 +15,12 @@ export const voiture = {
 
 // Plus bas qu'à l'origine (70 m de recul sous 30°, 38 m au-dessus de la
 // voiture à l'arrêt, 59 m à 130 km/h), à la demande de Yannick, « trop
-// haut » : 45 m sous 18°, soit 17 m à l'arrêt et 22 m à 130 km/h.
-export const RECUL_DEFAUT = 45, PENTE_DEFAUT = 18, HAUTEUR_DEFAUT = 200;
+// haut » : 45 m sous 18°, soit 17 m à l'arrêt et 22 m à 130 km/h ; puis
+// encore « trop haute et trop éloignée, ça manque d'effet immersif », puis
+// « plus proche, plus basse » : 20 m sous 15°, soit 8 m à l'arrêt et 10 m
+// à 130 km/h. La voiture, à l'échelle réelle jusqu'à 60 m de recul
+// (interface/maquette), y paraît deux fois plus grande qu'à 45 m.
+export const RECUL_DEFAUT = 20, PENTE_DEFAUT = 15, HAUTEUR_DEFAUT = 200;
 export const camVue = { mode: PARAMS.get('vue') === '2d' ? '2d' : '3d', recul: RECUL_DEFAUT, hauteur: HAUTEUR_DEFAUT,
                         lacet: 0, tangage: 0, dernierGeste: -Infinity, cap: 0, cible: new THREE.Vector3() };
 
