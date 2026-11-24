@@ -20,6 +20,7 @@
     GET /api/panneaux?lat=…&lon=…    les panneaux solaires du registre, si le service en a un
     GET /api/dpe?lat=…&lon=…         les DPE de l'ADEME, à la demande de la page seulement
     GET /api/bornes?lat=…&lon=…      les bornes de recharge (IRVE, data.gouv.fr), de même
+    GET /api/georisques/<couche>?lat=…&lon=…   inondations, old, cavites ; commune au clic
     GET /api/avancement?lat=…&lon=…  l'étape de la construction en cours
     GET /api/tuile/<couche>/<z>/<x>/<y>  une tuile WMTS de l'IGN (ortho, plan) : du
                                    stock du serveur, sinon redirigée vers l'IGN ;
@@ -74,6 +75,7 @@ from .postes_enedis import fetch_postes_enedis
 from .panneaux import REGISTRE_LICENCE
 from .polygone import Polygone
 from .panneaux import lecteur as lecteur_panneaux
+from .scene import (COUCHES_GEORISQUES, GeorisquesIndisponibles)
 from .scene import (NOM_BORNES, NOM_DPE, NOM_EMPRISES,
                     NOM_MONUMENTS,
                     NOM_NUAGE, NOM_NUAGE_PROCHE, NOM_ORTHO,
@@ -457,8 +459,10 @@ def creer_app(dossier_cache=None, construire=construire_scene, lire_monuments=fe
               lire_panneaux=None,
               lire_nuage=fetch_nuage, lire_dpe=fetch_dpe, lire_mer=fetch_mer,
               lire_tuile=fetch_tuile, quota=None, proxy=None, relectures=None,
-              lire_bornes=fetch_bornes):
-    """`construire`, `lire_monuments`, `lire_ouvrages`, `lire_emprises`,
+              lire_bornes=fetch_bornes, lire_georisques=None):
+    """`lire_georisques` : {couche: lecture}, doublures des lectures de
+    vue3d/georisques.py pour les tests.
+    `construire`, `lire_monuments`, `lire_ouvrages`, `lire_emprises`,
     `lire_reseaux`, `lire_postes_enedis`, `lire_vehicules`,
     `lire_panneaux`, `lire_nuage`, `lire_dpe`, `lire_mer` et
     `lire_bornes` sont injectables
@@ -495,7 +499,8 @@ def creer_app(dossier_cache=None, construire=construire_scene, lire_monuments=fe
                   lire_postes_enedis=lire_postes_enedis,
                   lire_vehicules=lire_vehicules, lire_panneaux=lire_panneaux,
                   lire_nuage=lire_nuage, lire_dpe=lire_dpe,
-                  lire_mer=lire_mer, lire_bornes=lire_bornes)
+                  lire_mer=lire_mer, lire_bornes=lire_bornes,
+                  lire_georisques=lire_georisques)
     # Hors du dossier des versions de scène : une tuile ne dépend pas de
     # SCENE_VERSION.
     stock = Stock(os.path.join(cache.dossier, "tuiles"), lire=lire_tuile)
@@ -604,7 +609,7 @@ def creer_app(dossier_cache=None, construire=construire_scene, lire_monuments=fe
         reponse.headers["Retry-After"] = str(attente)
         return reponse, code
 
-    def dossier_scene(couche=None, prelire=False, detecteur=None):
+    def dossier_scene(couche=None, prelire=False, detecteur=None, georisques=None):
         try:
             p = point()
         except HorsEmprise as exc:
@@ -618,6 +623,9 @@ def creer_app(dossier_cache=None, construire=construire_scene, lire_monuments=fe
             refus = refus_quota(*p, zone)
             if refus:
                 return None, refus
+            if georisques:
+                return cache.obtenir_georisques(georisques, *p, construire=construire,
+                                                zone=zone), None
             if couche == NOM_MONUMENTS:
                 return cache.obtenir_monuments(*p, construire=construire, zone=zone), None
             if couche == NOM_OUVRAGES:
@@ -714,6 +722,10 @@ def creer_app(dossier_cache=None, construire=construire_scene, lire_monuments=fe
             return None, erreur(503, "La base des bornes de recharge de data.gouv.fr n'a pas "
                                 f"répondu ({exc}). Rien n'a été mis en cache : réessayez "
                                 "dans quelques instants.")
+        except GeorisquesIndisponibles as exc:
+            app.logger.warning("Géorisques indisponible pour %s : %s", p, exc)
+            return None, erreur(503, f"Géorisques n'a pas répondu ({exc}). Rien n'a été "
+                                "mis en cache : réessayez dans quelques instants.")
         except PanneauxIndisponibles as exc:
             app.logger.warning("Panneaux indisponibles pour %s : %s", p, exc)
             return None, erreur(503, f"Le registre des panneaux solaires n'a pas pu être lu ({exc}). "
@@ -924,6 +936,20 @@ def creer_app(dossier_cache=None, construire=construire_scene, lire_monuments=fe
         if err:
             return err
         return servir_gzip(dossier, NOM_PANNEAUX)
+
+    @app.get("/api/georisques/<couche>")
+    def georisques(couche):
+        """Les risques de Géorisques : `inondations`, `old` et `cavites`,
+        demandées une fois la scène affichée, `commune` au clic. `null` quand
+        l'emprise n'a rien de la couche ; la fiche de la commune est toujours
+        un objet."""
+        if couche not in COUCHES_GEORISQUES:
+            return erreur(404, f"Couche inconnue : {couche}. Couches : "
+                          f"{', '.join(COUCHES_GEORISQUES)}.")
+        dossier, err = dossier_scene(georisques=couche)
+        if err:
+            return err
+        return servir_gzip(dossier, COUCHES_GEORISQUES[couche][0])
 
     @app.get("/api/dpe")
     def dpe():

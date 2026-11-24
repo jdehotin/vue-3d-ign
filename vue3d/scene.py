@@ -80,6 +80,10 @@ from .eau import (COUCHE_COURS_EAU, COUCHE_SURFACES_EAU, eau_pour_emprise,
                   masque_eau)
 from .emprises import EMPRISES_VERSION, emprises_pour_emprise, fetch_emprises
 from .reseaux import RESEAUX_VERSION, reseaux_pour_emprise, fetch_reseaux
+from .georisques import (GEORISQUES_VERSION, cavites_pour_emprise, fetch_cavites,
+                         fetch_inondations, fetch_old, fetch_risques_commune,
+                         inondations_pour_emprise, old_pour_emprise,
+                         risques_commune_pour_emprise)
 from .postes_enedis import (POSTES_ENEDIS_VERSION, postes_enedis_pour_emprise,
                              fetch_postes_enedis)
 from .geopf import Groupe
@@ -256,6 +260,19 @@ NOM_OUVRAGES = f"ouvrages-v{OUVRAGES_VERSION}.json.gz"
 NOM_EMPRISES = f"emprises-v{EMPRISES_VERSION}.json.gz"
 NOM_RESEAUX = f"reseaux-v{RESEAUX_VERSION}.json.gz"
 NOM_POSTES_ENEDIS = f"postes-enedis-v{POSTES_ENEDIS_VERSION}.json.gz"
+# Les couches de Géorisques (vue3d/georisques.py) : leur fichier et leur
+# assemblage. Aucune n'est lue d'avance (voir le module) ; « commune » est la
+# fiche que la page demande au clic.
+COUCHES_GEORISQUES = {
+    "inondations": (f"georisques-inondations-v{GEORISQUES_VERSION}.json.gz",
+                    inondations_pour_emprise),
+    "old": (f"georisques-old-v{GEORISQUES_VERSION}.json.gz", old_pour_emprise),
+    "cavites": (f"georisques-cavites-v{GEORISQUES_VERSION}.json.gz", cavites_pour_emprise),
+    "commune": (f"georisques-commune-v{GEORISQUES_VERSION}.json.gz",
+                risques_commune_pour_emprise),
+}
+LECTURES_GEORISQUES = {"inondations": fetch_inondations, "old": fetch_old,
+                       "cavites": fetch_cavites, "commune": fetch_risques_commune}
 
 
 # Les panneaux solaires ont une seule source : le registre, à sa version.
@@ -354,6 +371,12 @@ class ReseauxIndisponibles(RuntimeError):
 class PostesEnedisIndisponibles(RuntimeError):
     """L'API Enedis (postes HTA/BT) n'a pas répondu : rien n'est mis en cache,
     la scène reste affichée sans eux, réessayer plus tard."""
+
+
+class GeorisquesIndisponibles(RuntimeError):
+    """Une couche de Géorisques (ou le zonage OLD de la Géoplateforme) n'a
+    pas pu être lue : rien n'est mis en cache, la scène reste affichée sans
+    elle, réessayer plus tard."""
 
 
 class ReconstructionRefusee(RuntimeError):
@@ -932,8 +955,10 @@ class Cache:
                  lire_postes_enedis=fetch_postes_enedis,
                  lire_vehicules=None, lire_panneaux=None, lire_nuage=fetch_nuage,
                  lire_dpe=fetch_dpe, lire_mer=fetch_mer,
-                 lire_bornes=fetch_bornes):
-        """`lire_vehicules` : de `vehicules.lecteur()`, ou une doublure qui a
+                 lire_bornes=fetch_bornes, lire_georisques=None):
+        """`lire_georisques` : {couche: lecture d'une emprise}, pour les clés
+        de COUCHES_GEORISQUES ; None, celles de vue3d/georisques.py.
+        `lire_vehicules` : de `vehicules.lecteur()`, ou une doublure qui a
         la même forme — `mode`, `detecteurs`, `orthophoto(emprise)` -> tableau
         RGB, `piscines(emprise, rgb=None)`, `navires(emprise, rgb=None)` et
         `vehicules(detecteur)` -> une lecture `(emprise, rgb=None)` ; `rgb`
@@ -973,6 +998,7 @@ class Cache:
         self.lire_dpe = lire_dpe
         self.lire_mer = lire_mer
         self.lire_bornes = lire_bornes
+        self.lire_georisques = {**LECTURES_GEORISQUES, **(lire_georisques or {})}
         self._lectures = {}
         self._taches = {
             NOM_MONUMENTS: concurrent.futures.ThreadPoolExecutor(
@@ -1493,6 +1519,24 @@ class Cache:
             lambda message: BornesIndisponibles(f"bornes de recharge illisibles : {message}"),
             lambda bbox, brut, scene: bornes_pour_emprise(
                 *bbox, brut, polygone=zone if isinstance(zone, Polygone) else None), zone=zone)
+
+    def obtenir_georisques(self, couche, lat, lon, construire=construire, zone=None):
+        """Chemin du dossier où la couche `couche` de Géorisques est écrite
+        (une clé de COUCHES_GEORISQUES).
+
+        Jamais lue d'avance. Chaque couche porte la date de sa lecture ;
+        « Reconstruire la scène » la relit avec le reste.
+
+        Raises:
+            KeyError pour une couche inconnue ;
+            GeorisquesIndisponibles si la source n'a pas répondu : rien n'est
+            écrit, la demande suivante réessaie.
+        """
+        nom, assembler = COUCHES_GEORISQUES[couche]
+        return self._obtenir_couche(
+            nom, lat, lon, construire, self.lire_georisques[couche],
+            lambda message: GeorisquesIndisponibles(f"Géorisques ({couche}) illisible : {message}"),
+            lambda bbox, brut, scene: assembler(*bbox, brut), zone=zone)
 
     def _detections(self):
         """Les couches de l'orthophoto du service, dans l'ordre où elles se

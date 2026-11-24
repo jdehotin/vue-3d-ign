@@ -13,6 +13,26 @@ messages de commit et dans les commentaires des modules.
 
 ## Scène v16 — 26 octobre 2026
 
+- **Risques de Géorisques** (24 novembre 2026), dans un nouveau thème
+  « Risques » de la fenêtre « Données ». Trois couches à part, drapées sur le
+  relief : les **zones inondables** des TRI (débordement, ruissellement,
+  submersion ; scénarios fréquent, moyen, moyen avec changement climatique,
+  rare), le **zonage des obligations légales de débroussaillement** (massifs
+  exposés aux feux de forêt et bandes de 200 m, IGN pour le MASA) et les
+  **cavités souterraines** de BDCavité, en épingles de 30 m au-dessus des
+  toits. Au clic, la fiche **« Risques de la commune »** : atlas des zones
+  inondables, TRI, PAPI, inondations reconnues catastrophe naturelle et
+  obligation de débroussaillement au point. Mesuré à Avignon (12 surfaces
+  inondables du Rhône, 18 arrêtés d'inondation sur 24), à Gordes (bande OLD,
+  arrêté du 22 octobre 2025) et à Arras (34 cavités sur 1 km²). L'AZI, les PAPI
+  et l'historique ne sont servis par aucun service national en géométrie ; la
+  base des inondations historiques n'est pas dans l'API : la fiche donne à sa
+  place les arrêtés CatNat. Ces couches ne sont jamais lues d'avance par le
+  serveur : éteintes dans la fenêtre, elles ne coûtent aucune requête. Les
+  épingles de la fenêtre sont désormais gardées en écarts aux défauts, pour
+  qu'une couche nouvelle arrive au panneau. Pas encore dans l'export IFC et
+  CityGML.
+
 - **Fenêtre « Données et couches »** (24 novembre 2026), ouverte depuis le
   panneau. Chaque source y dit son fournisseur, sa licence, sa version et son
   état (chargée, rien ici, en échec, éteinte, non servie par ce service), lus

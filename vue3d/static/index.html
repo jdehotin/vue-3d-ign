@@ -196,6 +196,7 @@
         .liste-foncier { font-size:11px; margin-top:6px; }
         .liste-foncier div { padding:3px 0; border-top:1px solid rgba(255,255,255,.07); }
         .sous-titre { font-size:11px; font-weight:600; margin:10px 0 2px; color:var(--text); }
+        .liste-risques { margin:2px 0 0; padding-left:16px; font-size:11px; line-height:1.45; }
         .lien-ext { display:inline-block; margin-top:8px; font-size:11px; color:var(--accent);
                     text-decoration:none; border:1px solid var(--line); border-radius:5px;
                     padding:4px 8px; }
@@ -682,6 +683,10 @@
                 <button class="toggle on" id="t-panneaux" hidden title="Panneaux solaires du registre OpenPVMapper">Panneaux solaires</button>
                 <button class="toggle" id="t-dpe" title="Diagnostics de performance énergétique (ADEME) des bâtiments autour du point : lus au premier clic">DPE</button>
                 <button class="toggle" id="t-bornes" title="Bornes de recharge pour véhicules électriques (base nationale IRVE, data.gouv.fr) autour du point : lues au premier clic">Bornes de recharge</button>
+                <button class="toggle" id="t-inondations" disabled title="Surfaces inondables des territoires à risque important d'inondation (Géorisques), par scénario : fréquent, moyen, rare">Zones inondables</button>
+                <button class="toggle" id="t-old" disabled title="Obligations légales de débroussaillement : massifs exposés aux feux de forêt et bandes de 200 m (zonage informatif IGN pour le MASA)">Débroussaillement</button>
+                <button class="toggle" id="t-cavites" disabled title="Cavités souterraines abandonnées d'origine non minière (BDCavité, BRGM)">Cavités</button>
+                <button class="toggle" id="t-risques" title="Atlas des zones inondables, TRI, PAPI, inondations reconnues catastrophe naturelle et débroussaillement de la commune du point (Géorisques) : lus au premier clic">Risques de la commune</button>
             </div>
             <!-- Toutes les sources, leur provenance et leur licence : charger ou
                  non chacune, afficher ses couches, épingler celles qui restent
@@ -786,6 +791,12 @@
             <div class="note" id="bornes-note"></div>
         </div>
 
+        <div class="section" id="sec-risques" hidden>
+            <h2>Risques de la commune (Géorisques)</h2>
+            <div id="risques-resume"></div>
+            <div class="note" id="risques-note"></div>
+        </div>
+
         <details class="section">
             <summary><h2>Terrain<span class="chev" aria-hidden="true">▸</span></h2></summary>
             <div class="stat"><span>source</span><b id="s-src">—</b></div>
@@ -829,6 +840,7 @@
         <div id="etat-emprises" class="etat-couche" role="status" hidden><i class="roue"></i><span></span></div>
             <div id="etat-reseaux" class="etat-couche" role="status" hidden><i class="roue"></i><span></span></div>
             <div id="etat-postes-enedis" class="etat-couche" role="status" hidden><i class="roue"></i><span></span></div>
+            <div id="etat-georisques" class="etat-couche" role="status" hidden><i class="roue"></i><span></span></div>
             <div id="etat-nuage" class="etat-couche" role="status" hidden><i class="roue"></i><span></span></div>
             <div id="etat-vehicules" class="etat-couche" role="status" hidden><i class="roue"></i><span></span></div>
             <div id="etat-foncier" class="etat-couche" role="status" hidden><i class="roue"></i><span></span></div>
@@ -3508,6 +3520,9 @@ function majCiblesSurvol() {
     if (groupeDpe && groupeDpe.visible) ciblesSurvol.push(...groupeDpe.children);
     if (groupeBornes && groupeBornes.visible) ciblesSurvol.push(...groupeBornes.children);
     if (groupePostesEnedis && groupePostesEnedis.visible) ciblesSurvol.push(...groupePostesEnedis.children);
+    for (const groupe of [groupeInondations, groupeOld, groupeCavites]) {
+        if (groupe && groupe.visible) ciblesSurvol.push(...groupe.children);
+    }
 }
 
 /** Point dans polygone par lancer de rayon. Coordonnées en degrés (lon, lat). */
@@ -4617,6 +4632,14 @@ function majCredits() {
         html += ' · Postes HTA/BT : <a href="https://opendata.enedis.fr/explore/dataset/poste-electrique/information/"'
             + ' target="_blank" rel="noopener">Enedis</a> (Licence Ouverte 2.0)';
     }
+    // Déclarés en `var` plus bas : undefined au premier appel.
+    const risques = [groupeInondations, groupeOld, groupeCavites]
+        .some(g => g && g.visible && g.children.length) || risquesActif;
+    if (risques) {
+        html += ' · Risques : <a href="https://www.georisques.gouv.fr/" target="_blank" rel="noopener">Géorisques</a>'
+            + ' (MTE, BRGM)' + (groupeOld && groupeOld.visible && groupeOld.children.length
+                ? ', débroussaillement IGN pour le MASA' : '') + ', Licence Ouverte 2.0';
+    }
     document.getElementById('credits').innerHTML = html;
 }
 majCredits();
@@ -5086,6 +5109,7 @@ function appliquerExageration() {
     if (naviresPoses && naviresPoses.length) placerNavires();
     if (bornesPosees) placerBornes();
     if (POSTES_ENEDIS && postesEnedisConstruit) placerPostesEnedis();
+    if (CAVITES) placerCavites();
     // Le grand plan gris sert de fond au-delà de l'emprise, et sous les trous
     // de l'anneau : on le glisse sous le point le plus bas du terrain pour
     // qu'il ne le traverse pas.
@@ -5191,6 +5215,7 @@ async function chargerRelief() {
         construireEmprises();
         construireReseaux();
         construirePostesEnedis();
+        construireGeorisques();
         construireNuage();
         construireVehicules();
         construirePiscines();
@@ -5279,6 +5304,7 @@ async function chargerRelief() {
     construireEmprises();
     construireReseaux();
     construirePostesEnedis();
+    construireGeorisques();
     construireNuage();
     construireVehicules();
     construirePiscines();
@@ -7356,6 +7382,266 @@ async function chargerPostesEnedis(essai = 1) {
         setTimeout(() => chargerPostesEnedis(essai + 1), ATTENTE_MONUMENTS_S * 1000);
     }
 }
+
+// --- Risques (Géorisques) ---------------------------------------------------------
+// Surfaces inondables des TRI, zonage des obligations légales de débroussaillement
+// et cavités souterraines (/api/georisques/<couche>, vue3d/georisques.py),
+// demandées une fois la scène affichée ; la fiche de la commune, au clic. Les
+// surfaces sont des aplats translucides drapés sur le relief, du scénario rare
+// (le plus étendu, le plus clair) au fréquent (le plus foncé, posé dessus) ; une
+// cavité est un cône pointé vers le sol, teint de son type.
+//
+// `var` : majCiblesSurvol et majCredits les lisent avant que ce bloc soit évalué.
+var groupeInondations = new THREE.Group();
+var groupeOld = new THREE.Group();
+var groupeCavites = new THREE.Group();
+scene.add(groupeInondations, groupeOld, groupeCavites);
+var INONDATIONS = null, ZONES_OLD = null, CAVITES = null, RISQUES_COMMUNE = null;
+var risquesActif = false;
+const georisquesConstruits = { inondations: false, old: false, cavites: false };
+const urlGeorisques = couche => `api/georisques/${couche}?${REQUETE}`;
+// Maille des aplats de risque : 4 m, plus large que celle de l'eau (2,5 m). Une
+// surface inondable du Rhône couvre presque toute une zone de 1 000 m, et
+// quatre scénarios s'y empilent : à 2,5 m, 1,3 million de triangles.
+const RISQUE_MAILLE = 4;
+const SCENARIOS_INONDATION = {
+    // Du plus étendu au plus restreint : chacun posé au-dessus du précédent.
+    rare:     { nom: 'rare (millénal)', couleur: 0x8ec5ff, opacite: 0.30, decalage: 0.20 },
+    moyen_cc: { nom: 'moyen, avec changement climatique', couleur: 0x7a62d6, opacite: 0.32, decalage: 0.22 },
+    moyen:    { nom: 'moyen (centennal)', couleur: 0x3f7fe0, opacite: 0.38, decalage: 0.24 },
+    frequent: { nom: 'fréquent (décennal)', couleur: 0x1b3f99, opacite: 0.45, decalage: 0.26 },
+};
+const TYPES_INONDATION = {
+    debordement: "Débordement de cours d'eau", ruissellement: 'Ruissellement',
+    submersion: 'Submersion marine',
+};
+const ZONAGES_OLD = {
+    bande: { nom: 'Bande de 200 m soumise aux OLD', couleur: 0xf0a030, opacite: 0.30, decalage: 0.20 },
+    massif: { nom: 'Massif exposé aux feux de forêt', couleur: 0xc0392b, opacite: 0.35, decalage: 0.24 },
+};
+const COULEURS_CAVITE = {
+    'carrière': 0x8d6e63, 'cave': 0xbcaaa4, 'naturelle': 0x43a047, 'ouvrage civil': 0x5c6bc0,
+    'ouvrage militaire': 0xc62828, 'puits': 0x00838f,
+};
+const COULEUR_CAVITE_AUTRE = 0x9e9e9e;
+// Hauteur de l'épingle d'une cavité : de quoi dépasser les toits d'un
+// centre-ville. Une convention, à revoir sur mesure : à 4 m, aucune des 9
+// cavités de la Grand-Place d'Arras (zone de 350 m) n'était visible.
+const CAVITE_EPINGLE_M = 30;
+const matRisque = ({ couleur, opacite }) => new THREE.MeshStandardMaterial({
+    color: couleur, roughness: 0.9, transparent: true, opacity: opacite, depthWrite: false,
+    polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
+
+/** Un aplat de risque drapé sur le relief, avec son infobulle. */
+function poserAplatRisque(geometrie, materiau, groupe, decalage, infobulle) {
+    const polygones = geometrie.type === 'Polygon' ? [geometrie.coordinates]
+                    : geometrie.type === 'MultiPolygon' ? geometrie.coordinates : [];
+    const tris = polygones.flatMap(p => subdiviser(trianglesPolygone(p), RISQUE_MAILLE));
+    if (!tris.length) return null;
+    const mesh = maillageDrape(tris, materiau, groupe, decalage);
+    mesh.receiveShadow = false;
+    mesh.userData = { infobulle };
+    return mesh;
+}
+
+/** Le bouton d'une couche de risque : allumé s'il y a de quoi l'afficher. */
+function brancherBoutonRisque(id, groupe) {
+    const bouton = document.getElementById(id);
+    const present = !!groupe.children.length;
+    bouton.disabled = !present;
+    bouton.classList.toggle('on', present);
+    groupe.visible = present;
+    bouton.addEventListener('click', e => {
+        groupe.visible = !groupe.visible;
+        e.currentTarget.classList.toggle('on', groupe.visible);
+        majCiblesSurvol();
+        majCredits();
+    });
+}
+
+function construireInondations() {
+    if (!INONDATIONS || !reliefRegle || georisquesConstruits.inondations) return;
+    georisquesConstruits.inondations = true;
+    const ordre = Object.keys(SCENARIOS_INONDATION);
+    const surfaces = INONDATIONS.surfaces.slice().sort(
+        (a, b) => ordre.indexOf(a.scenario) - ordre.indexOf(b.scenario));
+    const materiaux = Object.fromEntries(ordre.map(s => [s, matRisque(SCENARIOS_INONDATION[s])]));
+    for (const s of surfaces) {
+        const sc = SCENARIOS_INONDATION[s.scenario];
+        if (!sc) continue;
+        poserAplatRisque(s.geometrie, materiaux[s.scenario], groupeInondations, sc.decalage,
+            `<b>${TYPES_INONDATION[s.type] || 'Inondation'}</b>`
+            + `<br>scénario ${sc.nom}`
+            + (s.cours_deau ? `<br>${echapper(s.cours_deau)}` : '')
+            + (s.tri ? `<br><i>${echapper(s.tri.replace(/^FR._TRI_/, 'TRI '))}</i>` : '')
+            + `<br><i>Géorisques, lu le ${dateLongue(INONDATIONS.lu_le)}</i>`);
+    }
+    placerDrapes();
+    brancherBoutonRisque('t-inondations', groupeInondations);
+    majCiblesSurvol();
+    majCredits();
+}
+
+function construireOld() {
+    if (!ZONES_OLD || !reliefRegle || georisquesConstruits.old) return;
+    georisquesConstruits.old = true;
+    const materiaux = Object.fromEntries(Object.entries(ZONAGES_OLD).map(([k, z]) => [k, matRisque(z)]));
+    for (const z of ZONES_OLD.zones) {
+        const zonage = ZONAGES_OLD[z.zonage];
+        poserAplatRisque(z.geometrie, materiaux[z.zonage], groupeOld, zonage.decalage,
+            `<b>${zonage.nom}</b>`
+            + (z.arrete ? `<br>arrêté préfectoral du ${echapper(z.arrete)}` : '')
+            + (z.source ? `<br>${echapper(z.source)}` : '')
+            + '<br><i>zonage informatif : la mairie ou la préfecture fait foi</i>'
+            + `<br><i>IGN pour le MASA, lu le ${dateLongue(ZONES_OLD.lu_le)}</i>`);
+    }
+    placerDrapes();
+    brancherBoutonRisque('t-old', groupeOld);
+    majCiblesSurvol();
+    majCredits();
+}
+
+function construireCavites() {
+    if (!CAVITES || !reliefRegle || georisquesConstruits.cavites) return;
+    georisquesConstruits.cavites = true;
+    const liste = CAVITES.cavites;
+    // Une épingle au droit de la cavité : une tige depuis le sol et une tête
+    // pointée vers lui, à CAVITE_EPINGLE_M. Un cône de 4 m posé au sol restait
+    // invisible à Arras : les boves de la Grand-Place sont sous les maisons, et
+    // le bâti le cachait ; la cavité elle-même est sous le relief opaque.
+    const tige = new THREE.CylinderGeometry(0.25, 0.25, CAVITE_EPINGLE_M, 6);
+    tige.translate(0, CAVITE_EPINGLE_M / 2, 0);
+    const tete = new THREE.ConeGeometry(2.2, 5, 12);
+    tete.rotateX(Math.PI);
+    tete.translate(0, CAVITE_EPINGLE_M + 2.5, 0);
+    const couleur = new THREE.Color();
+    for (const geom of [tige, tete]) {
+        const mesh = new THREE.InstancedMesh(geom, new THREE.MeshStandardMaterial({ roughness: 0.6 }), liste.length);
+        mesh.castShadow = geom === tete;
+        mesh.userData = { cavites: liste };
+        liste.forEach((c, i) => mesh.setColorAt(i, couleur.setHex(COULEURS_CAVITE[c.type] ?? COULEUR_CAVITE_AUTRE)));
+        mesh.instanceColor.needsUpdate = true;
+        groupeCavites.add(mesh);
+    }
+    placerCavites();
+    brancherBoutonRisque('t-cavites', groupeCavites);
+    majCiblesSurvol();
+    majCredits();
+}
+
+/** Les épingles suivent le relief quand il change (exagération, relief rechargé). */
+function placerCavites() {
+    const matrice = new THREE.Matrix4();
+    for (const mesh of groupeCavites.children) {
+        mesh.userData.cavites.forEach((c, i) => {
+            const [x, y] = toLocal(c.lon, c.lat);
+            mesh.setMatrixAt(i, matrice.makeTranslation(x, ySol(c.lon, c.lat), -y));
+        });
+        mesh.instanceMatrix.needsUpdate = true;
+        mesh.computeBoundingSphere();
+    }
+}
+
+function infobulleCavite(c) {
+    return `<b>Cavité : ${echapper(c.type || 'type inconnu')}</b>`
+        + (c.nom ? `<br>${echapper(c.nom)}` : '')
+        + (c.reperage ? `<br>point : ${echapper(c.reperage)}` : '')
+        + (c.identifiant ? `<br><i>BDCavité ${echapper(c.identifiant)}</i>` : '')
+        + `<br><i>BRGM, Géorisques, lu le ${dateLongue(CAVITES.lu_le)}</i>`;
+}
+
+function construireGeorisques() {
+    construireInondations();
+    construireOld();
+    construireCavites();
+}
+
+/** Une couche de risque, avec les essais et l'indicateur des couches à part. */
+async function chargerGeorisques(couche, libelle, recevoir, essai = 1) {
+    const retard = setTimeout(
+        () => etatCouche('etat-georisques', `${libelle} : lecture de Géorisques…`, true),
+        essai === 1 ? RETARD_ETAT_MONUMENTS_MS : 0);
+    try {
+        const r = await requete(urlGeorisques(couche));
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const donnees = await r.json();
+        clearTimeout(retard);
+        etatCouche('etat-georisques', null);
+        if (!donnees) {
+            // Rien de la couche ici : le bouton le dit, éteint.
+            document.getElementById(`t-${couche}`).disabled = true;
+            return;
+        }
+        recevoir(donnees);
+    } catch (err) {
+        clearTimeout(retard);
+        if (essai >= ESSAIS_MONUMENTS) {
+            etatCouche('etat-georisques', `${libelle} indisponibles : recharger la page pour réessayer.`);
+            return;
+        }
+        etatCouche('etat-georisques',
+                   `${libelle} indisponibles : nouvel essai dans ${ATTENTE_MONUMENTS_S} s.`, true);
+        setTimeout(() => chargerGeorisques(couche, libelle, recevoir, essai + 1),
+                   ATTENTE_MONUMENTS_S * 1000);
+    }
+}
+const chargerInondations = () => chargerGeorisques('inondations', 'Zones inondables',
+    d => { INONDATIONS = d; construireInondations(); });
+const chargerOld = () => chargerGeorisques('old', 'Zonage OLD',
+    d => { ZONES_OLD = d; construireOld(); });
+const chargerCavites = () => chargerGeorisques('cavites', 'Cavités',
+    d => { CAVITES = d; construireCavites(); });
+
+/** La fiche des risques de la commune, dans le panneau. */
+function resumerRisques() {
+    const f = RISQUES_COMMUNE;
+    const stat = (libelle, valeur) => `<div class="stat"><span>${libelle}</span><b>${valeur}</b></div>`;
+    const liste = (titre, elements, ligne) => `<div class="sous-titre">${titre}</div>`
+        + (elements.length ? `<ul class="liste-risques">${elements.map(e => `<li>${ligne(e)}</li>`).join('')}</ul>`
+                           : '<div class="note">Aucun.</div>');
+    const old = f.old
+        ? `Soumis aux OLD${f.old.zone_urbaine ? ', en zone urbaine' : ''}`
+          + (f.old.approbation ? ` — arrêté du ${dateLongue(f.old.approbation)}` : '')
+          + (f.old.url ? ` · <a href="${echapper(f.old.url)}" target="_blank" rel="noopener">règles de la préfecture</a>` : '')
+        : 'Le point n\'est pas soumis aux obligations légales de débroussaillement.';
+    const INONDATIONS_MONTREES = 12;
+    document.getElementById('risques-resume').innerHTML =
+        (f.commune ? stat('commune', `${echapper(f.commune.nom || '')} (${echapper(f.commune.code)})`) : '')
+        + liste('Atlas des zones inondables (AZI)', f.azi,
+                a => echapper(a.libelle) + (a.publication ? ` <i>(${echapper(a.publication)})</i>` : ''))
+        + liste('Territoires à risque important d\'inondation (TRI)', f.tri,
+                t => echapper(t.libelle) + (t.arrete_carte ? ` <i>(cartes du ${echapper(t.arrete_carte)})</i>` : ''))
+        + liste('Programmes d\'actions de prévention des inondations (PAPI)', f.papi,
+                p => echapper(p.libelle) + (p.labellisation ? ` <i>(labellisé le ${echapper(p.labellisation)})</i>` : ''))
+        + liste(`Inondations reconnues catastrophe naturelle (${f.inondations.length})`,
+                f.inondations.slice(0, INONDATIONS_MONTREES),
+                c => `${echapper(c.debut)}${c.fin && c.fin !== c.debut ? ' – ' + echapper(c.fin) : ''} · ${echapper(c.libelle)}`)
+        + (f.inondations.length > INONDATIONS_MONTREES
+            ? `<div class="note">… et ${f.inondations.length - INONDATIONS_MONTREES} plus anciennes.</div>` : '')
+        + `<div class="sous-titre">Feux de forêt</div><div class="note">${old}</div>`;
+    document.getElementById('risques-note').innerHTML =
+        `Base GASPAR de <a href="https://www.georisques.gouv.fr/" target="_blank" rel="noopener">Géorisques</a>, `
+        + `lue le ${dateLongue(f.lu_le)} ; « Reconstruire la scène » la relit. Les atlas et TRI ne disent pas `
+        + 'si le point est inondable : la couche « Zones inondables » le montre dans les TRI. Historique : '
+        + `les arrêtés CatNat liés aux inondations, ${f.catnat_total} arrêté(s) en tout pour la commune. Licence Ouverte 2.0.`;
+}
+
+document.getElementById('t-risques').addEventListener('click', async e => {
+    const bouton = e.currentTarget;
+    if (!RISQUES_COMMUNE) {
+        if (bouton.dataset.lecture) return;
+        bouton.dataset.lecture = '1';
+        const fiche = await lireALaDemande('Risques de la commune', 'de Géorisques', urlGeorisques('commune'));
+        delete bouton.dataset.lecture;
+        if (!fiche) return;
+        RISQUES_COMMUNE = fiche;
+        resumerRisques();
+    }
+    risquesActif = !risquesActif;
+    bouton.classList.toggle('on', risquesActif);
+    document.getElementById('sec-risques').hidden = !risquesActif;
+    majCredits();
+});
 
 // --- Nuage LiDAR HD ------------------------------------------------------------
 // Le bâti du nuage de points LiDAR HD (/api/nuage, vue3d/nuage.py), lu après la
@@ -12101,6 +12387,10 @@ const COUCHES_DES_SOURCES = {
     dpe: ['t-dpe'],
     detections: ['t-vehicules', 't-piscines', 't-navires'],
     bornes: ['t-bornes'],
+    inondations: ['t-inondations'],
+    old: ['t-old'],
+    cavites: ['t-cavites'],
+    risques_commune: ['t-risques'],
 };
 const CHARGEURS_DES_SOURCES = {
     monuments: () => chargerMonuments(),
@@ -12111,12 +12401,16 @@ const CHARGEURS_DES_SOURCES = {
     nuage: () => chargerNuage(),
     detections: () => chargerDetections(),
     panneaux: () => chargerPanneaux(),
+    inondations: () => chargerInondations(),
+    old: () => chargerOld(),
+    cavites: () => chargerCavites(),
 };
 // L'indicateur posé sur la vue par chaque chargeur : il dit l'attente et l'échec.
 const ETATS_DES_SOURCES = {
     monuments: 'etat-monuments', ouvrages: 'etat-ouvrages', emprises: 'etat-emprises',
     reseaux: 'etat-reseaux', postes_enedis: 'etat-postes-enedis', nuage: 'etat-nuage',
     detections: 'etat-vehicules', panneaux: 'etat-vehicules',
+    inondations: 'etat-georisques', old: 'etat-georisques', cavites: 'etat-georisques',
 };
 // Sans catalogue (service ancien, réponse perdue), la fenêtre reste utilisable.
 const SOURCES_DE_REPLI = Object.keys(COUCHES_DES_SOURCES).map(id => ({
@@ -12127,22 +12421,38 @@ const SOURCES_DE_REPLI = Object.keys(COUCHES_DES_SOURCES).map(id => ({
 // d'une vue 3D, et celles que les scripts d'essai cliquent (essai-navigateur,
 // demo-video, mesure-ecarts-toits). Les autres sont à un clic, dans la fenêtre.
 const EPINGLEES_PAR_DEFAUT = ['t-veg', 't-eau', 't-routes', 't-lignes', 't-mesure', 't-monuments',
-                              't-nuage', 't-vehicules', 't-panneaux', 't-dpe', 't-bornes'];
+                              't-nuage', 't-vehicules', 't-panneaux', 't-dpe', 't-bornes',
+                              't-inondations', 't-old', 't-cavites', 't-risques'];
 const CLE_DONNEES = 'vue3d.donnees';
 
+// Les épingles sont gardées en écarts aux épingles par défaut, jamais en liste
+// entière : une liste figeait les défauts du jour où elle était écrite, et une
+// couche ajoutée depuis (les risques de Géorisques) n'arrivait jamais au
+// panneau. Le premier format, une liste, se relit contre les défauts d'alors.
+const EPINGLEES_PAR_DEFAUT_V1 = ['t-veg', 't-eau', 't-routes', 't-lignes', 't-mesure', 't-monuments',
+                                 't-nuage', 't-vehicules', 't-panneaux', 't-dpe', 't-bornes'];
 function lirePreferencesDonnees() {
     let p = null;
     try { p = JSON.parse(localStorage.getItem(CLE_DONNEES)); } catch (e) { /* navigation privée */ }
+    let ajoutees = Array.isArray(p?.ajoutees) ? p.ajoutees : [];
+    let retirees = Array.isArray(p?.retirees) ? p.retirees : [];
+    if (Array.isArray(p?.epinglees)) {
+        ajoutees = p.epinglees.filter(id => !EPINGLEES_PAR_DEFAUT_V1.includes(id));
+        retirees = EPINGLEES_PAR_DEFAUT_V1.filter(id => !p.epinglees.includes(id));
+    }
     return {
         eteintes: new Set(Array.isArray(p?.eteintes) ? p.eteintes : []),
-        epinglees: new Set(Array.isArray(p?.epinglees) ? p.epinglees : EPINGLEES_PAR_DEFAUT),
+        epinglees: new Set([...EPINGLEES_PAR_DEFAUT, ...ajoutees].filter(id => !retirees.includes(id))),
     };
 }
 const preferencesDonnees = lirePreferencesDonnees();
 function ecrirePreferencesDonnees() {
+    const epinglees = preferencesDonnees.epinglees;
     try {
         localStorage.setItem(CLE_DONNEES, JSON.stringify({
-            eteintes: [...preferencesDonnees.eteintes], epinglees: [...preferencesDonnees.epinglees] }));
+            eteintes: [...preferencesDonnees.eteintes],
+            ajoutees: [...epinglees].filter(id => !EPINGLEES_PAR_DEFAUT.includes(id)),
+            retirees: EPINGLEES_PAR_DEFAUT.filter(id => !epinglees.has(id)) }));
     } catch (e) { /* navigation privée : les choix valent pour la visite */ }
 }
 
@@ -12855,6 +13165,10 @@ function objetSous(touche) {
     const b = ud.borne || (ud.bornes && touche.instanceId != null ? ud.bornes[touche.instanceId] : null);
     if (b) {
         return { html: infobulleBorne(b), centre: [b.lon, b.lat], quoi: 'sur cette station', yAller: true };
+    }
+    if (ud.cavites && touche.instanceId != null) {
+        const c = ud.cavites[touche.instanceId];
+        return { html: infobulleCavite(c), centre: [c.lon, c.lat], quoi: 'sur cette cavité' };
     }
     if (ud.postesEnedis && touche.instanceId != null) {
         const pe = ud.postesEnedis[touche.instanceId];
