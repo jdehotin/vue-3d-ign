@@ -13,6 +13,13 @@ messages de commit et dans les commentaires des modules.
 
 ## Scène v16 — 26 octobre 2026
 
+- **Plus d'archive vers Trimble Connect** (24 novembre 2026) : le zip est
+  réservé au téléchargement et à l'enregistrement local. Vers le projet, les
+  fichiers des couches et l'image du relief texturé sont déposés tels quels,
+  un par un ; en un seul fichier avec l'orthophoto sur le terrain, le modèle
+  et son image partent aussi séparément, là où une archive partait jusqu'ici.
+  Vérifié à Gordes avec un jeton factice et les dépôts interceptés : 4 IFC et
+  1 JPEG par couche, 1 IFC et 1 JPEG en un seul fichier, aucun zip.
 - **Export par couche** (24 novembre 2026) : l'IFC et le CityGML se
   découpent désormais en un fichier par couche de données — relief,
   bâtiments, monuments OSM, arbres, masses, routes, hydrographie, ouvrages,

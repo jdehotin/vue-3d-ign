@@ -423,8 +423,10 @@ archive zip. Tous partagent l'origine, la projection et l'ancrage : chargés
 ensemble (une fédération Revit, Trimble Connect, un projet QGIS), ils se
 superposent exactement, et chacun s'affiche ou se masque à part. Chaque
 fichier a son propre projet et son propre site IFC ; les éléments gardent
-leurs identifiants. Vers Trimble Connect, chaque fichier est déposé à part
-dans le dossier choisi. « Un seul fichier » rend l'export d'avant.
+leurs identifiants. L'archive zip n'est que pour le disque : vers Trimble
+Connect, rien n'est archivé, chaque fichier est déposé tel quel dans le
+dossier choisi, l'image de l'orthophoto collée sur le relief comprise. « Un
+seul fichier » rend l'export d'avant.
 
 - **IFC 4**, pour un logiciel de conception — Revit, ArchiCAD, Vectorworks,
   Allplan, Bonsai : des maillages, autour d'une origine au point visé. 5 à

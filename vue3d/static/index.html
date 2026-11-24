@@ -13875,10 +13875,11 @@ async function octetsDe(texte) {
 /**
  * L'export découpé par couche de données (modelesParCouche) : un fichier par
  * couche. Téléchargé ou enregistré, une archive zip qui les réunit, comprimés,
- * avec l'orthophoto du relief texturé ; vers Trimble Connect, chacun déposé
- * à part — le relief texturé, avec son image, en archive comme avant.
+ * avec l'orthophoto du relief texturé ; vers Trimble Connect, jamais
+ * d'archive : chaque fichier est déposé tel quel, l'image du relief comprise,
+ * à côté de lui dans le dossier.
  */
-async function exporterParCouche({ modele, choix, ecrire, extensionModele, avecTexture, mode,
+async function exporterParCouche({ modele, choix, ecrire, extensionModele, typeModele, avecTexture, mode,
                                    flux, poignee, nomFichier, reperes, abandonner }) {
     const base = nomFichierExport();
     const libelles = Object.fromEntries(COUCHES_EXPORT.map(([cle, id]) =>
@@ -13905,16 +13906,12 @@ async function exporterParCouche({ modele, choix, ecrire, extensionModele, avecT
     const liste = fichiers.map(f => libelles[f.couche] || f.couche).join(', ');
     if (mode === 'projet') {
         for (const f of fichiers) {
-            let blob = new Blob([f.octets], { type: 'application/octet-stream' }), nom = f.nom;
-            if (image && f.couche === 'relief') {
-                nom = `${f.modele.base}.zip`;
-                blob = new Blob(archiveZip([{ nom: f.nom, octets: f.octets, deflate: await compresserDeflate(f.octets) },
-                                            { nom: `${base}.jpg`, octets: image.jpeg }]), { type: 'application/zip' });
-            }
-            await envoyerAuProjet(blob, nom, f.modele, choix);
+            await envoyerAuProjet(new Blob([f.octets], { type: typeModele }), f.nom, f.modele, choix);
         }
-        noterExport(`${fichiers.length} fichier(s) déposé(s) dans le projet${tcAuth.nom ? ' ' + tcAuth.nom : ''} : `
-            + `${liste}. ` + resumeDe(modele, choix) + '. ' + reperes(modele));
+        if (image) await envoyerAuProjet(new Blob([image.jpeg], { type: 'image/jpeg' }), `${base}.jpg`, modele, choix);
+        noterExport(`${fichiers.length + (image ? 1 : 0)} fichier(s) déposé(s) dans le projet`
+            + `${tcAuth.nom ? ' ' + tcAuth.nom : ''}, sans archive : ${fichiers.map(f => f.nom).join(', ')}`
+            + (image ? `, ${base}.jpg` : '') + '. ' + resumeDe(modele, choix) + '. ' + reperes(modele));
         return;
     }
     noterExport(`Compression de ${fichiers.length} fichier(s)…`);
@@ -13990,7 +13987,9 @@ async function exporter(format, mode = 'telecharger') {
     const avecTexture = !estOrtho && textureTerrain && choix.relief;
     // Un fichier par couche : une archive zip, un modèle par couche de données.
     const parCouche = !estOrtho && fichiersExport === 'couches';
-    const extensionModele = extension;
+    const extensionModele = extension, typeModele = type;
+    // L'archive n'est que pour le disque : vers Trimble Connect, chaque fichier
+    // est déposé tel quel (voir plus bas et exporterParCouche).
     if (avecTexture || parCouche) { extension = 'zip'; type = 'application/zip'; }
     const nomFichier = `${nomFichierExport()}.${extension}`;
     // Le flux d'écriture s'ouvre tout de suite, avant le calcul. Deux raisons :
@@ -14040,7 +14039,7 @@ async function exporter(format, mode = 'telecharger') {
             return;
         }
         if (parCouche) {
-            await exporterParCouche({ modele, choix, ecrire, extensionModele, avecTexture, mode,
+            await exporterParCouche({ modele, choix, ecrire, extensionModele, typeModele, avecTexture, mode,
                                       flux, poignee, nomFichier, reperes, abandonner });
             return;
         }
@@ -14052,6 +14051,16 @@ async function exporter(format, mode = 'telecharger') {
             const { plan, jpeg } = await imageOrtho();
             modele.texture = { image: `${base}.jpg`, minX: plan.minX, minY: plan.maxY - plan.hauteur * plan.pasY,
                                largeurM: plan.largeur * plan.pasX, hauteurM: plan.hauteur * plan.pasY };
+            if (mode === 'projet') {
+                // Vers Trimble Connect, pas d'archive : le modèle et son image,
+                // deux fichiers côte à côte dans le dossier.
+                const nomModele = `${base}.${extensionModele}`;
+                await envoyerAuProjet(new Blob([].concat(ecrire(modele)), { type: typeModele }), nomModele, modele, choix);
+                await envoyerAuProjet(new Blob([jpeg], { type: 'image/jpeg' }), `${base}.jpg`, modele, choix);
+                noterExport(`${nomModele} et ${base}.jpg déposés dans le projet${tcAuth.nom ? ' ' + tcAuth.nom : ''}, `
+                    + 'sans archive. ' + resumeDe(modele, choix) + '.');
+                return;
+            }
             // Le modèle compressé : 55 Mo de CityGML en clair à Gordes, où le dépôt
             // dans le projet n'en accepte que 64 ; le JPEG, lui, est stocké tel quel.
             const gml = new TextEncoder().encode([].concat(ecrire(modele)).join(''));
