@@ -24,6 +24,7 @@
     GET /api/tuile/<couche>/<z>/<x>/<y>  une tuile WMTS de l'IGN (ortho, plan) : du
                                    stock du serveur, sinon redirigée vers l'IGN ;
                                    `?relire=1` après un refus, lue et gardée ici
+    GET /api/sources               le catalogue des sources de données (fenêtre « Données »)
     GET /api/sante                 contrôle de vie, pour Docker
     POST /api/connect/fichier?projet=…&nom=…   dépose le fichier exporté (IFC ou
                                    CityGML, corps de la requête) à la racine du
@@ -91,6 +92,7 @@ from .scene import (NOM_BORNES, NOM_DPE, NOM_EMPRISES,
 
 from .scene import aire_avertissement_m2, aire_max_m2
 from .scene import construire as construire_scene
+from .sources import catalogue
 from .toits import autoriser_bassin
 from .tuiles import (COUCHES, TUILES_RELECTURES_PAR_HEURE, Stock, TuileAbsente, TuileIllisible,
                      TuilesOccupees, fetch_tuile, url_ign, valide)
@@ -622,6 +624,14 @@ def creer_app(dossier_cache=None, construire=construire_scene, lire_monuments=fe
                 return cache.obtenir_ouvrages(*p, construire=construire, zone=zone), None
             if couche == NOM_EMPRISES:
                 return cache.obtenir_emprises(*p, construire=construire, zone=zone), None
+            # Sans ces deux branches, les routes recevaient le dossier de la
+            # scène sans que la couche y soit jamais écrite : 500 à chaque
+            # demande (FileNotFoundError sur reseaux-v1.json.gz, constaté à
+            # Gordes le 24 novembre 2026).
+            if couche == NOM_RESEAUX:
+                return cache.obtenir_reseaux(*p, construire=construire, zone=zone), None
+            if couche == NOM_POSTES_ENEDIS:
+                return cache.obtenir_postes_enedis(*p, construire=construire, zone=zone), None
             if couche == NOM_NUAGE:
                 return cache.obtenir_nuage(*p, construire=construire, zone=zone), None
             if couche == NOM_NUAGE_PROCHE:
@@ -1108,6 +1118,15 @@ def creer_app(dossier_cache=None, construire=construire_scene, lire_monuments=fe
         reponse = send_file(chemin, mimetype=COUCHES[couche][1], conditional=True)
         # Le délai que l'IGN donne lui-même à ses tuiles.
         reponse.headers["Cache-Control"] = "public, max-age=1814400"
+        return reponse
+
+    @app.get("/api/sources")
+    def sources():
+        """Le catalogue des sources, pour la fenêtre « Données » de la page :
+        provenance, licence, version, et ce que ce service sait servir. Jamais
+        gardé : le service peut être relancé avec un détecteur ou un registre."""
+        reponse = jsonify({"sources": catalogue(cache.lire_vehicules, cache.lire_panneaux)})
+        reponse.headers["Cache-Control"] = "no-store"
         return reponse
 
     @app.get("/api/sante")

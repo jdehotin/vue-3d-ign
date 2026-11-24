@@ -896,6 +896,7 @@ principales :
 | `GET /api/dpe?lat=…&lon=…` | Les DPE de l'ADEME réunis par bâtiment (`batiments`, par `cleabs`) et, sans bâtiment, par adresse (`adresses`), en JSON gzippé, datés (`lu_le`) ; demandés au clic seulement |
 | `GET /api/dvf?lat=…&lon=…` | Les ventes DVF des parcelles de l'emprise (`parcelles`, `ventes`, `resume`), en JSON gzippé, datées ; `absent` nomme les départements sans DVF (Alsace-Moselle) ; au clic seulement |
 | `GET /api/bornes?lat=…&lon=…` | Les bornes de recharge de l'emprise, réunies par station (`stations` : opérateur, points de charge, puissances, prises, accès), en JSON gzippé, datées ; au clic seulement |
+| `GET /api/sources` | `{"sources": [{"id", "libelle", "theme", "mode", "version", "fournisseur", "licence", "lien", "description", "disponible"}, …]}` : le catalogue lu par la fenêtre « Données et couches » de la page ; `mode` vaut `scene`, `apres-scene` ou `au-clic`, `disponible` dit si ce service sert la source (détecteur, registre) |
 | `GET /api/sante` | `{"ok": true, "vehicules": {"mode": …, "detecteurs": […]}, "panneaux": {"actif": …}}` : le contrôle de vie, et ce que le service sait détecter ou lire |
 | `POST /api/reconstruire?lat=…&lon=…` | Met de côté la scène et ses couches (202) : la demande suivante les reconstruit d'après les données de l'IGN du moment, l'ancienne revenant si l'IGN ne répond pas. 429 moins de 10 min après sa construction, 409 pendant qu'elle ou une de ses couches se calcule |
 

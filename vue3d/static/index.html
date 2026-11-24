@@ -397,32 +397,53 @@
         #tuto .tuto-ok:focus-visible, .tuto-mode button:focus-visible { outline:2px solid var(--text); outline-offset:2px; }
         /* Exporter : ce que le fichier contient, son format, et où l'écrire.
            Même cadre que la prise en main, le corps seul défilant. */
-        #export-dialogue { width:min(520px, calc(100vw - 24px)); max-height:min(86vh, 760px); padding:0;
+        :is(#export-dialogue, #donnees-dialogue) { width:min(520px, calc(100vw - 24px)); max-height:min(86vh, 760px); padding:0;
                 border:1px solid var(--line); border-radius:12px; background:var(--panel); color:var(--text);
                 box-shadow:0 12px 40px rgba(0,0,0,.55); }
-        #export-dialogue::backdrop { background:rgba(0,0,0,.45); }
-        #export-dialogue form { display:flex; flex-direction:column; max-height:inherit; }
-        #export-dialogue form > * { flex:none; }
-        #export-dialogue .corps { flex:1 1 auto; min-height:0; overflow-y:auto; padding:0 18px 4px; }
-        #export-dialogue header { display:flex; align-items:center; justify-content:space-between; padding:16px 18px 4px; }
-        #export-dialogue h2 { margin:0; font-size:18px; }
-        #export-dialogue .fermer { width:36px; height:36px; margin:-6px -8px 0 0; border:0; background:none; color:var(--muted);
+        :is(#export-dialogue, #donnees-dialogue)::backdrop { background:rgba(0,0,0,.45); }
+        :is(#export-dialogue, #donnees-dialogue) form { display:flex; flex-direction:column; max-height:inherit; }
+        :is(#export-dialogue, #donnees-dialogue) form > * { flex:none; }
+        :is(#export-dialogue, #donnees-dialogue) .corps { flex:1 1 auto; min-height:0; overflow-y:auto; padding:0 18px 4px; }
+        :is(#export-dialogue, #donnees-dialogue) header { display:flex; align-items:center; justify-content:space-between; padding:16px 18px 4px; }
+        :is(#export-dialogue, #donnees-dialogue) h2 { margin:0; font-size:18px; }
+        :is(#export-dialogue, #donnees-dialogue) .fermer { width:36px; height:36px; margin:-6px -8px 0 0; border:0; background:none; color:var(--muted);
                         font-size:26px; line-height:1; cursor:pointer; }
-        #export-dialogue .sous-titre { margin:12px 0 6px; }
-        #export-dialogue [hidden] { display:none !important; }   /* .toggles, .sous-titre : leur display l'emporterait */
-        #export-dialogue .choix-format { display:flex; gap:6px; }
-        #export-dialogue .choix-format button { flex:1; padding:8px 6px; border:1px solid var(--line); border-radius:6px;
+        :is(#export-dialogue, #donnees-dialogue) .sous-titre { margin:12px 0 6px; }
+        :is(#export-dialogue, #donnees-dialogue) [hidden] { display:none !important; }   /* .toggles, .sous-titre : leur display l'emporterait */
+        :is(#export-dialogue, #donnees-dialogue) .choix-format { display:flex; gap:6px; }
+        :is(#export-dialogue, #donnees-dialogue) .choix-format button { flex:1; padding:8px 6px; border:1px solid var(--line); border-radius:6px;
                 background:var(--panel-soft); color:var(--text); font:inherit; font-size:12px; cursor:pointer; }
-        #export-dialogue .choix-format button span { color:var(--muted); }
-        #export-dialogue .choix-format button.on { background:var(--accent); border-color:var(--accent); color:var(--accent-text, #111); }
-        #export-dialogue .choix-format button.on span { color:rgba(255,255,255,.75); }
-        #export-dialogue footer { display:flex; align-items:center; justify-content:flex-end; gap:8px;
+        :is(#export-dialogue, #donnees-dialogue) .choix-format button span { color:var(--muted); }
+        :is(#export-dialogue, #donnees-dialogue) .choix-format button.on { background:var(--accent); border-color:var(--accent); color:var(--accent-text, #111); }
+        :is(#export-dialogue, #donnees-dialogue) .choix-format button.on span { color:rgba(255,255,255,.75); }
+        :is(#export-dialogue, #donnees-dialogue) footer { display:flex; align-items:center; justify-content:flex-end; gap:8px;
                         padding:12px 18px 16px; border-top:1px solid var(--line); }
-        #export-dialogue footer button { padding:9px 16px; border-radius:8px; font:inherit; font-size:13px; cursor:pointer;
+        :is(#export-dialogue, #donnees-dialogue) footer button { padding:9px 16px; border-radius:8px; font:inherit; font-size:13px; cursor:pointer;
                 border:1px solid var(--line); background:var(--panel-soft); color:var(--text); }
-        #export-dialogue footer button.principal { background:var(--accent); border-color:var(--accent); color:var(--accent-text, #111); font-weight:600; }
-        #export-dialogue footer button:disabled { cursor:wait; opacity:.6; }
-        #export-dialogue footer button:focus-visible { outline:2px solid var(--text); outline-offset:2px; }
+        :is(#export-dialogue, #donnees-dialogue) footer button.principal { background:var(--accent); border-color:var(--accent); color:var(--accent-text, #111); font-weight:600; }
+        :is(#export-dialogue, #donnees-dialogue) footer button:disabled { cursor:wait; opacity:.6; }
+        :is(#export-dialogue, #donnees-dialogue) footer button:focus-visible { outline:2px solid var(--text); outline-offset:2px; }
+        /* Données : une source par bloc — provenance, chargement, puis ses
+           couches, chacune avec son épingle au panneau. */
+        #donnees-dialogue .source { padding:10px 0; border-top:1px solid var(--line); }
+        #donnees-dialogue .theme { margin:14px 0 2px; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); }
+        #donnees-dialogue .source-tete { display:flex; align-items:center; gap:8px; }
+        #donnees-dialogue .source-tete b { flex:1 1 auto; font-size:14px; }
+        #donnees-dialogue .source-etat { font-size:11px; color:var(--muted); white-space:nowrap; }
+        #donnees-dialogue .source-etat.echec { color:#e36c0a; }
+        #donnees-dialogue .source-prov { margin:3px 0 6px; font-size:11px; color:var(--muted); }
+        #donnees-dialogue .source-prov a { color:inherit; }
+        #donnees-dialogue .charger { display:flex; align-items:center; gap:5px; font-size:12px; cursor:pointer; white-space:nowrap; }
+        #donnees-dialogue .couche { display:inline-flex; align-items:stretch; }
+        #donnees-dialogue .couche .toggle { border-radius:5px 0 0 5px; }
+        #donnees-dialogue .epingle { border:1px solid var(--line); border-left:0; border-radius:0 5px 5px 0; padding:0 7px;
+                background:var(--panel-soft); color:var(--muted); font-size:12px; cursor:pointer; }
+        #donnees-dialogue .epingle[aria-pressed="true"] { color:var(--accent); }
+        #donnees-dialogue .epingle:focus-visible, #donnees-dialogue .charger input:focus-visible { outline:2px solid var(--text); outline-offset:2px; }
+        /* Une couche désépinglée quitte le panneau, pas la page : son bouton
+           garde sa logique, la fenêtre « Données » le pilote. */
+        #panel .toggle.hors-panneau { display:none; }
+        #btn-donnees { margin-top:8px; }
         #btn-plein-ecran .sortir, html.plein-ecran #btn-plein-ecran .entrer { display:none; }
         html.plein-ecran #btn-plein-ecran .sortir { display:inline; }
         /* Le drone au doigt : deux croix de touches, au-dessus des crédits. */
@@ -662,6 +683,11 @@
                 <button class="toggle" id="t-dpe" title="Diagnostics de performance énergétique (ADEME) des bâtiments autour du point : lus au premier clic">DPE</button>
                 <button class="toggle" id="t-bornes" title="Bornes de recharge pour véhicules électriques (base nationale IRVE, data.gouv.fr) autour du point : lues au premier clic">Bornes de recharge</button>
             </div>
+            <!-- Toutes les sources, leur provenance et leur licence : charger ou
+                 non chacune, afficher ses couches, épingler celles qui restent
+                 ici. Les autres boutons ne quittent que le panneau. -->
+            <button type="button" class="lien-ext" id="btn-donnees"
+                    title="Les sources de données : provenance, licence, chargement ; les couches à garder dans ce panneau.">🗂 Données et couches… <span id="donnees-resume"></span></button>
             <div class="legende-qualite" id="legende-qualite" hidden>
                 <span><i style="background:#c2d69b"></i>LiDAR</span>
                 <span><i style="background:#4f81bd"></i>Images</span>
@@ -992,6 +1018,29 @@ coordonnées absolues.">
                             title="La fenêtre du système, pour choisir le dossier et le nom — Chromium seulement.">Enregistrer sous…</button>
                     <button type="button" class="principal" id="btn-export-projet" disabled
                             title="Déposer le fichier dans le projet Trimble Connect ouvert.">Enregistrer dans le projet</button>
+                </footer>
+            </form>
+        </dialog>
+        <!-- Les données : une source est ce qu'on lit d'un coup chez un
+             fournisseur ; elle porte une ou plusieurs couches. Un <form
+             method="dialog"> : chaque bouton porte son type, sans quoi un clic
+             sur une couche fermerait la fenêtre. -->
+        <dialog id="donnees-dialogue" aria-labelledby="donnees-titre">
+            <form method="dialog">
+                <header>
+                    <h2 id="donnees-titre">Données et couches</h2>
+                    <button type="submit" class="fermer" value="fermer" aria-label="Fermer">×</button>
+                </header>
+                <div class="corps">
+                    <p class="note">« Charger » décide si une source est lue à l'ouverture
+                        d'une scène : éteinte, elle ne coûte aucune requête. Les couches
+                        s'affichent ou se masquent ; ★ les garde dans le panneau.
+                        Ces choix sont gardés dans ce navigateur.</p>
+                    <div id="donnees-sources"></div>
+                </div>
+                <footer>
+                    <button type="button" id="btn-donnees-defaut">Réglages d'origine</button>
+                    <button type="submit" class="principal" value="ok">Fermer</button>
                 </footer>
             </form>
         </dialog>
@@ -2320,11 +2369,15 @@ const demandeScene = window.DEMANDE_SCENE && window.DEMANDE_SCENE.url === URL_VU
 // prend la sienne à son premier essai (requete).
 const demandesAnticipees = new Map();
 function demanderSuite() {
-    for (const [url, options] of [
-        [URL_MONUMENTS], [URL_OUVRAGES], [URL_RESEAUX],
-        [URL_POSTES_ENEDIS],
+    // Une source éteinte dans la fenêtre « Données » n'est pas anticipée non
+    // plus : éteinte, elle ne coûte aucune requête. Appelée une fois la page
+    // évaluée (après la réponse de la scène) : preferencesDonnees existe.
+    for (const [url, options, source] of [
+        [URL_MONUMENTS, undefined, 'monuments'], [URL_OUVRAGES, undefined, 'ouvrages'],
+        [URL_RESEAUX, undefined, 'reseaux'], [URL_POSTES_ENEDIS, undefined, 'postes_enedis'],
         ['api/sante', { cache: 'no-store' }],
-        [URL_PISCINES, { cache: 'no-cache' }], [URL_PANNEAUX, { cache: 'no-cache' }]]) {
+        [URL_PISCINES, { cache: 'no-cache' }, 'detections'], [URL_PANNEAUX, { cache: 'no-cache' }, 'panneaux']]) {
+        if (source && preferencesDonnees.eteintes.has(source)) continue;
         const reponse = fetch(url, options);
         reponse.catch(() => {});      // l'erreur est traitée par le chargeur
         demandesAnticipees.set(url, reponse);
@@ -4184,14 +4237,9 @@ const sceneConstruite = chargerScene()
         // connues : c'est par elles qu'on écarte les toitures du sursol. D'où
         // ce chaînage plutôt qu'un chargement en parallèle.
         activerVegetation();
-        chargerMonuments();
-        chargerOuvrages();
-        chargerEmprises();
-        chargerReseaux();
-        chargerPostesEnedis();
-        chargerNuage();
-        chargerDetections();
-        chargerPanneaux();
+        // Les couches à part, sauf celles que l'utilisateur a éteintes dans
+        // la fenêtre « Données » : celles-là ne coûtent aucune requête.
+        for (const id of Object.keys(CHARGEURS_DES_SOURCES)) chargerSource(id);
     })
     .catch(err => {
         note.textContent = 'Chargement impossible : ' + err.message;
@@ -12034,6 +12082,296 @@ function etatCouchesExport() {
         bouton.classList.toggle('on', presente && optionsExport[cle]);
     }
 }
+
+// --- La fenêtre « Données » ------------------------------------------------------
+// Le catalogue (/api/sources, vue3d/sources.py) dit la provenance de chaque
+// source et ce que le service sait servir ; ici, le branchement : les boutons
+// de ses couches, et le chargeur d'une couche à part. Les boutons gardent leur
+// propre logique (matériaux, survol, crédits, export) : la fenêtre les
+// reflète et les clique, elle ne la double pas.
+const COUCHES_DES_SOURCES = {
+    scene: ['t-veg', 't-eau', 't-routes', 't-lignes', 't-constructions', 't-mesure'],
+    nuage: ['t-nuage'],
+    monuments: ['t-monuments'],
+    ouvrages: ['t-ouvrages', 't-voies'],
+    emprises: ['t-aerodromes', 't-postes', 't-haies'],
+    reseaux: ['t-reseaux'],
+    postes_enedis: ['t-postes-enedis'],
+    panneaux: ['t-panneaux'],
+    dpe: ['t-dpe'],
+    detections: ['t-vehicules', 't-piscines', 't-navires'],
+    bornes: ['t-bornes'],
+};
+const CHARGEURS_DES_SOURCES = {
+    monuments: () => chargerMonuments(),
+    ouvrages: () => chargerOuvrages(),
+    emprises: () => chargerEmprises(),
+    reseaux: () => chargerReseaux(),
+    postes_enedis: () => chargerPostesEnedis(),
+    nuage: () => chargerNuage(),
+    detections: () => chargerDetections(),
+    panneaux: () => chargerPanneaux(),
+};
+// L'indicateur posé sur la vue par chaque chargeur : il dit l'attente et l'échec.
+const ETATS_DES_SOURCES = {
+    monuments: 'etat-monuments', ouvrages: 'etat-ouvrages', emprises: 'etat-emprises',
+    reseaux: 'etat-reseaux', postes_enedis: 'etat-postes-enedis', nuage: 'etat-nuage',
+    detections: 'etat-vehicules', panneaux: 'etat-vehicules',
+};
+// Sans catalogue (service ancien, réponse perdue), la fenêtre reste utilisable.
+const SOURCES_DE_REPLI = Object.keys(COUCHES_DES_SOURCES).map(id => ({
+    id, libelle: document.getElementById(COUCHES_DES_SOURCES[id][0]).textContent,
+    theme: 'Sources', mode: id === 'scene' ? 'scene' : (CHARGEURS_DES_SOURCES[id] ? 'apres-scene' : 'au-clic'),
+    disponible: true }));
+// Les couches gardées au panneau à la première visite : celles qu'on attend
+// d'une vue 3D, et celles que les scripts d'essai cliquent (essai-navigateur,
+// demo-video, mesure-ecarts-toits). Les autres sont à un clic, dans la fenêtre.
+const EPINGLEES_PAR_DEFAUT = ['t-veg', 't-eau', 't-routes', 't-lignes', 't-mesure', 't-monuments',
+                              't-nuage', 't-vehicules', 't-panneaux', 't-dpe', 't-bornes'];
+const CLE_DONNEES = 'vue3d.donnees';
+
+function lirePreferencesDonnees() {
+    let p = null;
+    try { p = JSON.parse(localStorage.getItem(CLE_DONNEES)); } catch (e) { /* navigation privée */ }
+    return {
+        eteintes: new Set(Array.isArray(p?.eteintes) ? p.eteintes : []),
+        epinglees: new Set(Array.isArray(p?.epinglees) ? p.epinglees : EPINGLEES_PAR_DEFAUT),
+    };
+}
+const preferencesDonnees = lirePreferencesDonnees();
+function ecrirePreferencesDonnees() {
+    try {
+        localStorage.setItem(CLE_DONNEES, JSON.stringify({
+            eteintes: [...preferencesDonnees.eteintes], epinglees: [...preferencesDonnees.epinglees] }));
+    } catch (e) { /* navigation privée : les choix valent pour la visite */ }
+}
+
+// Où en est chaque couche à part : absente (la scène n'est pas affichée),
+// 'eteinte' (non chargée, par choix), 'demandee', puis 'lue'.
+const avancementSources = {};
+let sceneAffichee = false;
+function chargerSource(id) {
+    sceneAffichee = true;
+    if (preferencesDonnees.eteintes.has(id)) {
+        avancementSources[id] = 'eteinte';
+    } else if (avancementSources[id] !== 'demandee' && avancementSources[id] !== 'lue') {
+        avancementSources[id] = 'demandee';
+        Promise.resolve(CHARGEURS_DES_SOURCES[id]())
+            .catch(() => {})
+            .finally(() => { avancementSources[id] = 'lue'; majFenetreDonnees(); });
+    }
+    majFenetreDonnees();
+}
+
+function appliquerEpingles() {
+    for (const ids of Object.values(COUCHES_DES_SOURCES)) {
+        for (const id of ids) {
+            document.getElementById(id).classList.toggle('hors-panneau', !preferencesDonnees.epinglees.has(id));
+        }
+    }
+    const eteintes = preferencesDonnees.eteintes.size;
+    document.getElementById('donnees-resume').textContent =
+        eteintes ? `(${eteintes} source${eteintes > 1 ? 's' : ''} éteinte${eteintes > 1 ? 's' : ''})` : '';
+}
+appliquerEpingles();
+
+let catalogueSources = null;
+const fenetreDonnees = document.getElementById('donnees-dialogue');
+const listeSources = document.getElementById('donnees-sources');
+const lignesSources = [];   // { source, etat, charger, miroirs: [[original, miroir, epingle]] }
+
+/** Ce que la fenêtre dit d'une source, d'après son avancement et ses couches. */
+function etatSource(source) {
+    if (source.mode === 'scene') return ['dans la scène', false];
+    if (!source.disponible) return ['non servie par ce service', false];
+    const boutons = COUCHES_DES_SOURCES[source.id].map(id => document.getElementById(id));
+    const presente = boutons.some(b => !b.hidden && !b.disabled);
+    if (source.mode === 'au-clic') {
+        return [boutons.some(b => b.classList.contains('on')) ? 'affichée' : 'lue au clic', false];
+    }
+    const avancement = avancementSources[source.id] || 'attente';
+    if (preferencesDonnees.eteintes.has(source.id)) {
+        if (avancement === 'attente') return ['éteinte', false];
+        return [avancement === 'eteinte' ? 'éteinte, non chargée' : 'lue — éteinte à la prochaine ouverture', false];
+    }
+    const indicateur = document.getElementById(ETATS_DES_SOURCES[source.id]);
+    if (indicateur && !indicateur.hidden && /indisponible/i.test(indicateur.textContent)) {
+        return [indicateur.classList.contains('en-cours') ? 'en échec, nouvel essai…' : 'en échec', true];
+    }
+    if (avancement === 'attente') return ['après la scène', false];
+    if (avancement === 'demandee' && !presente) return ['chargement…', false];
+    return [presente ? 'chargée' : 'rien ici', false];
+}
+
+function construireFenetreDonnees() {
+    listeSources.replaceChildren();
+    lignesSources.length = 0;
+    let theme = null;
+    for (const source of catalogueSources || SOURCES_DE_REPLI) {
+        const ids = COUCHES_DES_SOURCES[source.id];
+        if (!ids) continue;   // une source que cette page ne sait pas encore dessiner
+        if (source.theme !== theme) {
+            theme = source.theme;
+            const t = document.createElement('div');
+            t.className = 'theme';
+            t.textContent = theme;
+            listeSources.append(t);
+        }
+        const bloc = document.createElement('section');
+        bloc.className = 'source';
+        bloc.dataset.source = source.id;
+        const tete = document.createElement('div');
+        tete.className = 'source-tete';
+        const nom = document.createElement('b');
+        nom.textContent = source.libelle;
+        const etat = document.createElement('span');
+        etat.className = 'source-etat';
+        tete.append(nom, etat);
+        let charger = null;
+        if (source.mode === 'apres-scene') {
+            const label = document.createElement('label');
+            label.className = 'charger';
+            label.title = "Lire cette source à l'ouverture d'une scène. Éteinte, elle ne coûte aucune requête.";
+            charger = document.createElement('input');
+            charger.type = 'checkbox';
+            charger.disabled = !source.disponible;
+            charger.addEventListener('change', () => basculerSource(source, charger.checked));
+            label.append(charger, 'Charger');
+            tete.append(label);
+        }
+        bloc.append(tete);
+        if (source.fournisseur) {
+            const prov = document.createElement('div');
+            prov.className = 'source-prov';
+            const lien = document.createElement(source.lien ? 'a' : 'span');
+            lien.textContent = source.fournisseur;
+            if (source.lien) Object.assign(lien, { href: source.lien, target: '_blank', rel: 'noopener' });
+            prov.append(lien, ` · ${source.licence}`
+                + (source.version != null ? ` · v${source.version}` : '')
+                + (source.description ? ` — ${source.description}` : ''));
+            bloc.append(prov);
+        }
+        const couches = document.createElement('div');
+        couches.className = 'toggles';
+        const miroirs = [];
+        for (const id of ids) {
+            const original = document.getElementById(id);
+            const couche = document.createElement('span');
+            couche.className = 'couche';
+            const miroir = document.createElement('button');
+            miroir.type = 'button';
+            miroir.className = 'toggle';
+            miroir.textContent = original.textContent;
+            miroir.dataset.couche = id;
+            miroir.addEventListener('click', () => { original.click(); majFenetreDonnees(); });
+            const epingle = document.createElement('button');
+            epingle.type = 'button';
+            epingle.className = 'epingle';
+            epingle.textContent = '★';
+            epingle.setAttribute('aria-label', `Garder « ${original.textContent} » dans le panneau`);
+            epingle.addEventListener('click', () => {
+                if (preferencesDonnees.epinglees.has(id)) preferencesDonnees.epinglees.delete(id);
+                else preferencesDonnees.epinglees.add(id);
+                ecrirePreferencesDonnees();
+                appliquerEpingles();
+                majFenetreDonnees();
+            });
+            couche.append(miroir, epingle);
+            couches.append(couche);
+            miroirs.push([original, miroir, epingle]);
+        }
+        bloc.append(couches);
+        listeSources.append(bloc);
+        lignesSources.push({ source, etat, charger, miroirs });
+    }
+    majFenetreDonnees();
+}
+
+function majFenetreDonnees() {
+    if (!fenetreDonnees.open) return;
+    for (const { source, etat, charger, miroirs } of lignesSources) {
+        const [texte, echec] = etatSource(source);
+        etat.textContent = texte;
+        etat.classList.toggle('echec', echec);
+        if (charger) charger.checked = source.disponible && !preferencesDonnees.eteintes.has(source.id);
+        for (const [original, miroir, epingle] of miroirs) {
+            // Un bouton caché au panneau l'est faute de données ici : la
+            // fenêtre le montre quand même, éteint, pour qu'on sache qu'il existe.
+            miroir.disabled = original.disabled || original.hidden;
+            miroir.title = miroir.disabled ? 'Rien de cette couche dans la scène.' : (original.title || '');
+            miroir.classList.toggle('on', !miroir.disabled && original.classList.contains('on'));
+            const epinglee = preferencesDonnees.epinglees.has(original.id);
+            epingle.setAttribute('aria-pressed', String(epinglee));
+            epingle.textContent = epinglee ? '★' : '☆';
+        }
+    }
+}
+
+/** Charger ou non une couche à part. Rallumée, elle est lue tout de suite si
+ *  la scène est là ; éteinte, ses couches se masquent et elle ne sera plus
+ *  lue aux prochaines ouvertures — ce qui est déjà lu reste en mémoire. */
+function basculerSource(source, charger) {
+    if (charger) {
+        preferencesDonnees.eteintes.delete(source.id);
+        ecrirePreferencesDonnees();
+        if (sceneAffichee) {
+            const dejaLue = avancementSources[source.id] === 'lue';
+            if (avancementSources[source.id] === 'eteinte') delete avancementSources[source.id];
+            chargerSource(source.id);
+            // Lue avant d'avoir été éteinte : ses couches réapparaissent.
+            if (dejaLue) {
+                for (const id of COUCHES_DES_SOURCES[source.id]) {
+                    const b = document.getElementById(id);
+                    if (!b.disabled && !b.hidden && !b.classList.contains('on')) b.click();
+                }
+            }
+        }
+    } else {
+        preferencesDonnees.eteintes.add(source.id);
+        ecrirePreferencesDonnees();
+        for (const id of COUCHES_DES_SOURCES[source.id]) {
+            const b = document.getElementById(id);
+            if (b.classList.contains('on') && !b.disabled) b.click();
+        }
+    }
+    appliquerEpingles();
+    majFenetreDonnees();
+}
+
+// Les couches changent d'elles-mêmes (une couche arrive, un essai échoue) :
+// la fenêtre ouverte le suit.
+const observateurDonnees = new MutationObserver(() => majFenetreDonnees());
+for (const ids of Object.values(COUCHES_DES_SOURCES)) {
+    for (const id of ids) {
+        observateurDonnees.observe(document.getElementById(id),
+                                   { attributes: true, attributeFilter: ['class', 'disabled', 'hidden'] });
+    }
+}
+for (const id of new Set(Object.values(ETATS_DES_SOURCES))) {
+    observateurDonnees.observe(document.getElementById(id),
+                               { attributes: true, childList: true, subtree: true, characterData: true });
+}
+
+fetch('api/sources', { cache: 'no-store' })
+    .then(r => r.ok ? r.json() : null)
+    .then(c => { if (c && Array.isArray(c.sources)) catalogueSources = c.sources; })
+    .catch(() => { /* la fenêtre s'en passe : SOURCES_DE_REPLI */ })
+    .finally(() => { if (fenetreDonnees.open) construireFenetreDonnees(); });
+
+document.getElementById('btn-donnees').addEventListener('click', () => {
+    fenetreDonnees.showModal();
+    construireFenetreDonnees();
+});
+document.getElementById('btn-donnees-defaut').addEventListener('click', () => {
+    for (const id of [...preferencesDonnees.eteintes]) {
+        const source = (catalogueSources || SOURCES_DE_REPLI).find(s => s.id === id);
+        if (source) basculerSource(source, true);
+    }
+    preferencesDonnees.epinglees = new Set(EPINGLEES_PAR_DEFAUT);
+    ecrirePreferencesDonnees();
+    appliquerEpingles();
+    majFenetreDonnees();
+});
 
 // --- La fenêtre d'export -------------------------------------------------------
 const fenetreExport = document.getElementById('export-dialogue');

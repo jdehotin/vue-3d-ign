@@ -42,6 +42,18 @@ def client(tmp_path):
                 "pistes": {"features": []}, "postes": {"features": []},
                 "haies": {"features": []}}
 
+    def lire_reseaux(west, south, east, north):
+        # Au sud de 46° : l'IGN en panne sur la couche des canalisations.
+        if south < 46:
+            raise ConnectionError("HTTP 504 sur canalisation")
+        return {"features": []}
+
+    def lire_postes_enedis(west, south, east, north):
+        # Au sud de 46° : l'API Enedis en panne.
+        if south < 46:
+            raise ConnectionError("API Enedis injoignable : 503")
+        return []
+
     lectures_nuage = []
 
     def lire_nuage(west, south, east, north, proche_m=None, cote_max_m=None):
@@ -54,8 +66,8 @@ def client(tmp_path):
     appli = module_app.creer_app(str(tmp_path), construire=construire,
                                  lire_monuments=lire_monuments, lire_ouvrages=lire_ouvrages,
                                  lire_emprises=lire_emprises,
-                                 lire_reseaux=lambda *b: None,
-                                 lire_postes_enedis=lambda *b: None,
+                                 lire_reseaux=lire_reseaux,
+                                 lire_postes_enedis=lire_postes_enedis,
                                  lire_nuage=lire_nuage)
     client = appli.test_client()
     client.lectures_nuage = lectures_nuage
@@ -231,6 +243,24 @@ def test_une_panne_des_emprises_rend_503_sans_toucher_la_scene(client):
     assert client.get("/api/scene?lat=45.5&lon=2").status_code == 200
 
 
+@pytest.mark.parametrize("route", ["reseaux", "postes_enedis"])
+def test_les_reseaux_et_postes_enedis_sont_servis_a_part(client, route):
+    """Rien sur l'emprise : la couche vaut null, écrite dans son propre
+    fichier. Elle tombait en 500 quand la route ne savait pas la construire."""
+    r = client.get(f"/api/{route}?lat=48.8049&lon=2.1204")
+    assert r.status_code == 200 and r.headers["Content-Encoding"] == "gzip"
+    assert json.loads(gzip.decompress(r.data)) is None
+
+
+@pytest.mark.parametrize("route", ["reseaux", "postes_enedis"])
+def test_une_panne_des_reseaux_ou_d_enedis_rend_503_sans_toucher_la_scene(client, route):
+    assert client.get("/api/scene?lat=45.5&lon=2").status_code == 200
+    r = client.get(f"/api/{route}?lat=45.5&lon=2")
+    assert r.status_code == 503 and "Rien n'a été mis en cache" in r.get_json()["erreur"]
+    assert client.get(f"/api/{route}?lat=45.5&lon=2").status_code == 503
+    assert client.get("/api/scene?lat=45.5&lon=2").status_code == 200
+
+
 def test_la_couche_du_nuage_est_servie_a_part(client):
     """Hors couverture LiDAR HD : la couche vaut null, et se met en cache."""
     r = client.get("/api/nuage?lat=48.8049&lon=2.1204")
@@ -364,6 +394,29 @@ def test_sante_dit_les_limites_du_service_a_la_page(client, monkeypatch):
     monkeypatch.setenv("VUE3D_AIRE_MAX_KM2", "2.5")
     limites = client.get("/api/sante").get_json()["limites"]
     assert limites == {"aire_max_km2": 2.5, "aire_avertissement_km2": 1.5}
+
+
+def test_le_catalogue_des_sources_dit_provenance_et_disponibilite(client):
+    """La fenêtre « Données » lit ici chaque source : son fournisseur, sa
+    licence, son mode. Sans détecteur ni registre, les détections et les
+    panneaux ne sont pas servis, et la page ne les propose pas."""
+    r = client.get("/api/sources")
+    assert r.status_code == 200 and r.headers["Cache-Control"] == "no-store"
+    sources = {s["id"]: s for s in r.get_json()["sources"]}
+    assert {"scene", "nuage", "monuments", "ouvrages", "emprises", "reseaux",
+            "postes_enedis", "panneaux", "dpe", "detections", "bornes"} <= set(sources)
+    for s in sources.values():
+        assert s["fournisseur"] and s["licence"] and s["theme"] and s["libelle"]
+        assert s["mode"] in ("scene", "apres-scene", "au-clic")
+    assert sources["scene"]["mode"] == "scene"
+    assert sources["monuments"]["licence"] == "ODbL"
+    assert not sources["detections"]["disponible"] and not sources["panneaux"]["disponible"]
+    assert sources["ouvrages"]["disponible"]
+
+
+def test_le_catalogue_suit_les_options_du_service(client_panneaux):
+    sources = {s["id"]: s for s in client_panneaux.get("/api/sources").get_json()["sources"]}
+    assert sources["panneaux"]["disponible"] and not sources["detections"]["disponible"]
 
 
 def test_sans_registre_la_couche_des_panneaux_le_dit(client):

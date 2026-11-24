@@ -13,6 +13,23 @@ messages de commit et dans les commentaires des modules.
 
 ## Scène v16 — 26 octobre 2026
 
+- **Fenêtre « Données et couches »** (24 novembre 2026), ouverte depuis le
+  panneau. Chaque source y dit son fournisseur, sa licence, sa version et son
+  état (chargée, rien ici, en échec, éteinte, non servie par ce service), lus
+  dans le nouveau catalogue `/api/sources` (`vue3d/sources.py`). Une couche à
+  part peut ne pas être chargée : éteinte, elle ne coûte plus aucune requête,
+  pas même anticipée. Chaque couche s'affiche ou se masque, et ★ la garde dans
+  le panneau : il passe de 28 boutons à 14 par défaut, les autres restant à un
+  clic dans la fenêtre. Les choix sont gardés dans le navigateur
+  (`localStorage`), « Réglages d'origine » les efface. La scène n'est pas
+  touchée.
+
+- **Réseaux souterrains et postes HTA/BT de nouveau servis** (24 novembre
+  2026) : `/api/reseaux` et `/api/postes_enedis` répondaient 500 à chaque
+  demande. La route ne savait pas construire ces couches et servait le
+  dossier de la scène, où leur fichier n'était jamais écrit. Une panne de
+  leur source rend désormais 503, sans rien mettre en cache.
+
 - **Couches BD Forêt (polygones), RPG et Chemins/pistes retirées** de l'affichage
   et de l'export : ces couches à part n'étaient plus proposées. Le module
   `foret.py` reste utilisé pour la segmentation des houppiers.
