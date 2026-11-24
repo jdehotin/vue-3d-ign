@@ -42,8 +42,11 @@ function extraire(nom) {
     else if (src[j] === '}' && --n === 0) return src.slice(i, j + 1);
   }
 }
+// lireCoordonnees vit dans le bloc de l'accueil, avec enFrance, la boîte de la
+// France métropolitaine qu'elle consulte (extraireConst est déclarée plus bas).
 const { lireCoordonnees, suggestionsDe } = new Function(
-  `${extraire('lireCoordonnees')}\n${extraire('suggestionsDe')}\nreturn { lireCoordonnees, suggestionsDe };`)();
+  `${extraireConst('enFrance')}\n${extraire('lireCoordonnees')}\n${extraire('suggestionsDe')}\n`
+  + 'return { lireCoordonnees, suggestionsDe };')();
 
 let tout = true;
 function ok(nom, vrai, detail = '') {
