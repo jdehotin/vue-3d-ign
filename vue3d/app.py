@@ -20,7 +20,7 @@
     GET /api/panneaux?lat=…&lon=…    les panneaux solaires du registre, si le service en a un
     GET /api/dpe?lat=…&lon=…         les DPE de l'ADEME, à la demande de la page seulement
     GET /api/bornes?lat=…&lon=…      les bornes de recharge (IRVE, data.gouv.fr), de même
-    GET /api/georisques/<couche>?lat=…&lon=…   inondations, old, cavites ; commune au clic
+    GET /api/georisques/<couche>?lat=…&lon=…   inondations (surfaces inondables des TRI)
     GET /api/avancement?lat=…&lon=…  l'étape de la construction en cours
     GET /api/tuile/<couche>/<z>/<x>/<y>  une tuile WMTS de l'IGN (ortho, plan) : du
                                    stock du serveur, sinon redirigée vers l'IGN ;
@@ -939,10 +939,9 @@ def creer_app(dossier_cache=None, construire=construire_scene, lire_monuments=fe
 
     @app.get("/api/georisques/<couche>")
     def georisques(couche):
-        """Les risques de Géorisques : `inondations`, `old` et `cavites`,
-        demandées une fois la scène affichée, `commune` au clic. `null` quand
-        l'emprise n'a rien de la couche ; la fiche de la commune est toujours
-        un objet."""
+        """Les couches de Géorisques : `inondations`, les surfaces inondables
+        des TRI, demandées une fois la scène affichée. `null` quand l'emprise
+        n'en a pas."""
         if couche not in COUCHES_GEORISQUES:
             return erreur(404, f"Couche inconnue : {couche}. Couches : "
                           f"{', '.join(COUCHES_GEORISQUES)}.")

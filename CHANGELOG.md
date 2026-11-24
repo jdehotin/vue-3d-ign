@@ -13,6 +13,14 @@ messages de commit et dans les commentaires des modules.
 
 ## Scène v16 — 26 octobre 2026
 
+- **Risques réduits aux surfaces inondables des TRI** (24 novembre 2026) : le
+  zonage des obligations légales de débroussaillement, les cavités
+  souterraines et la fiche « Risques de la commune » (AZI, PAPI, arrêtés
+  CatNat, sans géométrie) sont retirés de la page, de l'export, du catalogue
+  et du service (`/api/georisques/old`, `cavites` et `commune` répondent 404).
+  Restent les surfaces inondables, drapées sur le relief et exportées en IFC
+  et CityGML. Une préférence « éteinte » d'une source retirée n'est plus
+  comptée dans la fenêtre « Données ».
 - **Mes sources** (24 novembre 2026) : la fenêtre « Données et couches »
   accepte les données de l'utilisateur — fichiers GeoJSON, KML, GPX et CSV,
   adresses GeoJSON, WFS et OGC API Features. Elles vivent dans le navigateur

@@ -196,7 +196,6 @@
         .liste-foncier { font-size:11px; margin-top:6px; }
         .liste-foncier div { padding:3px 0; border-top:1px solid rgba(255,255,255,.07); }
         .sous-titre { font-size:11px; font-weight:600; margin:10px 0 2px; color:var(--text); }
-        .liste-risques { margin:2px 0 0; padding-left:16px; font-size:11px; line-height:1.45; }
         .lien-ext { display:inline-block; margin-top:8px; font-size:11px; color:var(--accent);
                     text-decoration:none; border:1px solid var(--line); border-radius:5px;
                     padding:4px 8px; }
@@ -704,9 +703,6 @@
                 <button class="toggle" id="t-dpe" title="Diagnostics de performance énergétique (ADEME) des bâtiments autour du point : lus au premier clic">DPE</button>
                 <button class="toggle" id="t-bornes" title="Bornes de recharge pour véhicules électriques (base nationale IRVE, data.gouv.fr) autour du point : lues au premier clic">Bornes de recharge</button>
                 <button class="toggle" id="t-inondations" disabled title="Surfaces inondables des territoires à risque important d'inondation (Géorisques), par scénario : fréquent, moyen, rare">Zones inondables</button>
-                <button class="toggle" id="t-old" disabled title="Obligations légales de débroussaillement : massifs exposés aux feux de forêt et bandes de 200 m (zonage informatif IGN pour le MASA)">Débroussaillement</button>
-                <button class="toggle" id="t-cavites" disabled title="Cavités souterraines abandonnées d'origine non minière (BDCavité, BRGM)">Cavités</button>
-                <button class="toggle" id="t-risques" title="Atlas des zones inondables, TRI, PAPI, inondations reconnues catastrophe naturelle et débroussaillement de la commune du point (Géorisques) : lus au premier clic">Risques de la commune</button>
             </div>
             <!-- Toutes les sources, leur provenance et leur licence : charger ou
                  non chacune, afficher ses couches, épingler celles qui restent
@@ -809,12 +805,6 @@
             <h2>Bornes de recharge (IRVE)</h2>
             <div id="bornes-resume"></div>
             <div class="note" id="bornes-note"></div>
-        </div>
-
-        <div class="section" id="sec-risques" hidden>
-            <h2>Risques de la commune (Géorisques)</h2>
-            <div id="risques-resume"></div>
-            <div class="note" id="risques-note"></div>
         </div>
 
         <details class="section">
@@ -992,8 +982,6 @@
                         <button type="button" class="toggle on" id="x-panneaux" title="Panneaux solaires du registre OpenPVMapper (CC-BY 4.0).">Panneaux solaires</button>
                         <button type="button" class="toggle on" id="x-postes-enedis" title="Postes de transformation HTA/BT Enedis (Licence Ouverte 2.0).">Postes HTA/BT</button>
                         <button type="button" class="toggle on" id="x-inondations" title="Surfaces inondables des TRI (Géorisques), une par type et par scénario, drapées sur le relief.">Zones inondables</button>
-                        <button type="button" class="toggle on" id="x-old" title="Zonage des obligations légales de débroussaillement (IGN pour le MASA), massifs et bandes de 200 m, drapé sur le relief. Informatif : la mairie ou la préfecture fait foi.">Débroussaillement</button>
-                        <button type="button" class="toggle on" id="x-cavites" title="Cavités souterraines (BDCavité, BRGM) : l'épingle de la vue, au droit de chaque cavité, et non sa forme.">Cavités</button>
                         <button type="button" class="toggle on" id="x-routes" title="Tronçons de route, chemins et sentiers de la BD TOPO, drapés sur le relief.">Routes et chemins</button>
                         <button type="button" class="toggle on" id="x-eau" title="Étendues et cours d'eau de la BD TOPO, drapés sur le relief.">Hydrographie</button>
                         <button type="button" class="toggle on" id="x-ouvrages" title="Murs, ponts, voies ferrées et terrains de sport de la BD TOPO : murs et tabliers en volumes, voies et terrains drapés sur le relief.">Ouvrages</button>
@@ -3570,9 +3558,7 @@ function majCiblesSurvol() {
     if (groupeDpe && groupeDpe.visible) ciblesSurvol.push(...groupeDpe.children);
     if (groupeBornes && groupeBornes.visible) ciblesSurvol.push(...groupeBornes.children);
     if (groupePostesEnedis && groupePostesEnedis.visible) ciblesSurvol.push(...groupePostesEnedis.children);
-    for (const groupe of [groupeInondations, groupeOld, groupeCavites]) {
-        if (groupe && groupe.visible) ciblesSurvol.push(...groupe.children);
-    }
+    if (groupeInondations && groupeInondations.visible) ciblesSurvol.push(...groupeInondations.children);
     if (groupeMesSources) {
         for (const groupe of groupeMesSources.children) if (groupe.visible) ciblesSurvol.push(...groupe.children);
     }
@@ -4686,12 +4672,9 @@ function majCredits() {
             + ' target="_blank" rel="noopener">Enedis</a> (Licence Ouverte 2.0)';
     }
     // Déclarés en `var` plus bas : undefined au premier appel.
-    const risques = [groupeInondations, groupeOld, groupeCavites]
-        .some(g => g && g.visible && g.children.length) || risquesActif;
-    if (risques) {
-        html += ' · Risques : <a href="https://www.georisques.gouv.fr/" target="_blank" rel="noopener">Géorisques</a>'
-            + ' (MTE, BRGM)' + (groupeOld && groupeOld.visible && groupeOld.children.length
-                ? ', débroussaillement IGN pour le MASA' : '') + ', Licence Ouverte 2.0';
+    if (groupeInondations && groupeInondations.visible && groupeInondations.children.length) {
+        html += ' · Zones inondables : <a href="https://www.georisques.gouv.fr/" target="_blank" rel="noopener">Géorisques</a>'
+            + ' (directive inondation), Licence Ouverte 2.0';
     }
     const miennes = (mesSources || []).filter(src => {
         const g = etatsMesSources && etatsMesSources.get(src.id)?.groupe;
@@ -5167,7 +5150,6 @@ function appliquerExageration() {
     if (naviresPoses && naviresPoses.length) placerNavires();
     if (bornesPosees) placerBornes();
     if (POSTES_ENEDIS && postesEnedisConstruit) placerPostesEnedis();
-    if (CAVITES) placerCavites();
     if (groupeMesSources && groupeMesSources.children.length) placerMesSources();
     // Le grand plan gris sert de fond au-delà de l'emprise, et sous les trous
     // de l'anneau : on le glisse sous le point le plus bas du terrain pour
@@ -7444,25 +7426,20 @@ async function chargerPostesEnedis(essai = 1) {
     }
 }
 
-// --- Risques (Géorisques) ---------------------------------------------------------
-// Surfaces inondables des TRI, zonage des obligations légales de débroussaillement
-// et cavités souterraines (/api/georisques/<couche>, vue3d/georisques.py),
-// demandées une fois la scène affichée ; la fiche de la commune, au clic. Les
-// surfaces sont des aplats translucides drapés sur le relief, du scénario rare
-// (le plus étendu, le plus clair) au fréquent (le plus foncé, posé dessus) ; une
-// cavité est un cône pointé vers le sol, teint de son type.
+// --- Zones inondables (Géorisques) --------------------------------------------------
+// Surfaces inondables des TRI (/api/georisques/inondations, vue3d/georisques.py),
+// demandées une fois la scène affichée : des aplats translucides drapés sur le
+// relief, du scénario rare (le plus étendu, le plus clair) au fréquent (le plus
+// foncé, posé dessus).
 //
 // `var` : majCiblesSurvol et majCredits les lisent avant que ce bloc soit évalué.
 var groupeInondations = new THREE.Group();
-var groupeOld = new THREE.Group();
-var groupeCavites = new THREE.Group();
-scene.add(groupeInondations, groupeOld, groupeCavites);
-var INONDATIONS = null, ZONES_OLD = null, CAVITES = null, RISQUES_COMMUNE = null;
-var risquesActif = false;
+scene.add(groupeInondations);
+var INONDATIONS = null;
 // Les triangles de chaque aplat, entité par entité, comme routesPosees et
 // eauPosee : l'export les redrape (facettesDrapes) au même décalage.
-var risquesPoses = [];      // { couche: 'inondations'|'old', donnees, tris, decalage }
-const georisquesConstruits = { inondations: false, old: false, cavites: false };
+var risquesPoses = [];      // { couche: 'inondations', donnees, tris, decalage }
+const georisquesConstruits = { inondations: false };
 const urlGeorisques = couche => `api/georisques/${couche}?${REQUETE}`;
 // Maille des aplats de risque : 4 m, plus large que celle de l'eau (2,5 m). Une
 // surface inondable du Rhône couvre presque toute une zone de 1 000 m, et
@@ -7480,24 +7457,6 @@ const TYPES_INONDATION = {
     debordement: "Débordement de cours d'eau", ruissellement: 'Ruissellement',
     submersion: 'Submersion marine',
 };
-const ZONAGES_OLD = {
-    bande: { nom: 'Bande de 200 m soumise aux OLD', couleur: 0xf0a030, opacite: 0.30, decalage: 0.20, style: 'oldBande' },
-    massif: { nom: 'Massif exposé aux feux de forêt', couleur: 0xc0392b, opacite: 0.35, decalage: 0.24, style: 'oldMassif' },
-};
-const COULEURS_CAVITE = {
-    'carrière': 0x8d6e63, 'cave': 0xbcaaa4, 'naturelle': 0x43a047, 'ouvrage civil': 0x5c6bc0,
-    'ouvrage militaire': 0xc62828, 'puits': 0x00838f,
-};
-const COULEUR_CAVITE_AUTRE = 0x9e9e9e;
-// Leur teinte dans l'export (STYLES_IFC), la même.
-const STYLES_CAVITE = {
-    'carrière': 'caviteCarriere', 'cave': 'caviteCave', 'naturelle': 'caviteNaturelle',
-    'ouvrage civil': 'caviteOuvrageCivil', 'ouvrage militaire': 'caviteOuvrageMilitaire', 'puits': 'cavitePuits',
-};
-// Hauteur de l'épingle d'une cavité : de quoi dépasser les toits d'un
-// centre-ville. Une convention, à revoir sur mesure : à 4 m, aucune des 9
-// cavités de la Grand-Place d'Arras (zone de 350 m) n'était visible.
-const CAVITE_EPINGLE_M = 30;
 const matRisque = ({ couleur, opacite }) => new THREE.MeshStandardMaterial({
     color: couleur, roughness: 0.9, transparent: true, opacity: opacite, depthWrite: false,
     polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
@@ -7554,79 +7513,8 @@ function construireInondations() {
     majCredits();
 }
 
-function construireOld() {
-    if (!ZONES_OLD || !reliefRegle || georisquesConstruits.old) return;
-    georisquesConstruits.old = true;
-    const materiaux = Object.fromEntries(Object.entries(ZONAGES_OLD).map(([k, z]) => [k, matRisque(z)]));
-    for (const z of ZONES_OLD.zones) {
-        const zonage = ZONAGES_OLD[z.zonage];
-        poserAplatRisque(z.geometrie, materiaux[z.zonage], groupeOld, zonage.decalage,
-            `<b>${zonage.nom}</b>`
-            + (z.arrete ? `<br>arrêté préfectoral du ${echapper(z.arrete)}` : '')
-            + (z.source ? `<br>${echapper(z.source)}` : '')
-            + '<br><i>zonage informatif : la mairie ou la préfecture fait foi</i>'
-            + `<br><i>IGN pour le MASA, lu le ${dateLongue(ZONES_OLD.lu_le)}</i>`,
-            { couche: 'old', donnees: z });
-    }
-    placerDrapes();
-    brancherBoutonRisque('t-old', groupeOld);
-    majCiblesSurvol();
-    majCredits();
-}
-
-function construireCavites() {
-    if (!CAVITES || !reliefRegle || georisquesConstruits.cavites) return;
-    georisquesConstruits.cavites = true;
-    const liste = CAVITES.cavites;
-    // Une épingle au droit de la cavité : une tige depuis le sol et une tête
-    // pointée vers lui, à CAVITE_EPINGLE_M. Un cône de 4 m posé au sol restait
-    // invisible à Arras : les boves de la Grand-Place sont sous les maisons, et
-    // le bâti le cachait ; la cavité elle-même est sous le relief opaque.
-    const tige = new THREE.CylinderGeometry(0.25, 0.25, CAVITE_EPINGLE_M, 6);
-    tige.translate(0, CAVITE_EPINGLE_M / 2, 0);
-    const tete = new THREE.ConeGeometry(2.2, 5, 12);
-    tete.rotateX(Math.PI);
-    tete.translate(0, CAVITE_EPINGLE_M + 2.5, 0);
-    const couleur = new THREE.Color();
-    for (const geom of [tige, tete]) {
-        const mesh = new THREE.InstancedMesh(geom, new THREE.MeshStandardMaterial({ roughness: 0.6 }), liste.length);
-        mesh.castShadow = geom === tete;
-        mesh.userData = { cavites: liste };
-        liste.forEach((c, i) => mesh.setColorAt(i, couleur.setHex(COULEURS_CAVITE[c.type] ?? COULEUR_CAVITE_AUTRE)));
-        mesh.instanceColor.needsUpdate = true;
-        groupeCavites.add(mesh);
-    }
-    placerCavites();
-    brancherBoutonRisque('t-cavites', groupeCavites);
-    majCiblesSurvol();
-    majCredits();
-}
-
-/** Les épingles suivent le relief quand il change (exagération, relief rechargé). */
-function placerCavites() {
-    const matrice = new THREE.Matrix4();
-    for (const mesh of groupeCavites.children) {
-        mesh.userData.cavites.forEach((c, i) => {
-            const [x, y] = toLocal(c.lon, c.lat);
-            mesh.setMatrixAt(i, matrice.makeTranslation(x, ySol(c.lon, c.lat), -y));
-        });
-        mesh.instanceMatrix.needsUpdate = true;
-        mesh.computeBoundingSphere();
-    }
-}
-
-function infobulleCavite(c) {
-    return `<b>Cavité : ${echapper(c.type || 'type inconnu')}</b>`
-        + (c.nom ? `<br>${echapper(c.nom)}` : '')
-        + (c.reperage ? `<br>point : ${echapper(c.reperage)}` : '')
-        + (c.identifiant ? `<br><i>BDCavité ${echapper(c.identifiant)}</i>` : '')
-        + `<br><i>BRGM, Géorisques, lu le ${dateLongue(CAVITES.lu_le)}</i>`;
-}
-
 function construireGeorisques() {
     construireInondations();
-    construireOld();
-    construireCavites();
 }
 
 /** Une couche de risque, avec les essais et l'indicateur des couches à part. */
@@ -7660,61 +7548,6 @@ async function chargerGeorisques(couche, libelle, recevoir, essai = 1) {
 }
 const chargerInondations = () => chargerGeorisques('inondations', 'Zones inondables',
     d => { INONDATIONS = d; construireInondations(); });
-const chargerOld = () => chargerGeorisques('old', 'Zonage OLD',
-    d => { ZONES_OLD = d; construireOld(); });
-const chargerCavites = () => chargerGeorisques('cavites', 'Cavités',
-    d => { CAVITES = d; construireCavites(); });
-
-/** La fiche des risques de la commune, dans le panneau. */
-function resumerRisques() {
-    const f = RISQUES_COMMUNE;
-    const stat = (libelle, valeur) => `<div class="stat"><span>${libelle}</span><b>${valeur}</b></div>`;
-    const liste = (titre, elements, ligne) => `<div class="sous-titre">${titre}</div>`
-        + (elements.length ? `<ul class="liste-risques">${elements.map(e => `<li>${ligne(e)}</li>`).join('')}</ul>`
-                           : '<div class="note">Aucun.</div>');
-    const old = f.old
-        ? `Soumis aux OLD${f.old.zone_urbaine ? ', en zone urbaine' : ''}`
-          + (f.old.approbation ? ` — arrêté du ${dateLongue(f.old.approbation)}` : '')
-          + (f.old.url ? ` · <a href="${echapper(f.old.url)}" target="_blank" rel="noopener">règles de la préfecture</a>` : '')
-        : 'Le point n\'est pas soumis aux obligations légales de débroussaillement.';
-    const INONDATIONS_MONTREES = 12;
-    document.getElementById('risques-resume').innerHTML =
-        (f.commune ? stat('commune', `${echapper(f.commune.nom || '')} (${echapper(f.commune.code)})`) : '')
-        + liste('Atlas des zones inondables (AZI)', f.azi,
-                a => echapper(a.libelle) + (a.publication ? ` <i>(${echapper(a.publication)})</i>` : ''))
-        + liste('Territoires à risque important d\'inondation (TRI)', f.tri,
-                t => echapper(t.libelle) + (t.arrete_carte ? ` <i>(cartes du ${echapper(t.arrete_carte)})</i>` : ''))
-        + liste('Programmes d\'actions de prévention des inondations (PAPI)', f.papi,
-                p => echapper(p.libelle) + (p.labellisation ? ` <i>(labellisé le ${echapper(p.labellisation)})</i>` : ''))
-        + liste(`Inondations reconnues catastrophe naturelle (${f.inondations.length})`,
-                f.inondations.slice(0, INONDATIONS_MONTREES),
-                c => `${echapper(c.debut)}${c.fin && c.fin !== c.debut ? ' – ' + echapper(c.fin) : ''} · ${echapper(c.libelle)}`)
-        + (f.inondations.length > INONDATIONS_MONTREES
-            ? `<div class="note">… et ${f.inondations.length - INONDATIONS_MONTREES} plus anciennes.</div>` : '')
-        + `<div class="sous-titre">Feux de forêt</div><div class="note">${old}</div>`;
-    document.getElementById('risques-note').innerHTML =
-        `Base GASPAR de <a href="https://www.georisques.gouv.fr/" target="_blank" rel="noopener">Géorisques</a>, `
-        + `lue le ${dateLongue(f.lu_le)} ; « Reconstruire la scène » la relit. Les atlas et TRI ne disent pas `
-        + 'si le point est inondable : la couche « Zones inondables » le montre dans les TRI. Historique : '
-        + `les arrêtés CatNat liés aux inondations, ${f.catnat_total} arrêté(s) en tout pour la commune. Licence Ouverte 2.0.`;
-}
-
-document.getElementById('t-risques').addEventListener('click', async e => {
-    const bouton = e.currentTarget;
-    if (!RISQUES_COMMUNE) {
-        if (bouton.dataset.lecture) return;
-        bouton.dataset.lecture = '1';
-        const fiche = await lireALaDemande('Risques de la commune', 'de Géorisques', urlGeorisques('commune'));
-        delete bouton.dataset.lecture;
-        if (!fiche) return;
-        RISQUES_COMMUNE = fiche;
-        resumerRisques();
-    }
-    risquesActif = !risquesActif;
-    bouton.classList.toggle('on', risquesActif);
-    document.getElementById('sec-risques').hidden = !risquesActif;
-    majCredits();
-});
 
 // --- Mes sources : les données de l'utilisateur ----------------------------------
 // Fichiers (GeoJSON, KML, GPX, CSV) et adresses (GeoJSON, WFS, OGC API Features)
@@ -7741,8 +7574,8 @@ const MES_SOURCES_DECALAGE = 0.32;
 // Maille des aplats : celle des risques (RISQUE_MAILLE), pour la même raison.
 const MES_SOURCES_MAILLE = 4;
 const MES_SOURCES_LARGEUR_LIGNE = 1.5;
-// Hauteur de l'épingle d'un point : une convention, comme celle des cavités,
-// assez haute pour sortir des houppiers sans dépasser les toits d'un centre.
+// Hauteur de l'épingle d'un point : une convention, assez haute pour sortir
+// des houppiers sans dépasser les toits d'un centre.
 const MES_SOURCES_EPINGLE_M = 15;
 // Au-delà, la page ralentit sans rien montrer de plus : un fichier national
 // se découpe d'abord à l'emprise, et ce qui reste dépasse rarement ces bornes.
@@ -8306,7 +8139,7 @@ function dessinerMaSource(src, entites) {
         m.userData = ud({ parTriangle: Uint32Array.from(parRuban) });
     }
     if (points.length) {
-        // L'épingle des cavités, plus basse : une tige depuis le sol, une tête pointée vers lui.
+        // Une tige depuis le sol, une tête pointée vers lui.
         const h = MES_SOURCES_EPINGLE_M;
         const tige = new THREE.CylinderGeometry(0.2, 0.2, h, 6);
         tige.translate(0, h / 2, 0);
@@ -11744,11 +11577,8 @@ const ENTITES_IFC = {
     // Les couches à part : canalisations drapées, panneaux posés sur les toits.
     reseau: ['IFCGEOGRAPHICELEMENT', 'USERDEFINED', 'Canalisation'],
     panneau_solaire: ['IFCBUILDINGELEMENTPROXY', 'USERDEFINED', 'Panneaux solaires'],
-    // Les risques (Géorisques) : des zonages drapés sur le relief, et le
-    // symbole d'une cavité — rien de construit.
+    // Les zones inondables (Géorisques) : des aplats drapés sur le relief.
     zone_inondable: ['IFCGEOGRAPHICELEMENT', 'USERDEFINED', 'Zone inondable'],
-    zone_old: ['IFCGEOGRAPHICELEMENT', 'USERDEFINED', 'Zone de débroussaillement'],
-    cavite: ['IFCGEOGRAPHICELEMENT', 'USERDEFINED', 'Cavité souterraine'],
 };
 
 /**
@@ -12269,13 +12099,9 @@ const STYLES_IFC = {
     tennis: [0.71, 0.40, 0.25], pisteSport: [0.66, 0.31, 0.24], bassin: [0.25, 0.56, 0.75],
     // Les couches à part (MAT_PANNEAU, MAT_POSTE_ENEDIS).
     panneau: [0.11, 0.17, 0.27], posteEnedis: [0.91, 0.51, 0.17],
-    // Les risques (SCENARIOS_INONDATION, ZONAGES_OLD, COULEURS_CAVITE).
+    // Les zones inondables (SCENARIOS_INONDATION).
     inondationRare: [0.56, 0.77, 1.00], inondationMoyenCc: [0.48, 0.38, 0.84],
     inondationMoyen: [0.25, 0.50, 0.88], inondationFrequent: [0.11, 0.25, 0.60],
-    oldBande: [0.94, 0.63, 0.19], oldMassif: [0.75, 0.22, 0.17],
-    caviteCarriere: [0.55, 0.43, 0.39], caviteCave: [0.74, 0.67, 0.64], caviteNaturelle: [0.26, 0.63, 0.28],
-    caviteOuvrageCivil: [0.36, 0.42, 0.75], caviteOuvrageMilitaire: [0.78, 0.16, 0.16],
-    cavitePuits: [0.00, 0.51, 0.56], cavite: [0.62, 0.62, 0.62],
 };
 // Mailles du relief exporté, par côté, au plus : 178 dans l'emprise par
 // défaut, la maille de la vue (2 m) ; en zone de 1 000 m, 500 mailles
@@ -12302,10 +12128,10 @@ function toitDessine(ud) {
  * les emprises BD TOPO, telles que la vue les a drapées ou dressées, un élément
  * par entité ; les tronçons de route et les étendues d'eau, drapés comme eux ;
  * les pylônes et les conducteurs des lignes à haute tension ; le relief de
- * l'emprise ; les zonages de risque drapés et les épingles des cavités.
+ * l'emprise ; les surfaces inondables drapées.
  * `options` : { relief, batiments, arbres, masses, routes, eau, lignes,
  * ouvrages, aerodromes, postes, haies, monuments, reseaux, panneaux,
- * postes_enedis, inondations, old, cavites }.
+ * postes_enedis, inondations }.
  */
 
 /** Le libellé et le jeu de propriétés de chaque sous-couche d'emprises. */
@@ -12445,57 +12271,6 @@ function elementInondation(s, facettes, i) {
 }
 
 /**
- * Une zone des obligations légales de débroussaillement (construireOld). Le
- * zonage est informatif : la propriété `Portee` le dit dans le fichier, comme
- * l'infobulle à l'écran.
- */
-function elementOld(z, facettes, i) {
-    const zonage = ZONAGES_OLD[z.zonage];
-    return {
-        cle: `zone_old|${z.zonage}|${i}`,
-        genre: 'zone_old',
-        nom: zonage.nom,
-        description: (z.arrete ? `Arrêté préfectoral du ${z.arrete}, ` : '')
-            + `zonage informatif IGN pour le MASA, lu le ${ZONES_OLD.lu_le}`,
-        tag: null,
-        proprietes: { nom: 'VueIGN_Debroussaillement', valeurs: [
-            ['Zonage', 'IFCLABEL', zonage.nom],
-            ['ArretePrefectoral', 'IFCLABEL', z.arrete],
-            ['Source', 'IFCLABEL', z.source],
-            ['Url', 'IFCLABEL', z.url],
-            ['Portee', 'IFCLABEL', 'informative : la mairie ou la préfecture fait foi'],
-            ['LuLe', 'IFCLABEL', ZONES_OLD.lu_le],
-        ] },
-        maillages: [{ style: zonage.style, facettes }],
-    };
-}
-
-/**
- * Une cavité souterraine (construireCavites) : l'épingle de la vue, tige et
- * tête, dressée au droit du point BDCavité. Un symbole, pas la cavité — ni sa
- * forme ni sa profondeur ne sont connues ; sa hauteur est CAVITE_EPINGLE_M.
- */
-function elementCavite(c, facettes, i) {
-    return {
-        cle: `cavite|${c.identifiant || ''}|${i}`,
-        genre: 'cavite',
-        nom: `Cavité : ${c.type || 'type inconnu'}`,
-        description: (c.nom ? `${c.nom}, ` : '')
-            + `symbole au droit de la cavité (BRGM, Géorisques, lu le ${CAVITES.lu_le})`,
-        tag: c.identifiant || null,
-        proprietes: { nom: 'VueIGN_Cavite', valeurs: [
-            ['Type', 'IFCLABEL', c.type],
-            ['Nom', 'IFCLABEL', c.nom],
-            ['IdentifiantBDCavite', 'IFCLABEL', c.identifiant],
-            ['Reperage', 'IFCLABEL', c.reperage],
-            ['HauteurSymbole', 'IFCLENGTHMEASURE', CAVITE_EPINGLE_M],
-            ['LuLe', 'IFCLABEL', CAVITES.lu_le],
-        ] },
-        maillages: [{ style: STYLES_CAVITE[c.type] || 'cavite', facettes }],
-    };
-}
-
-/**
  * Un pylône d'une ligne à haute tension, tel que la vue le dresse : son fût et
  * sa traverse, lus dans la scène. Sa hauteur vient du pylône BD TOPO quand il
  * est rattaché à la ligne, sinon de la médiane de sa tension (vue3d/lignes.py).
@@ -12616,7 +12391,7 @@ function modeleExport(options) {
                      routes: 0, surfacesEau: 0, coursEau: 0, pylones: 0, lignes: 0,
                      aerodromes: 0, postes: 0, haies: 0,
                      monuments: 0, reseaux: 0, panneaux: 0, postes_enedis: 0,
-                     inondations: 0, old: 0, cavites: 0,
+                     inondations: 0,
                      murs: 0, ponts: 0, voies: 0, terrainsSport: 0 };
 
     if (options.batiments) {
@@ -12763,7 +12538,7 @@ function modeleExport(options) {
     if (options.aerodromes || options.postes || options.haies
         || options.reseaux || options.panneaux || options.postes_enedis
         || options.routes || options.eau || options.lignes || options.ouvrages
-        || options.inondations || options.old || options.cavites) {
+        || options.inondations) {
         const exagEmp = exagVert, reliefEmp = relief;
         exagVert = 1; relief = true;
         try {
@@ -12771,8 +12546,6 @@ function modeleExport(options) {
             placerEmprises();
             placerLignes();
             placerOuvrages();
-            placerCavites();
-            groupeCavites.updateMatrixWorld(true);
             groupeEmprises.updateMatrixWorld(true);
             groupeLignes.updateMatrixWorld(true);
             groupeOuvrages.updateMatrixWorld(true);
@@ -12954,30 +12727,8 @@ function modeleExport(options) {
                 if (!options[couche]) continue;
                 const facettes = facettesDrapes(tris, decalage, versIfc);
                 if (!facettes.faces.length) continue;
-                elements.push(couche === 'inondations' ? elementInondation(donnees, facettes, elements.length)
-                                                       : elementOld(donnees, facettes, elements.length));
+                elements.push(elementInondation(donnees, facettes, elements.length));
                 compte[couche]++;
-            }
-            if (options.cavites && groupeCavites.children.length) {
-                // Une cavité, un élément : la tige et la tête de son instance.
-                const mx = new THREE.Matrix4();
-                CAVITES.cavites.forEach((c, inst) => {
-                    const tri = [];
-                    for (const o of groupeCavites.children) {
-                        o.getMatrixAt(inst, mx);
-                        mx.premultiply(o.matrixWorld);
-                        const pos = o.geometry.attributes.position, idx = o.geometry.index;
-                        const nb = idx ? idx.count : pos.count;
-                        for (let i = 0; i < nb; i++) {
-                            v.fromBufferAttribute(pos, idx ? idx.getX(i) : i).applyMatrix4(mx);
-                            tri.push(...versIfc(v.x, v.y, v.z));
-                        }
-                    }
-                    const facettes = facettesIfc(tri);
-                    if (!facettes.faces.length) return;
-                    elements.push(elementCavite(c, facettes, elements.length));
-                    compte.cavites++;
-                });
             }
         } finally {
             exagVert = exagEmp; relief = reliefEmp;
@@ -12985,8 +12736,6 @@ function modeleExport(options) {
             placerEmprises();
             placerLignes();
             placerOuvrages();
-            placerCavites();
-            groupeCavites.updateMatrixWorld(true);
             groupeEmprises.updateMatrixWorld(true);
             groupeLignes.updateMatrixWorld(true);
             groupeOuvrages.updateMatrixWorld(true);
@@ -13024,11 +12773,7 @@ function modeleExport(options) {
         + (rgeAlti ? ', RGE ALTI' : '') + '), Licence Ouverte 2.0'];
     if (!rgeAlti && sourceRelief) credits.push(`relief : ${sourceRelief} (Mapzen Terrain Tiles, EU-DEM © Copernicus)`);
     if (compte.osm) credits.push('parties de monuments © contributeurs OpenStreetMap, ODbL');
-    if (compte.inondations || compte.old || compte.cavites) {
-        credits.push('risques : Géorisques (MTE, BRGM)'
-            + (compte.old ? ', débroussaillement IGN pour le MASA, zonage informatif' : '')
-            + ', Licence Ouverte 2.0');
-    }
+    if (compte.inondations) credits.push('zones inondables : Géorisques (directive inondation), Licence Ouverte 2.0');
     return {
         base: `vue3d-${LAT0}-${LON0}-z${ZONE}`,
         horodatage: new Date().toISOString().slice(0, 19),
@@ -13059,7 +12804,7 @@ const optionsExport = { relief: true, batiments: true, arbres: true, masses: fal
                         routes: true, eau: true, lignes: true, ouvrages: true,
                         aerodromes: true, postes: true, haies: true,
                         monuments: true, reseaux: true, panneaux: true, postes_enedis: true,
-                        inondations: true, old: true, cavites: true };
+                        inondations: true };
 const COUCHES_EXPORT = [['relief', 'x-relief'], ['batiments', 'x-batiments'],
                         ['arbres', 'x-arbres'], ['masses', 'x-masses'],
                         ['routes', 'x-routes'], ['eau', 'x-eau'], ['ouvrages', 'x-ouvrages'], ['lignes', 'x-lignes'],
@@ -13067,7 +12812,7 @@ const COUCHES_EXPORT = [['relief', 'x-relief'], ['batiments', 'x-batiments'],
                         ['postes', 'x-postes'], ['haies', 'x-haies'],
                         ['monuments', 'x-monuments'], ['reseaux', 'x-reseaux'],
                         ['panneaux', 'x-panneaux'], ['postes_enedis', 'x-postes-enedis'],
-                        ['inondations', 'x-inondations'], ['old', 'x-old'], ['cavites', 'x-cavites']];
+                        ['inondations', 'x-inondations']];
 for (const [cle, id] of COUCHES_EXPORT) {
     const bouton = document.getElementById(id);
     bouton.dataset.titre = bouton.title;          // etatCouchesExport() le remplace
@@ -13250,8 +12995,6 @@ const COUCHES_PRESENTES = {
     panneaux: () => groupePanneaux.children.length > 0,
     postes_enedis: () => groupePostesEnedis.children.length > 0,
     inondations: () => risquesPoses.some(r => r.couche === 'inondations'),
-    old: () => risquesPoses.some(r => r.couche === 'old'),
-    cavites: () => groupeCavites.children.length > 0,
 };
 
 /** Éteint, dans la fenêtre, les couches que la scène ne porte pas. */
@@ -13284,9 +13027,6 @@ const COUCHES_DES_SOURCES = {
     detections: ['t-vehicules', 't-piscines', 't-navires'],
     bornes: ['t-bornes'],
     inondations: ['t-inondations'],
-    old: ['t-old'],
-    cavites: ['t-cavites'],
-    risques_commune: ['t-risques'],
 };
 const CHARGEURS_DES_SOURCES = {
     monuments: () => chargerMonuments(),
@@ -13298,15 +13038,13 @@ const CHARGEURS_DES_SOURCES = {
     detections: () => chargerDetections(),
     panneaux: () => chargerPanneaux(),
     inondations: () => chargerInondations(),
-    old: () => chargerOld(),
-    cavites: () => chargerCavites(),
 };
 // L'indicateur posé sur la vue par chaque chargeur : il dit l'attente et l'échec.
 const ETATS_DES_SOURCES = {
     monuments: 'etat-monuments', ouvrages: 'etat-ouvrages', emprises: 'etat-emprises',
     reseaux: 'etat-reseaux', postes_enedis: 'etat-postes-enedis', nuage: 'etat-nuage',
     detections: 'etat-vehicules', panneaux: 'etat-vehicules',
-    inondations: 'etat-georisques', old: 'etat-georisques', cavites: 'etat-georisques',
+    inondations: 'etat-georisques',
 };
 // Sans catalogue (service ancien, réponse perdue), la fenêtre reste utilisable.
 const SOURCES_DE_REPLI = Object.keys(COUCHES_DES_SOURCES).map(id => ({
@@ -13318,7 +13056,7 @@ const SOURCES_DE_REPLI = Object.keys(COUCHES_DES_SOURCES).map(id => ({
 // demo-video, mesure-ecarts-toits). Les autres sont à un clic, dans la fenêtre.
 const EPINGLEES_PAR_DEFAUT = ['t-veg', 't-eau', 't-routes', 't-lignes', 't-mesure', 't-monuments',
                               't-nuage', 't-vehicules', 't-panneaux', 't-dpe', 't-bornes',
-                              't-inondations', 't-old', 't-cavites', 't-risques'];
+                              't-inondations'];
 const CLE_DONNEES = 'vue3d.donnees';
 
 // Les épingles sont gardées en écarts aux épingles par défaut, jamais en liste
@@ -13337,7 +13075,9 @@ function lirePreferencesDonnees() {
         retirees = EPINGLEES_PAR_DEFAUT_V1.filter(id => !p.epinglees.includes(id));
     }
     return {
-        eteintes: new Set(Array.isArray(p?.eteintes) ? p.eteintes : []),
+        // Une source retirée de la page depuis (le débroussaillement, les
+        // cavités) ne se compte plus parmi les éteintes.
+        eteintes: new Set((Array.isArray(p?.eteintes) ? p.eteintes : []).filter(id => id in COUCHES_DES_SOURCES)),
         epinglees: new Set([...EPINGLEES_PAR_DEFAUT, ...ajoutees].filter(id => !retirees.includes(id))),
     };
 }
@@ -13992,8 +13732,6 @@ function resumeExport(modele, choix) {
             choix.panneaux && nombre(c.panneaux, 'panneau solaire'),
             choix.postes_enedis && `${c.postes_enedis.toLocaleString('fr-FR')} poste(s) HTA/BT`,
             choix.inondations && `${c.inondations.toLocaleString('fr-FR')} surface(s) inondable(s)`,
-            choix.old && `${c.old.toLocaleString('fr-FR')} zone(s) de débroussaillement`,
-            choix.cavites && nombre(c.cavites, 'cavité'),
             choix.ouvrages && c.murs > 0 && nombre(c.murs, 'mur'),
             choix.ouvrages && c.ponts > 0 && nombre(c.ponts, 'pont'),
             choix.ouvrages && c.voies > 0 && `${c.voies.toLocaleString('fr-FR')} tronçon(s) de voie ferrée`,
@@ -14287,10 +14025,6 @@ function objetSous(touche) {
     const b = ud.borne || (ud.bornes && touche.instanceId != null ? ud.bornes[touche.instanceId] : null);
     if (b) {
         return { html: infobulleBorne(b), centre: [b.lon, b.lat], quoi: 'sur cette station', yAller: true };
-    }
-    if (ud.cavites && touche.instanceId != null) {
-        const c = ud.cavites[touche.instanceId];
-        return { html: infobulleCavite(c), centre: [c.lon, c.lat], quoi: 'sur cette cavité' };
     }
     if (ud.postesEnedis && touche.instanceId != null) {
         const pe = ud.postesEnedis[touche.instanceId];

@@ -80,10 +80,7 @@ from .eau import (COUCHE_COURS_EAU, COUCHE_SURFACES_EAU, eau_pour_emprise,
                   masque_eau)
 from .emprises import EMPRISES_VERSION, emprises_pour_emprise, fetch_emprises
 from .reseaux import RESEAUX_VERSION, reseaux_pour_emprise, fetch_reseaux
-from .georisques import (GEORISQUES_VERSION, cavites_pour_emprise, fetch_cavites,
-                         fetch_inondations, fetch_old, fetch_risques_commune,
-                         inondations_pour_emprise, old_pour_emprise,
-                         risques_commune_pour_emprise)
+from .georisques import GEORISQUES_VERSION, fetch_inondations, inondations_pour_emprise
 from .postes_enedis import (POSTES_ENEDIS_VERSION, postes_enedis_pour_emprise,
                              fetch_postes_enedis)
 from .geopf import Groupe
@@ -261,18 +258,12 @@ NOM_EMPRISES = f"emprises-v{EMPRISES_VERSION}.json.gz"
 NOM_RESEAUX = f"reseaux-v{RESEAUX_VERSION}.json.gz"
 NOM_POSTES_ENEDIS = f"postes-enedis-v{POSTES_ENEDIS_VERSION}.json.gz"
 # Les couches de Géorisques (vue3d/georisques.py) : leur fichier et leur
-# assemblage. Aucune n'est lue d'avance (voir le module) ; « commune » est la
-# fiche que la page demande au clic.
+# assemblage. Jamais lues d'avance (voir le module).
 COUCHES_GEORISQUES = {
     "inondations": (f"georisques-inondations-v{GEORISQUES_VERSION}.json.gz",
                     inondations_pour_emprise),
-    "old": (f"georisques-old-v{GEORISQUES_VERSION}.json.gz", old_pour_emprise),
-    "cavites": (f"georisques-cavites-v{GEORISQUES_VERSION}.json.gz", cavites_pour_emprise),
-    "commune": (f"georisques-commune-v{GEORISQUES_VERSION}.json.gz",
-                risques_commune_pour_emprise),
 }
-LECTURES_GEORISQUES = {"inondations": fetch_inondations, "old": fetch_old,
-                       "cavites": fetch_cavites, "commune": fetch_risques_commune}
+LECTURES_GEORISQUES = {"inondations": fetch_inondations}
 
 
 # Les panneaux solaires ont une seule source : le registre, à sa version.
@@ -374,8 +365,7 @@ class PostesEnedisIndisponibles(RuntimeError):
 
 
 class GeorisquesIndisponibles(RuntimeError):
-    """Une couche de Géorisques (ou le zonage OLD de la Géoplateforme) n'a
-    pas pu être lue : rien n'est mis en cache, la scène reste affichée sans
+    """Une couche de Géorisques n'a pas pu être lue : rien n'est mis en cache, la scène reste affichée sans
     elle, réessayer plus tard."""
 
 

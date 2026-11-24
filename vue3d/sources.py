@@ -90,26 +90,6 @@ SOURCES = (
      "description": "Débordement de cours d'eau, ruissellement et submersion marine, "
                     "par scénario (fréquent, moyen, rare), dans les territoires à "
                     "risque important d'inondation."},
-    {"id": "old", "libelle": "Débroussaillement (OLD)", "theme": "Risques",
-     "mode": "apres-scene", "version": GEORISQUES_VERSION,
-     "fournisseur": "IGN pour le ministère de l'Agriculture — zonage informatif",
-     "licence": LICENCE_OUVERTE,
-     "lien": "https://www.georisques.gouv.fr/risques/feux-de-foret",
-     "description": "Massifs exposés aux feux de forêt et bandes de 200 m où "
-                    "s'appliquent les obligations légales de débroussaillement."},
-    {"id": "cavites", "libelle": "Cavités souterraines", "theme": "Risques",
-     "mode": "apres-scene", "version": GEORISQUES_VERSION,
-     "fournisseur": "BRGM — BDCavité (Géorisques)", "licence": LICENCE_OUVERTE,
-     "lien": "https://www.georisques.gouv.fr/risques/cavites-souterraines",
-     "description": "Carrières, caves, ouvrages civils et militaires, cavités "
-                    "naturelles, puits : abandonnés et d'origine non minière."},
-    {"id": "risques_commune", "libelle": "Risques de la commune", "theme": "Risques",
-     "mode": "au-clic", "version": GEORISQUES_VERSION,
-     "fournisseur": "Géorisques — base GASPAR", "licence": LICENCE_OUVERTE,
-     "lien": "https://www.georisques.gouv.fr/",
-     "description": "Atlas des zones inondables, TRI, PAPI et arrêtés de "
-                    "catastrophe naturelle liés aux inondations de la commune du "
-                    "point ; obligation de débroussaillement au point."},
     {"id": "detections", "libelle": "Lus sur l'orthophoto", "theme": "Mobilité",
      "mode": "apres-scene", "version": VEHICULES_VERSION,
      "fournisseur": "Orthophoto IGN, détection RTMDet-R ou YOLO11-OBB",

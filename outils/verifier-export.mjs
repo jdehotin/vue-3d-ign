@@ -566,8 +566,8 @@ const classerMurs = nz => nz < -0.5 ? 'GroundSurface' : nz <= 0.5 ? 'WallSurface
   const references = new Set([...texte.matchAll(/#(\d+)(?!\d|=)/g)].map(m => m[1]));
   const manquants = [...references].filter(r => !definis.has(r));
   verifier(!manquants.length, `IFC : ${definis.size} entités, toute référence définie${manquants.length ? ' — manquent ' + manquants.join(', ') : ''}`);
-  // Un style n'a pas de GlobalId : son nom, s'il fait 22 lettres
-  // (caviteOuvrageMilitaire), passerait pour un.
+  // Un style n'a pas de GlobalId : son nom, s'il faisait 22 lettres,
+  // passerait pour un.
   const guids = [...texte.matchAll(/^#\d+=IFC(?!SURFACESTYLE)\w+\('([0-9A-Za-z_$]{22})'/gm)].map(m => m[1]);
   verifier(guids.length === 43 && new Set(guids).size === guids.length, `IFC : ${guids.length} GlobalId, tous distincts`);
   verifier(!/Vide/.test(texte), 'IFC : un élément sans triangle est omis');
@@ -593,15 +593,11 @@ const classerMurs = nz => nz < -0.5 ? 'GroundSurface' : nz <= 0.5 ? 'WallSurface
   const sansEntite = [...genres].filter(g => !ENTITES_IFC[g]);
   verifier(!sansEntite.length, `IFC : ${genres.size} genres de la page, chacun son entité`
            + (sansEntite.length ? ` — manquent ${sansEntite.join(', ')}` : ''));
-  // Et chaque style nommé dans la page, sa teinte : en littéral, ou dans les
-  // tables des risques (`style: 'inondationRare'`, STYLES_CAVITE).
-  const debutCavites = src.indexOf('const STYLES_CAVITE = {');
-  const styles = new Set([
-    ...[...src.matchAll(/style: '(\w+)'/g)].map(m => m[1]),
-    ...[...src.slice(debutCavites, src.indexOf('};', debutCavites)).matchAll(/: '(\w+)'/g)].map(m => m[1]),
-  ]);
+  // Et chaque style nommé dans la page, sa teinte : en littéral, ou dans la
+  // table des scénarios d'inondation (`style: 'inondationRare'`).
+  const styles = new Set([...src.matchAll(/style: '(\w+)'/g)].map(m => m[1]));
   const sansTeinte = [...styles].filter(s => (STYLES_IFC[s] || []).length !== 3);
-  verifier(debutCavites > 0 && !sansTeinte.length, `IFC : ${styles.size} styles de la page, chacun sa teinte`
+  verifier(styles.has('inondationRare') && !sansTeinte.length, `IFC : ${styles.size} styles de la page, chacun sa teinte`
            + (sansTeinte.length ? ` — manquent ${sansTeinte.join(', ')}` : ''));
   // Le CRS écrit est celui du modèle : une autre projection se lit dans
   // IFCPROJECTEDCRS et dans l'IFCMAPCONVERSION, sans altitude NGF déclarée

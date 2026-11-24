@@ -56,7 +56,7 @@ vue3d/
   dvf.py        ventes DVF (fichiers Etalab) jointes aux parcelles du cadastre IGN : couche à part, lue au clic seulement, datée
   bornes.py     bornes de recharge (Base nationale des IRVE, API tabulaire de data.gouv.fr) réunies par station : couche à part, lue au clic seulement, datée
   sources.py    catalogue des sources (provenance, licence, mode, disponibilité) pour la fenêtre « Données » de la page
-  georisques.py inondations (TRI), débroussaillement (OLD) et cavités de Géorisques et de la Géoplateforme, fiche de la commune au clic : couches à part, jamais lues d'avance ; un WFS de Géorisques se compte (resultType=hits) avant d'être lu
+  georisques.py surfaces inondables des TRI (WFS de Géorisques), drapées : couche à part, jamais lue d'avance ; chaque couche WFS se compte (resultType=hits) avant d'être lue
   geopf.py      GET avec reprise sur la Géoplateforme ; 8 places pour tout le service, lectures groupées abandonnées au premier échec
   tuiles.py     tuiles WMTS de la page (ortho, plan) : stock servi, sinon redirection vers l'IGN ; une tuile refusée au navigateur est relue ici et gardée 90 jours (cache/tuiles/)
   static/index.html   la page entière : HTML, CSS et JavaScript (three.js r160) ; les sources de l'utilisateur (« Mes sources ») n'y vivent qu'en IndexedDB
