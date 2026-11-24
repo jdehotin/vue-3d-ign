@@ -13,6 +13,21 @@ messages de commit et dans les commentaires des modules.
 
 ## Scène v16 — 26 octobre 2026
 
+- **Les risques dans l'export IFC et CityGML** (24 novembre 2026) : trois
+  interrupteurs de plus, « Zones inondables », « Débroussaillement » et
+  « Cavités », éteints quand la scène ne porte pas la couche. Les zonages
+  partent des triangles de la vue, redrapés sans exagération au même décalage,
+  une entité par surface : `IfcGeographicElement` « Zone inondable » ou « Zone
+  de débroussaillement » en IFC, `GenericCityObject` en CityGML, avec le type,
+  le scénario, le TRI, l'arrêté, le lien de la préfecture et la date de
+  lecture ; le zonage OLD y est dit informatif. Une cavité exporte l'épingle
+  de la vue, en symbole et non en forme (`HauteurSymbole`, 30 m). Vérifié à
+  Avignon (6 surfaces inondables sur 6), à Gordes (6 zones OLD sur 6) et à
+  Arras (9 cavités sur 9, posées entre 70 et 73 m). Corrigé au passage : l'IFC
+  d'une scène portant des canalisations ou des panneaux solaires échouait, faute
+  d'entité IFC pour leur genre. `outils/verifier-export.mjs` vérifie
+  désormais que chaque genre et chaque style de la page ont leur entité et
+  leur teinte.
 - **Risques de Géorisques** (24 novembre 2026), dans un nouveau thème
   « Risques » de la fenêtre « Données ». Trois couches à part, drapées sur le
   relief : les **zones inondables** des TRI (débordement, ruissellement,

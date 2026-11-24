@@ -971,6 +971,9 @@
                         <button type="button" class="toggle on" id="x-reseaux" title="Canalisations BD TOPO (eau, gaz, électricité…).">Réseaux souterrains</button>
                         <button type="button" class="toggle on" id="x-panneaux" title="Panneaux solaires du registre OpenPVMapper (CC-BY 4.0).">Panneaux solaires</button>
                         <button type="button" class="toggle on" id="x-postes-enedis" title="Postes de transformation HTA/BT Enedis (Licence Ouverte 2.0).">Postes HTA/BT</button>
+                        <button type="button" class="toggle on" id="x-inondations" title="Surfaces inondables des TRI (Géorisques), une par type et par scénario, drapées sur le relief.">Zones inondables</button>
+                        <button type="button" class="toggle on" id="x-old" title="Zonage des obligations légales de débroussaillement (IGN pour le MASA), massifs et bandes de 200 m, drapé sur le relief. Informatif : la mairie ou la préfecture fait foi.">Débroussaillement</button>
+                        <button type="button" class="toggle on" id="x-cavites" title="Cavités souterraines (BDCavité, BRGM) : l'épingle de la vue, au droit de chaque cavité, et non sa forme.">Cavités</button>
                         <button type="button" class="toggle on" id="x-routes" title="Tronçons de route, chemins et sentiers de la BD TOPO, drapés sur le relief.">Routes et chemins</button>
                         <button type="button" class="toggle on" id="x-eau" title="Étendues et cours d'eau de la BD TOPO, drapés sur le relief.">Hydrographie</button>
                         <button type="button" class="toggle on" id="x-ouvrages" title="Murs, ponts, voies ferrées et terrains de sport de la BD TOPO : murs et tabliers en volumes, voies et terrains drapés sur le relief.">Ouvrages</button>
@@ -7398,6 +7401,9 @@ var groupeCavites = new THREE.Group();
 scene.add(groupeInondations, groupeOld, groupeCavites);
 var INONDATIONS = null, ZONES_OLD = null, CAVITES = null, RISQUES_COMMUNE = null;
 var risquesActif = false;
+// Les triangles de chaque aplat, entité par entité, comme routesPosees et
+// eauPosee : l'export les redrape (facettesDrapes) au même décalage.
+var risquesPoses = [];      // { couche: 'inondations'|'old', donnees, tris, decalage }
 const georisquesConstruits = { inondations: false, old: false, cavites: false };
 const urlGeorisques = couche => `api/georisques/${couche}?${REQUETE}`;
 // Maille des aplats de risque : 4 m, plus large que celle de l'eau (2,5 m). Une
@@ -7406,24 +7412,30 @@ const urlGeorisques = couche => `api/georisques/${couche}?${REQUETE}`;
 const RISQUE_MAILLE = 4;
 const SCENARIOS_INONDATION = {
     // Du plus étendu au plus restreint : chacun posé au-dessus du précédent.
-    rare:     { nom: 'rare (millénal)', couleur: 0x8ec5ff, opacite: 0.30, decalage: 0.20 },
-    moyen_cc: { nom: 'moyen, avec changement climatique', couleur: 0x7a62d6, opacite: 0.32, decalage: 0.22 },
-    moyen:    { nom: 'moyen (centennal)', couleur: 0x3f7fe0, opacite: 0.38, decalage: 0.24 },
-    frequent: { nom: 'fréquent (décennal)', couleur: 0x1b3f99, opacite: 0.45, decalage: 0.26 },
+    // `style` : sa teinte dans l'export (STYLES_IFC).
+    rare:     { nom: 'rare (millénal)', couleur: 0x8ec5ff, opacite: 0.30, decalage: 0.20, style: 'inondationRare' },
+    moyen_cc: { nom: 'moyen, avec changement climatique', couleur: 0x7a62d6, opacite: 0.32, decalage: 0.22, style: 'inondationMoyenCc' },
+    moyen:    { nom: 'moyen (centennal)', couleur: 0x3f7fe0, opacite: 0.38, decalage: 0.24, style: 'inondationMoyen' },
+    frequent: { nom: 'fréquent (décennal)', couleur: 0x1b3f99, opacite: 0.45, decalage: 0.26, style: 'inondationFrequent' },
 };
 const TYPES_INONDATION = {
     debordement: "Débordement de cours d'eau", ruissellement: 'Ruissellement',
     submersion: 'Submersion marine',
 };
 const ZONAGES_OLD = {
-    bande: { nom: 'Bande de 200 m soumise aux OLD', couleur: 0xf0a030, opacite: 0.30, decalage: 0.20 },
-    massif: { nom: 'Massif exposé aux feux de forêt', couleur: 0xc0392b, opacite: 0.35, decalage: 0.24 },
+    bande: { nom: 'Bande de 200 m soumise aux OLD', couleur: 0xf0a030, opacite: 0.30, decalage: 0.20, style: 'oldBande' },
+    massif: { nom: 'Massif exposé aux feux de forêt', couleur: 0xc0392b, opacite: 0.35, decalage: 0.24, style: 'oldMassif' },
 };
 const COULEURS_CAVITE = {
     'carrière': 0x8d6e63, 'cave': 0xbcaaa4, 'naturelle': 0x43a047, 'ouvrage civil': 0x5c6bc0,
     'ouvrage militaire': 0xc62828, 'puits': 0x00838f,
 };
 const COULEUR_CAVITE_AUTRE = 0x9e9e9e;
+// Leur teinte dans l'export (STYLES_IFC), la même.
+const STYLES_CAVITE = {
+    'carrière': 'caviteCarriere', 'cave': 'caviteCave', 'naturelle': 'caviteNaturelle',
+    'ouvrage civil': 'caviteOuvrageCivil', 'ouvrage militaire': 'caviteOuvrageMilitaire', 'puits': 'cavitePuits',
+};
 // Hauteur de l'épingle d'une cavité : de quoi dépasser les toits d'un
 // centre-ville. Une convention, à revoir sur mesure : à 4 m, aucune des 9
 // cavités de la Grand-Place d'Arras (zone de 350 m) n'était visible.
@@ -7433,7 +7445,7 @@ const matRisque = ({ couleur, opacite }) => new THREE.MeshStandardMaterial({
     polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
 
 /** Un aplat de risque drapé sur le relief, avec son infobulle. */
-function poserAplatRisque(geometrie, materiau, groupe, decalage, infobulle) {
+function poserAplatRisque(geometrie, materiau, groupe, decalage, infobulle, pose) {
     const polygones = geometrie.type === 'Polygon' ? [geometrie.coordinates]
                     : geometrie.type === 'MultiPolygon' ? geometrie.coordinates : [];
     const tris = polygones.flatMap(p => subdiviser(trianglesPolygone(p), RISQUE_MAILLE));
@@ -7441,6 +7453,7 @@ function poserAplatRisque(geometrie, materiau, groupe, decalage, infobulle) {
     const mesh = maillageDrape(tris, materiau, groupe, decalage);
     mesh.receiveShadow = false;
     mesh.userData = { infobulle };
+    risquesPoses.push({ ...pose, tris, decalage });
     return mesh;
 }
 
@@ -7474,7 +7487,8 @@ function construireInondations() {
             + `<br>scénario ${sc.nom}`
             + (s.cours_deau ? `<br>${echapper(s.cours_deau)}` : '')
             + (s.tri ? `<br><i>${echapper(s.tri.replace(/^FR._TRI_/, 'TRI '))}</i>` : '')
-            + `<br><i>Géorisques, lu le ${dateLongue(INONDATIONS.lu_le)}</i>`);
+            + `<br><i>Géorisques, lu le ${dateLongue(INONDATIONS.lu_le)}</i>`,
+            { couche: 'inondations', donnees: s });
     }
     placerDrapes();
     brancherBoutonRisque('t-inondations', groupeInondations);
@@ -7493,7 +7507,8 @@ function construireOld() {
             + (z.arrete ? `<br>arrêté préfectoral du ${echapper(z.arrete)}` : '')
             + (z.source ? `<br>${echapper(z.source)}` : '')
             + '<br><i>zonage informatif : la mairie ou la préfecture fait foi</i>'
-            + `<br><i>IGN pour le MASA, lu le ${dateLongue(ZONES_OLD.lu_le)}</i>`);
+            + `<br><i>IGN pour le MASA, lu le ${dateLongue(ZONES_OLD.lu_le)}</i>`,
+            { couche: 'old', donnees: z });
     }
     placerDrapes();
     brancherBoutonRisque('t-old', groupeOld);
@@ -10988,6 +11003,14 @@ const ENTITES_IFC = {
     pont: ['IFCGEOGRAPHICELEMENT', 'USERDEFINED', 'Pont'],
     voie_ferree: ['IFCGEOGRAPHICELEMENT', 'USERDEFINED', 'Voie ferrée'],
     terrain_sport: ['IFCGEOGRAPHICELEMENT', 'USERDEFINED', 'Terrain de sport'],
+    // Les couches à part : canalisations drapées, panneaux posés sur les toits.
+    reseau: ['IFCGEOGRAPHICELEMENT', 'USERDEFINED', 'Canalisation'],
+    panneau_solaire: ['IFCBUILDINGELEMENTPROXY', 'USERDEFINED', 'Panneaux solaires'],
+    // Les risques (Géorisques) : des zonages drapés sur le relief, et le
+    // symbole d'une cavité — rien de construit.
+    zone_inondable: ['IFCGEOGRAPHICELEMENT', 'USERDEFINED', 'Zone inondable'],
+    zone_old: ['IFCGEOGRAPHICELEMENT', 'USERDEFINED', 'Zone de débroussaillement'],
+    cavite: ['IFCGEOGRAPHICELEMENT', 'USERDEFINED', 'Cavité souterraine'],
 };
 
 /**
@@ -11506,6 +11529,15 @@ const STYLES_IFC = {
     ballast: [0.42, 0.37, 0.34], rail: [0.73, 0.75, 0.77],
     terrainSport: [0.31, 0.56, 0.29], petitTerrain: [0.36, 0.56, 0.47],
     tennis: [0.71, 0.40, 0.25], pisteSport: [0.66, 0.31, 0.24], bassin: [0.25, 0.56, 0.75],
+    // Les couches à part (MAT_PANNEAU, MAT_POSTE_ENEDIS).
+    panneau: [0.11, 0.17, 0.27], posteEnedis: [0.91, 0.51, 0.17],
+    // Les risques (SCENARIOS_INONDATION, ZONAGES_OLD, COULEURS_CAVITE).
+    inondationRare: [0.56, 0.77, 1.00], inondationMoyenCc: [0.48, 0.38, 0.84],
+    inondationMoyen: [0.25, 0.50, 0.88], inondationFrequent: [0.11, 0.25, 0.60],
+    oldBande: [0.94, 0.63, 0.19], oldMassif: [0.75, 0.22, 0.17],
+    caviteCarriere: [0.55, 0.43, 0.39], caviteCave: [0.74, 0.67, 0.64], caviteNaturelle: [0.26, 0.63, 0.28],
+    caviteOuvrageCivil: [0.36, 0.42, 0.75], caviteOuvrageMilitaire: [0.78, 0.16, 0.16],
+    cavitePuits: [0.00, 0.51, 0.56], cavite: [0.62, 0.62, 0.62],
 };
 // Mailles du relief exporté, par côté, au plus : 178 dans l'emprise par
 // défaut, la maille de la vue (2 m) ; en zone de 1 000 m, 500 mailles
@@ -11532,8 +11564,10 @@ function toitDessine(ud) {
  * les emprises BD TOPO, telles que la vue les a drapées ou dressées, un élément
  * par entité ; les tronçons de route et les étendues d'eau, drapés comme eux ;
  * les pylônes et les conducteurs des lignes à haute tension ; le relief de
- * l'emprise. `options` : { relief, batiments, arbres, masses, routes, eau,
- * lignes, ouvrages, aerodromes, postes, haies }.
+ * l'emprise ; les zonages de risque drapés et les épingles des cavités.
+ * `options` : { relief, batiments, arbres, masses, routes, eau, lignes,
+ * ouvrages, aerodromes, postes, haies, monuments, reseaux, panneaux,
+ * postes_enedis, inondations, old, cavites }.
  */
 
 /** Le libellé et le jeu de propriétés de chaque sous-couche d'emprises. */
@@ -11643,6 +11677,83 @@ function elementEau(couche, d, facettes, i) {
         tag: null,
         proprietes: { nom: eau ? 'VueIGN_SurfaceEau' : 'VueIGN_CoursDEau', valeurs },
         maillages: [{ style: d.persistance === 'Intermittent' ? 'eauIntermittente' : 'eau', facettes }],
+    };
+}
+
+/**
+ * Une surface inondable d'un TRI (construireInondations), drapée comme la vue
+ * la drape. Une par type et par scénario : les quatre scénarios se recouvrent,
+ * chacun au-dessus du plus rare (SCENARIOS_INONDATION, `decalage`).
+ */
+function elementInondation(s, facettes, i) {
+    const sc = SCENARIOS_INONDATION[s.scenario];
+    const type = TYPES_INONDATION[s.type] || 'Inondation';
+    const tri = s.tri ? s.tri.replace(/^FR._TRI_/, 'TRI ') : null;
+    return {
+        cle: `zone_inondable|${s.type}|${s.scenario}|${i}`,
+        genre: 'zone_inondable',
+        nom: `${type}, scénario ${sc.nom}`,
+        description: `Surface inondable${tri ? ` du ${tri}` : ''} (Géorisques, lue le ${INONDATIONS.lu_le})`,
+        tag: null,
+        proprietes: { nom: 'VueIGN_ZoneInondable', valeurs: [
+            ['Type', 'IFCLABEL', type],
+            ['Scenario', 'IFCLABEL', sc.nom],
+            ['CoursDEau', 'IFCLABEL', s.cours_deau],
+            ['TRI', 'IFCLABEL', s.tri],
+            ['LuLe', 'IFCLABEL', INONDATIONS.lu_le],
+        ] },
+        maillages: [{ style: sc.style, facettes }],
+    };
+}
+
+/**
+ * Une zone des obligations légales de débroussaillement (construireOld). Le
+ * zonage est informatif : la propriété `Portee` le dit dans le fichier, comme
+ * l'infobulle à l'écran.
+ */
+function elementOld(z, facettes, i) {
+    const zonage = ZONAGES_OLD[z.zonage];
+    return {
+        cle: `zone_old|${z.zonage}|${i}`,
+        genre: 'zone_old',
+        nom: zonage.nom,
+        description: (z.arrete ? `Arrêté préfectoral du ${z.arrete}, ` : '')
+            + `zonage informatif IGN pour le MASA, lu le ${ZONES_OLD.lu_le}`,
+        tag: null,
+        proprietes: { nom: 'VueIGN_Debroussaillement', valeurs: [
+            ['Zonage', 'IFCLABEL', zonage.nom],
+            ['ArretePrefectoral', 'IFCLABEL', z.arrete],
+            ['Source', 'IFCLABEL', z.source],
+            ['Url', 'IFCLABEL', z.url],
+            ['Portee', 'IFCLABEL', 'informative : la mairie ou la préfecture fait foi'],
+            ['LuLe', 'IFCLABEL', ZONES_OLD.lu_le],
+        ] },
+        maillages: [{ style: zonage.style, facettes }],
+    };
+}
+
+/**
+ * Une cavité souterraine (construireCavites) : l'épingle de la vue, tige et
+ * tête, dressée au droit du point BDCavité. Un symbole, pas la cavité — ni sa
+ * forme ni sa profondeur ne sont connues ; sa hauteur est CAVITE_EPINGLE_M.
+ */
+function elementCavite(c, facettes, i) {
+    return {
+        cle: `cavite|${c.identifiant || ''}|${i}`,
+        genre: 'cavite',
+        nom: `Cavité : ${c.type || 'type inconnu'}`,
+        description: (c.nom ? `${c.nom}, ` : '')
+            + `symbole au droit de la cavité (BRGM, Géorisques, lu le ${CAVITES.lu_le})`,
+        tag: c.identifiant || null,
+        proprietes: { nom: 'VueIGN_Cavite', valeurs: [
+            ['Type', 'IFCLABEL', c.type],
+            ['Nom', 'IFCLABEL', c.nom],
+            ['IdentifiantBDCavite', 'IFCLABEL', c.identifiant],
+            ['Reperage', 'IFCLABEL', c.reperage],
+            ['HauteurSymbole', 'IFCLENGTHMEASURE', CAVITE_EPINGLE_M],
+            ['LuLe', 'IFCLABEL', CAVITES.lu_le],
+        ] },
+        maillages: [{ style: STYLES_CAVITE[c.type] || 'cavite', facettes }],
     };
 }
 
@@ -11767,6 +11878,7 @@ function modeleExport(options) {
                      routes: 0, surfacesEau: 0, coursEau: 0, pylones: 0, lignes: 0,
                      aerodromes: 0, postes: 0, haies: 0,
                      monuments: 0, reseaux: 0, panneaux: 0, postes_enedis: 0,
+                     inondations: 0, old: 0, cavites: 0,
                      murs: 0, ponts: 0, voies: 0, terrainsSport: 0 };
 
     if (options.batiments) {
@@ -11912,7 +12024,8 @@ function modeleExport(options) {
     // suit la pente du sol, un toit ne l'a jamais suivie.
     if (options.aerodromes || options.postes || options.haies
         || options.reseaux || options.panneaux || options.postes_enedis
-        || options.routes || options.eau || options.lignes || options.ouvrages) {
+        || options.routes || options.eau || options.lignes || options.ouvrages
+        || options.inondations || options.old || options.cavites) {
         const exagEmp = exagVert, reliefEmp = relief;
         exagVert = 1; relief = true;
         try {
@@ -11920,6 +12033,8 @@ function modeleExport(options) {
             placerEmprises();
             placerLignes();
             placerOuvrages();
+            placerCavites();
+            groupeCavites.updateMatrixWorld(true);
             groupeEmprises.updateMatrixWorld(true);
             groupeLignes.updateMatrixWorld(true);
             groupeOuvrages.updateMatrixWorld(true);
@@ -12051,12 +12166,12 @@ function modeleExport(options) {
                     if (!facettes.faces.length) continue;
                     elements.push({
                         cle: `panneau|${elements.length}`,
-                        genre: 'toiture',
+                        genre: 'panneau_solaire',
                         nom: 'Panneaux solaires',
                         description: 'Registre OpenPVMapper (CC-BY 4.0)',
                         tag: null,
                         proprietes: { nom: 'VueIGN_Panneau', valeurs: [] },
-                        maillages: [{ style: 'toiture', facettes }],
+                        maillages: [{ style: 'panneau', facettes }],
                     });
                     compte.panneaux++;
                 }
@@ -12089,11 +12204,42 @@ function modeleExport(options) {
                                 ['Commune', 'IFCLABEL', pe.commune],
                                 ['Departement', 'IFCLABEL', pe.departement],
                             ] },
-                            maillages: [{ style: 'batiment', facettes }],
+                            maillages: [{ style: 'posteEnedis', facettes }],
                         });
                         compte.postes_enedis++;
                     }
                 }
+            }
+            // Les aplats de risque, redrapés au décalage de la vue : le plus
+            // fréquent reste posé sur le plus rare, comme à l'écran.
+            for (const { couche, donnees, tris, decalage } of risquesPoses) {
+                if (!options[couche]) continue;
+                const facettes = facettesDrapes(tris, decalage, versIfc);
+                if (!facettes.faces.length) continue;
+                elements.push(couche === 'inondations' ? elementInondation(donnees, facettes, elements.length)
+                                                       : elementOld(donnees, facettes, elements.length));
+                compte[couche]++;
+            }
+            if (options.cavites && groupeCavites.children.length) {
+                // Une cavité, un élément : la tige et la tête de son instance.
+                const mx = new THREE.Matrix4();
+                CAVITES.cavites.forEach((c, inst) => {
+                    const tri = [];
+                    for (const o of groupeCavites.children) {
+                        o.getMatrixAt(inst, mx);
+                        mx.premultiply(o.matrixWorld);
+                        const pos = o.geometry.attributes.position, idx = o.geometry.index;
+                        const nb = idx ? idx.count : pos.count;
+                        for (let i = 0; i < nb; i++) {
+                            v.fromBufferAttribute(pos, idx ? idx.getX(i) : i).applyMatrix4(mx);
+                            tri.push(...versIfc(v.x, v.y, v.z));
+                        }
+                    }
+                    const facettes = facettesIfc(tri);
+                    if (!facettes.faces.length) return;
+                    elements.push(elementCavite(c, facettes, elements.length));
+                    compte.cavites++;
+                });
             }
         } finally {
             exagVert = exagEmp; relief = reliefEmp;
@@ -12101,6 +12247,8 @@ function modeleExport(options) {
             placerEmprises();
             placerLignes();
             placerOuvrages();
+            placerCavites();
+            groupeCavites.updateMatrixWorld(true);
             groupeEmprises.updateMatrixWorld(true);
             groupeLignes.updateMatrixWorld(true);
             groupeOuvrages.updateMatrixWorld(true);
@@ -12138,6 +12286,11 @@ function modeleExport(options) {
         + (rgeAlti ? ', RGE ALTI' : '') + '), Licence Ouverte 2.0'];
     if (!rgeAlti && sourceRelief) credits.push(`relief : ${sourceRelief} (Mapzen Terrain Tiles, EU-DEM © Copernicus)`);
     if (compte.osm) credits.push('parties de monuments © contributeurs OpenStreetMap, ODbL');
+    if (compte.inondations || compte.old || compte.cavites) {
+        credits.push('risques : Géorisques (MTE, BRGM)'
+            + (compte.old ? ', débroussaillement IGN pour le MASA, zonage informatif' : '')
+            + ', Licence Ouverte 2.0');
+    }
     return {
         base: `vue3d-${LAT0}-${LON0}-z${ZONE}`,
         horodatage: new Date().toISOString().slice(0, 19),
@@ -12167,14 +12320,16 @@ function modeleExport(options) {
 const optionsExport = { relief: true, batiments: true, arbres: true, masses: false,
                         routes: true, eau: true, lignes: true, ouvrages: true,
                         aerodromes: true, postes: true, haies: true,
-                        monuments: true, reseaux: true, panneaux: true, postes_enedis: true };
+                        monuments: true, reseaux: true, panneaux: true, postes_enedis: true,
+                        inondations: true, old: true, cavites: true };
 const COUCHES_EXPORT = [['relief', 'x-relief'], ['batiments', 'x-batiments'],
                         ['arbres', 'x-arbres'], ['masses', 'x-masses'],
                         ['routes', 'x-routes'], ['eau', 'x-eau'], ['ouvrages', 'x-ouvrages'], ['lignes', 'x-lignes'],
                         ['aerodromes', 'x-aerodromes'],
                         ['postes', 'x-postes'], ['haies', 'x-haies'],
                         ['monuments', 'x-monuments'], ['reseaux', 'x-reseaux'],
-                        ['panneaux', 'x-panneaux'], ['postes_enedis', 'x-postes-enedis']];
+                        ['panneaux', 'x-panneaux'], ['postes_enedis', 'x-postes-enedis'],
+                        ['inondations', 'x-inondations'], ['old', 'x-old'], ['cavites', 'x-cavites']];
 for (const [cle, id] of COUCHES_EXPORT) {
     const bouton = document.getElementById(id);
     bouton.dataset.titre = bouton.title;          // etatCouchesExport() le remplace
@@ -12356,6 +12511,9 @@ const COUCHES_PRESENTES = {
     reseaux: () => reseauxPoses.length > 0,
     panneaux: () => groupePanneaux.children.length > 0,
     postes_enedis: () => groupePostesEnedis.children.length > 0,
+    inondations: () => risquesPoses.some(r => r.couche === 'inondations'),
+    old: () => risquesPoses.some(r => r.couche === 'old'),
+    cavites: () => groupeCavites.children.length > 0,
 };
 
 /** Éteint, dans la fenêtre, les couches que la scène ne porte pas. */
@@ -12871,11 +13029,14 @@ function resumeExport(modele, choix) {
             choix.monuments && c.monuments > 0 && nombre(c.monuments, 'monument'),
             choix.reseaux && nombre(c.reseaux, 'canalisation'),
             choix.panneaux && nombre(c.panneaux, 'panneau solaire'),
-            choix.postes_enedis && nombre(c.postes_enedis, 'poste HTA/BT'),
+            choix.postes_enedis && `${c.postes_enedis.toLocaleString('fr-FR')} poste(s) HTA/BT`,
+            choix.inondations && `${c.inondations.toLocaleString('fr-FR')} surface(s) inondable(s)`,
+            choix.old && `${c.old.toLocaleString('fr-FR')} zone(s) de débroussaillement`,
+            choix.cavites && nombre(c.cavites, 'cavité'),
             choix.ouvrages && c.murs > 0 && nombre(c.murs, 'mur'),
             choix.ouvrages && c.ponts > 0 && nombre(c.ponts, 'pont'),
-            choix.ouvrages && c.voies > 0 && nombreDe(c.voies, 'tronçon(s) de voie ferrée'),
-            choix.ouvrages && c.terrainsSport > 0 && nombreDe(c.terrainsSport, 'nature(s) de terrain de sport'),
+            choix.ouvrages && c.voies > 0 && `${c.voies.toLocaleString('fr-FR')} tronçon(s) de voie ferrée`,
+            choix.ouvrages && c.terrainsSport > 0 && `${c.terrainsSport.toLocaleString('fr-FR')} nature(s) de terrain de sport`,
             choix.lignes && nombre(c.pylones, 'pylône'),
             choix.lignes && nombreDe(c.lignes, 'ligne'),
             c.maille && `relief à ${c.maille.toFixed(1).replace('.', ',')} m`].filter(Boolean).join(', ');

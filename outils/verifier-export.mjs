@@ -83,7 +83,7 @@ const CONSTS = ['GRS80', 'WGS84', 'PROJECTIONS', 'ALPHABET_IFC', 'ENTITES_IFC', 
                 'HAUTEUR_MIN_TRONC', 'SEGMENTS_SIMPLE', 'PLAN_COS', 'PLAN_ECART_M', 'texteXml', 'ESPACES_CITYGML', 'ORTHO_NOEUDS', 'TABLE_CRC32'];
 const { etendre, versLambert93, PROJECTIONS, guidIfc, idGml, chaineIfc, angleIfc, facettesIfc, trianglesRelief, trianglesTronc,
         tubeCable, ecrireIfc, aUnTronc, portDe, ajouterHouppierSimple, polygonesPlans, solsOuverts, ecrireCityGml,
-        ALPHABET_IFC, STYLES_IFC, ENFONCEMENT, inverseProjection, planOrtho, reechantillonnerOrtho,
+        ALPHABET_IFC, ENTITES_IFC, STYLES_IFC, ENFONCEMENT, inverseProjection, planOrtho, reechantillonnerOrtho,
         fichierJgw, wktProjection, crc32, archiveZip, comprimer, compresserDeflate, ecrireGeoTiff } =
   new Function('THREE', CONSTS.map(extraireConst).join('\n') + '\n' + NOMS.map(extraire).join('\n')
     + `\nreturn { ${[...NOMS, ...CONSTS].join(', ')} };`)(THREE);
@@ -566,7 +566,9 @@ const classerMurs = nz => nz < -0.5 ? 'GroundSurface' : nz <= 0.5 ? 'WallSurface
   const references = new Set([...texte.matchAll(/#(\d+)(?!\d|=)/g)].map(m => m[1]));
   const manquants = [...references].filter(r => !definis.has(r));
   verifier(!manquants.length, `IFC : ${definis.size} entités, toute référence définie${manquants.length ? ' — manquent ' + manquants.join(', ') : ''}`);
-  const guids = [...texte.matchAll(/^#\d+=IFC\w+\('([0-9A-Za-z_$]{22})'/gm)].map(m => m[1]);
+  // Un style n'a pas de GlobalId : son nom, s'il fait 22 lettres
+  // (caviteOuvrageMilitaire), passerait pour un.
+  const guids = [...texte.matchAll(/^#\d+=IFC(?!SURFACESTYLE)\w+\('([0-9A-Za-z_$]{22})'/gm)].map(m => m[1]);
   verifier(guids.length === 43 && new Set(guids).size === guids.length, `IFC : ${guids.length} GlobalId, tous distincts`);
   verifier(!/Vide/.test(texte), 'IFC : un élément sans triangle est omis');
   verifier(texte.startsWith('ISO-10303-21;\nHEADER;') && texte.endsWith('END-ISO-10303-21;\n'), 'IFC : en-tête et fin ISO 10303-21');
@@ -582,6 +584,25 @@ const classerMurs = nz => nz < -0.5 ? 'GroundSurface' : nz <= 0.5 ? 'WallSurface
   verifier(['route', 'chemin', 'eau', 'eauIntermittente', 'pylone', 'cable',
     'mur', 'pont', 'ballast', 'rail', 'tennis', 'terrainSport', 'petitTerrain', 'pisteSport', 'bassin']
     .every(s => (STYLES_IFC[s] || []).length === 3), 'IFC : chaque style des réseaux a sa teinte');
+  // Chaque genre écrit par la page a son entité : sans elle, ecrireIfc lit
+  // ENTITES_IFC[genre] === undefined et lève — l'IFC d'une scène avec
+  // canalisations ou panneaux échouait ainsi. `tronc` et `voie` ne sont que
+  // des userData de la vue, jamais des éléments exportés.
+  const genres = new Set([...src.matchAll(/genre: '(\w+)'/g)].map(m => m[1]));
+  for (const interne of ['tronc', 'voie']) genres.delete(interne);
+  const sansEntite = [...genres].filter(g => !ENTITES_IFC[g]);
+  verifier(!sansEntite.length, `IFC : ${genres.size} genres de la page, chacun son entité`
+           + (sansEntite.length ? ` — manquent ${sansEntite.join(', ')}` : ''));
+  // Et chaque style nommé dans la page, sa teinte : en littéral, ou dans les
+  // tables des risques (`style: 'inondationRare'`, STYLES_CAVITE).
+  const debutCavites = src.indexOf('const STYLES_CAVITE = {');
+  const styles = new Set([
+    ...[...src.matchAll(/style: '(\w+)'/g)].map(m => m[1]),
+    ...[...src.slice(debutCavites, src.indexOf('};', debutCavites)).matchAll(/: '(\w+)'/g)].map(m => m[1]),
+  ]);
+  const sansTeinte = [...styles].filter(s => (STYLES_IFC[s] || []).length !== 3);
+  verifier(debutCavites > 0 && !sansTeinte.length, `IFC : ${styles.size} styles de la page, chacun sa teinte`
+           + (sansTeinte.length ? ` — manquent ${sansTeinte.join(', ')}` : ''));
   // Le CRS écrit est celui du modèle : une autre projection se lit dans
   // IFCPROJECTEDCRS et dans l'IFCMAPCONVERSION, sans altitude NGF déclarée
   // (EPSG:5720 est un composé RGF93, pas WGS 84).
