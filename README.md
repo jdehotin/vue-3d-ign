@@ -698,6 +698,21 @@ l'orthophoto, à 0,2 m par pixel, avec un réseau de neurones — RTMDet-R
 ([Ultralytics](https://github.com/ultralytics/ultralytics)), au choix de qui
 déploie.
 
+### Vos propres sources
+
+La fenêtre « Données et couches » accepte aussi vos données : un fichier
+GeoJSON, KML, GPX ou CSV (colonnes `lat` et `lon`, `x` et `y`, ou
+`geo_point_2d`), ou l'adresse d'un GeoJSON, d'un WFS servant du GeoJSON
+(`https://data.geopf.fr/wfs/ows` et une couche, par exemple) ou d'une
+collection OGC API Features. Elles restent **dans votre navigateur**
+(IndexedDB) et ne passent jamais par le serveur ; une adresse est lue par le
+navigateur lui-même, et le service doit l'autoriser (CORS). La projection est
+reconnue d'après les coordonnées — degrés, Lambert-93, CC42 à CC50, UTM 30 à
+32, Web Mercator — ou choisie à la main. Chaque source est découpée au contour
+ou à l'emprise de la scène, puis posée selon sa géométrie : aplat drapé,
+ruban ou épingle de 15 m, à la couleur et à l'opacité choisies, avec ses
+propriétés en infobulle. Elles n'entrent pas encore dans l'export.
+
 ## La méthode, en bref
 
 Chaque règle a été fixée après une mesure sur des données réelles. Les
@@ -930,6 +945,7 @@ npm install puppeteer-core
 node outils/essai-navigateur.mjs "http://localhost:8080/?lat=43.9116&lon=5.2003" capture.png
 node outils/verifier-recherche.mjs     # la recherche d'un lieu, sous Node, sans réseau
 node outils/verifier-export.mjs essai.ifc essai.gml   # les exports, sous Node (npm install three@0.160.0)
+node outils/verifier-sources.mjs      # les sources de l'utilisateur : lecture, projection, découpage
 pip install ifcopenshell pytest && python outils/valider_ifc.py essai.ifc   # l'IFC, comme un logiciel le lirait
 python outils/valider_citygml.py essai.gml   # la géométrie du CityGML, sans dépendance
 citygml-tools validate essai.gml             # son schéma (github.com/citygml4j/citygml-tools)

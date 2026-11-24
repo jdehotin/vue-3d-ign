@@ -20,6 +20,7 @@ VUE3D_PANNEAUX=oui docker compose up -d --build        # avec les panneaux solai
 node outils/verifier-geometrie.mjs               # géométrie de la page, exécutée sous Node
 node outils/verifier-recherche.mjs               # recherche d'un lieu, exécutée sous Node
 node outils/verifier-export.mjs essai.ifc essai.gml   # exports IFC et CityGML, exécutés sous Node
+node outils/verifier-sources.mjs                 # sources de l'utilisateur (lecture, projection, découpage), sous Node
 node outils/mesure-ecarts-toits.mjs "http://localhost:8080/?lat=43.9116&lon=5.2003"   # toits contre le nuage LiDAR (puppeteer-core)
 python outils/valider_ifc.py essai.ifc           # validation par ifcopenshell (pip install ifcopenshell pytest, hors requirements)
 python outils/valider_citygml.py essai.gml       # géométrie du CityGML ; son schéma : citygml-tools validate essai.gml
@@ -58,7 +59,7 @@ vue3d/
   georisques.py inondations (TRI), débroussaillement (OLD) et cavités de Géorisques et de la Géoplateforme, fiche de la commune au clic : couches à part, jamais lues d'avance ; un WFS de Géorisques se compte (resultType=hits) avant d'être lu
   geopf.py      GET avec reprise sur la Géoplateforme ; 8 places pour tout le service, lectures groupées abandonnées au premier échec
   tuiles.py     tuiles WMTS de la page (ortho, plan) : stock servi, sinon redirection vers l'IGN ; une tuile refusée au navigateur est relue ici et gardée 90 jours (cache/tuiles/)
-  static/index.html   la page entière : HTML, CSS et JavaScript (three.js r160)
+  static/index.html   la page entière : HTML, CSS et JavaScript (three.js r160) ; les sources de l'utilisateur (« Mes sources ») n'y vivent qu'en IndexedDB
 ```
 
 Pas de base de données, pas de clé d'API, pas de build front : la page est un
@@ -180,6 +181,12 @@ l'étage `export` du Dockerfile.
   en arguments dépasse la pile (« Maximum call stack size exceeded »), ce qui
   perdait l'export d'une scène avec lignes. `outils/verifier-export.mjs` le
   vérifie sur ces 62 208 valeurs.
+- **Une source de l'utilisateur ne touche jamais le serveur.** Fichiers et
+  adresses de « Mes sources » vivent dans IndexedDB ; une adresse est lue par
+  le navigateur, CORS compris. Pas de relais serveur (une porte ouverte aux
+  requêtes forgées), pas de cache disque (il ne périme pas et sert des scènes
+  publiques). Elles obéissent au contour comme les autres :
+  `decouperTriangles` les coupe à la région de la scène avant tout dessin.
 - **Dans la fenêtre d'export, tout `<button>` porte son `type`.** La fenêtre
   est un `<form method="dialog">` : un bouton sans `type` est un bouton de
   soumission, et chaque clic sur une couche la fermait.

@@ -444,6 +444,26 @@
         /* Une couche désépinglée quitte le panneau, pas la page : son bouton
            garde sa logique, la fenêtre « Données » le pilote. */
         #panel .toggle.hors-panneau { display:none; }
+        /* Mes sources : la couleur en pastille devant le nom, l'état sous lui,
+           les réglages (projection, opacité) en dessous ; puis l'ajout. */
+        #donnees-dialogue .ma-source .source-tete input[type=color] { width:22px; height:22px; padding:0; border:0;
+                background:none; cursor:pointer; flex:none; }
+        #donnees-dialogue .ma-source .source-tete .epingle { border-left:1px solid var(--line); border-radius:5px; padding:3px 7px; }
+        #donnees-dialogue .ma-source > .source-etat { display:block; margin-top:3px; white-space:normal; }
+        #donnees-dialogue .ma-source .source-prov { overflow-wrap:anywhere; }
+        #donnees-dialogue .reglages-source { display:flex; gap:8px; align-items:center; }
+        #donnees-dialogue .reglages-source select { flex:1 1 auto; min-width:0; }
+        #donnees-dialogue .reglages-source input[type=range] { width:90px; flex:none; }
+        #donnees-dialogue :is(select, input[type=url], input[type=text]) { background:#2349b4; color:#e8eaed;
+                border:1px solid #4a70dc; border-radius:4px; padding:4px 6px; font:inherit; font-size:12px; }
+        #donnees-dialogue #ajout-source { margin:10px 0 8px; padding-top:10px; border-top:1px solid var(--line); }
+        #donnees-dialogue #ajout-source summary { cursor:pointer; font-size:13px; font-weight:600; }
+        #donnees-dialogue .ajout-ligne { display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin-top:8px; font-size:12px; }
+        #donnees-dialogue .ajout-ligne input[type=url] { flex:1 1 100%; }
+        #donnees-dialogue .ajout-ligne input[type=text] { flex:1 1 140px; min-width:0; }
+        #donnees-dialogue #btn-source-ajouter { padding:5px 12px; border-radius:6px; border:1px solid var(--line);
+                background:var(--panel-soft); color:var(--text); font:inherit; font-size:12px; cursor:pointer; }
+        #donnees-dialogue #source-note.echec { color:#e36c0a; }
         #btn-donnees { margin-top:8px; }
         #btn-plein-ecran .sortir, html.plein-ecran #btn-plein-ecran .entrer { display:none; }
         html.plein-ecran #btn-plein-ecran .sortir { display:inline; }
@@ -1052,6 +1072,33 @@ coordonnées absolues.">
                         s'affichent ou se masquent ; ★ les garde dans le panneau.
                         Ces choix sont gardés dans ce navigateur.</p>
                     <div id="donnees-sources"></div>
+                    <div class="theme">Mes sources</div>
+                    <p class="note">Les fichiers et adresses ajoutés ici restent dans ce navigateur :
+                        ils ne passent jamais par le serveur. Une adresse est lue par le navigateur
+                        lui-même ; le service doit l'autoriser (CORS).</p>
+                    <div id="mes-sources"></div>
+                    <details id="ajout-source">
+                        <summary>+ Ajouter une source</summary>
+                        <label class="ajout-ligne">Fichier GeoJSON, KML, GPX ou CSV
+                            <input type="file" id="source-fichier"
+                                   accept=".geojson,.json,.kml,.gpx,.csv,.txt,application/geo+json,application/json,application/vnd.google-earth.kml+xml,application/gpx+xml,text/csv"></label>
+                        <div class="ajout-ligne">ou une adresse
+                            <input type="url" id="source-url" placeholder="https://… (GeoJSON, WFS, OGC API Features)"
+                                   aria-label="Adresse de la source">
+                        </div>
+                        <div class="ajout-ligne">
+                            <select id="source-type" aria-label="Type de l'adresse">
+                                <option value="auto">Type : d'après l'adresse</option>
+                                <option value="geojson">GeoJSON</option>
+                                <option value="wfs">WFS (servi en GeoJSON)</option>
+                                <option value="ogcapi">OGC API Features</option>
+                            </select>
+                            <input type="text" id="source-couche" placeholder="Couche WFS (typeName)"
+                                   aria-label="Couche WFS">
+                            <button type="button" id="btn-source-ajouter">Ajouter</button>
+                        </div>
+                        <div class="note" id="source-note" role="status"></div>
+                    </details>
                 </div>
                 <footer>
                     <button type="button" id="btn-donnees-defaut">Réglages d'origine</button>
@@ -3526,6 +3573,9 @@ function majCiblesSurvol() {
     for (const groupe of [groupeInondations, groupeOld, groupeCavites]) {
         if (groupe && groupe.visible) ciblesSurvol.push(...groupe.children);
     }
+    if (groupeMesSources) {
+        for (const groupe of groupeMesSources.children) if (groupe.visible) ciblesSurvol.push(...groupe.children);
+    }
 }
 
 /** Point dans polygone par lancer de rayon. Coordonnées en degrés (lon, lat). */
@@ -4643,6 +4693,11 @@ function majCredits() {
             + ' (MTE, BRGM)' + (groupeOld && groupeOld.visible && groupeOld.children.length
                 ? ', débroussaillement IGN pour le MASA' : '') + ', Licence Ouverte 2.0';
     }
+    const miennes = (mesSources || []).filter(src => {
+        const g = etatsMesSources && etatsMesSources.get(src.id)?.groupe;
+        return g && g.visible && g.children.length;
+    });
+    if (miennes.length) html += ' · Mes sources : ' + miennes.map(src => echapper(src.nom)).join(', ');
     document.getElementById('credits').innerHTML = html;
 }
 majCredits();
@@ -5113,6 +5168,7 @@ function appliquerExageration() {
     if (bornesPosees) placerBornes();
     if (POSTES_ENEDIS && postesEnedisConstruit) placerPostesEnedis();
     if (CAVITES) placerCavites();
+    if (groupeMesSources && groupeMesSources.children.length) placerMesSources();
     // Le grand plan gris sert de fond au-delà de l'emprise, et sous les trous
     // de l'anneau : on le glisse sous le point le plus bas du terrain pour
     // qu'il ne le traverse pas.
@@ -5219,6 +5275,7 @@ async function chargerRelief() {
         construireReseaux();
         construirePostesEnedis();
         construireGeorisques();
+        construireMesSources();
         construireNuage();
         construireVehicules();
         construirePiscines();
@@ -5308,6 +5365,7 @@ async function chargerRelief() {
     construireReseaux();
     construirePostesEnedis();
     construireGeorisques();
+    construireMesSources();
     construireNuage();
     construireVehicules();
     construirePiscines();
@@ -7657,6 +7715,686 @@ document.getElementById('t-risques').addEventListener('click', async e => {
     document.getElementById('sec-risques').hidden = !risquesActif;
     majCredits();
 });
+
+// --- Mes sources : les données de l'utilisateur ----------------------------------
+// Fichiers (GeoJSON, KML, GPX, CSV) et adresses (GeoJSON, WFS, OGC API Features)
+// ajoutés dans la fenêtre « Données ». Ils vivent dans ce navigateur seul
+// (IndexedDB) et ne passent jamais par le serveur : son cache, qui ne périme
+// pas, est fait pour des scènes publiques, et une donnée de l'utilisateur peut
+// être privée. Une adresse est lue par le navigateur, directement : le service
+// doit l'autoriser (CORS). Pas de relais par le serveur, qui l'exposerait à
+// des requêtes forgées vers son propre réseau.
+//
+// À chaque scène, une source est relue, reprojetée, découpée au contour ou à
+// l'emprise — rien au-delà n'est dessiné, comme pour les sources du service —
+// puis posée selon sa géométrie : un polygone en aplat drapé, une ligne en
+// ruban, un point en épingle. Les propriétés d'une entité font son infobulle.
+//
+// `var` : majCiblesSurvol et majCredits les lisent avant que ce bloc soit évalué.
+var groupeMesSources = new THREE.Group();
+scene.add(groupeMesSources);
+var mesSources = [];                  // les enregistrements d'IndexedDB, dans l'ordre d'ajout
+var etatsMesSources = new Map();      // id → { etat, message, n, projection, groupe, jeton }
+// Au-dessus des aplats de risque (0,20 à 0,26 m) : une source de l'utilisateur
+// est ce qu'il est venu voir.
+const MES_SOURCES_DECALAGE = 0.32;
+// Maille des aplats : celle des risques (RISQUE_MAILLE), pour la même raison.
+const MES_SOURCES_MAILLE = 4;
+const MES_SOURCES_LARGEUR_LIGNE = 1.5;
+// Hauteur de l'épingle d'un point : une convention, comme celle des cavités,
+// assez haute pour sortir des houppiers sans dépasser les toits d'un centre.
+const MES_SOURCES_EPINGLE_M = 15;
+// Au-delà, la page ralentit sans rien montrer de plus : un fichier national
+// se découpe d'abord à l'emprise, et ce qui reste dépasse rarement ces bornes.
+const MES_SOURCES_ENTITES_MAX = 100000;
+const MES_SOURCES_TRIANGLES_MAX = 600000;
+const MES_SOURCES_OCTETS_MAX = 60 * 1024 * 1024;
+// Les entités demandées à un WFS ou une OGC API, sur l'emprise de la scène.
+const MES_SOURCES_OBJETS_SERVICE = 5000;
+const MES_SOURCES_PAGES_MAX = 10;
+const COULEURS_MES_SOURCES = ['#e6194b', '#3cb44b', '#4363d8', '#f58231', '#911eb4',
+                              '#42d4f4', '#f032e6', '#bfef45'];
+// La France métropolitaine, large : une projection qui y replace la source est
+// plausible. La plus proche de la scène l'emporte entre deux candidates
+// (Lambert-93 et Web Mercator se recouvrent : Marseille en Lambert-93, lue en
+// Web Mercator, tombe dans les Vosges).
+const FRANCE_LARGE = { o: -7, e: 11, s: 40, n: 53 };
+
+/** Le code EPSG d'un membre `crs` (GeoJSON d'avant la RFC 7946), sinon null. */
+function crsDeclare(crs) {
+    const nom = crs && crs.properties && String(crs.properties.name || '');
+    if (!nom) return null;
+    if (/CRS:?84/i.test(nom)) return 4326;
+    const m = nom.match(/EPSG:{1,2}(?:[\d.]*:)?(\d{4,5})\b/i);
+    return m ? Number(m[1]) : null;
+}
+
+/** Les entités d'un GeoJSON : { entites: [{ geometrie, proprietes }], crs }. Une
+ *  collection de géométries donne une entité par géométrie, mêmes propriétés. */
+function lireGeoJson(texte) {
+    let d;
+    try { d = typeof texte === 'string' ? JSON.parse(texte) : texte; } catch (e) {
+        throw new Error('JSON illisible : ' + e.message);
+    }
+    if (!d || typeof d !== 'object' || typeof d.type !== 'string') throw new Error("ce n'est pas du GeoJSON");
+    const entites = [];
+    const ajouter = (g, p) => {
+        if (!g) return;
+        if (g.type === 'GeometryCollection') { for (const x of g.geometries || []) ajouter(x, p); return; }
+        if (!Array.isArray(g.coordinates)) return;
+        entites.push({ geometrie: { type: g.type, coordinates: g.coordinates }, proprietes: p || {} });
+    };
+    const parcourir = o => {
+        if (!o || typeof o !== 'object') return;
+        if (o.type === 'FeatureCollection') { for (const f of o.features || []) parcourir(f); }
+        else if (o.type === 'Feature') ajouter(o.geometry, o.properties);
+        else ajouter(o, {});
+    };
+    parcourir(d);
+    return { entites, crs: crsDeclare(d.crs), suivant: lienSuivant(d), total: d.numberMatched ?? null };
+}
+
+/** Le lien `next` d'une page d'OGC API Features. */
+function lienSuivant(d) {
+    const l = Array.isArray(d.links) && d.links.find(x => x && x.rel === 'next' && x.href);
+    return l ? l.href : null;
+}
+
+/** Les champs d'une ligne CSV : guillemets doublés, séparateur entre guillemets. */
+function champsCsv(ligne, sep) {
+    const champs = [];
+    let champ = '', guillemets = false;
+    for (let i = 0; i < ligne.length; i++) {
+        const c = ligne[i];
+        if (guillemets) {
+            if (c === '"' && ligne[i + 1] === '"') { champ += '"'; i++; }
+            else if (c === '"') guillemets = false;
+            else champ += c;
+        } else if (c === '"') guillemets = true;
+        else if (c === sep) { champs.push(champ); champ = ''; }
+        else champ += c;
+    }
+    champs.push(champ);
+    return champs.map(c => c.trim());
+}
+
+/** Un nom de colonne ramené à l'essentiel : minuscules, sans accents ni ponctuation. */
+const nomColonne = n => n.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_|_$/g, '');
+
+/**
+ * Les points d'un CSV : colonnes de latitude et de longitude (ou de x et y, la
+ * projection étant alors à reconnaître), ou une colonne « lat, lon » à la façon
+ * d'OpenDataSoft (geo_point_2d). Le séparateur est celui qui découpe le plus
+ * l'en-tête ; la virgule décimale est lue quand le séparateur n'est pas elle.
+ */
+function lireCsv(texte) {
+    const lignes = texte.replace(/^﻿/, '').split(/\r?\n/).filter(l => l.trim());
+    if (lignes.length < 2) throw new Error('CSV sans ligne de données');
+    const sep = [';', '\t', ',', '|'].map(s => [s, champsCsv(lignes[0], s).length])
+        .sort((a, b) => b[1] - a[1])[0][0];
+    const entete = champsCsv(lignes[0], sep);
+    const noms = entete.map(nomColonne);
+    const trouver = re => noms.findIndex(n => re.test(n));
+    const iLat = trouver(/^(lat|latitude|lat_wgs84|y_wgs84|wgs84_lat|ylat|consolidated_latitude)$/);
+    const iLon = trouver(/^(lon|lng|long|longitude|lon_wgs84|x_wgs84|wgs84_lon|xlong|consolidated_longitude)$/);
+    const iX = trouver(/^(x|coord_x|x_l93|xl93|x_lambert93|coordonnee_x|easting)$/);
+    const iY = trouver(/^(y|coord_y|y_l93|yl93|y_lambert93|coordonnee_y|northing)$/);
+    const iPaire = trouver(/^(geo_point_2d|geo_point|geopoint|coordonnees|coordinates|point_geo)$/);
+    let lire, crs;
+    // Un champ vide n'est pas zéro : Number('') le serait, et la ligne irait au large du golfe de Guinée.
+    const nombre = t => (t == null || t === '' ? NaN : Number(sep === ',' ? t : t.replace(',', '.')));
+    if (iLat >= 0 && iLon >= 0) {
+        lire = c => [nombre(c[iLon]), nombre(c[iLat])]; crs = 4326;
+    } else if (iX >= 0 && iY >= 0) {
+        lire = c => [nombre(c[iX]), nombre(c[iY])]; crs = null;
+    } else if (iPaire >= 0) {
+        // « 43.9116, 5.2003 » : la latitude d'abord, comme OpenDataSoft l'écrit.
+        lire = c => { const [la, lo] = String(c[iPaire] ?? '').split(/[,;\s]+/).filter(Boolean).map(Number); return [lo, la]; };
+        crs = 4326;
+    } else {
+        throw new Error('aucune colonne de coordonnées reconnue (lat et lon, x et y, ou geo_point_2d)');
+    }
+    const entites = [];
+    let ignorees = 0;
+    for (const ligne of lignes.slice(1)) {
+        const c = champsCsv(ligne, sep);
+        const xy = lire(c);
+        if (!xy.every(Number.isFinite)) { ignorees++; continue; }
+        entites.push({ geometrie: { type: 'Point', coordinates: xy },
+                       proprietes: Object.fromEntries(entete.map((n, k) => [n, c[k]])) });
+    }
+    return { entites, crs, ignorees };
+}
+
+/** L'enfant direct d'un élément XML, par son nom local. */
+const enfantXml = (el, nom) => [...el.children].find(c => c.localName === nom) || null;
+/** Les coordonnées d'un élément KML <coordinates> : « lon,lat[,alt] » séparés d'espaces. */
+const coordonneesKml = el => (el ? el.textContent.trim().split(/\s+/) : [])
+    .map(t => t.split(',').slice(0, 2).map(Number)).filter(c => c.length === 2 && c.every(Number.isFinite));
+const descendantsXml = (el, nom) => [...el.getElementsByTagNameNS('*', nom)];
+
+/** Les entités d'un document KML (déjà analysé par DOMParser) : une par géométrie
+ *  de chaque Placemark ; nom, description sans balises et ExtendedData. */
+function lireKml(doc) {
+    const entites = [];
+    for (const pm of descendantsXml(doc, 'Placemark')) {
+        const p = {};
+        const nom = enfantXml(pm, 'name');
+        if (nom) p.nom = nom.textContent.trim();
+        const desc = enfantXml(pm, 'description');
+        if (desc) p.description = desc.textContent.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+        for (const d of descendantsXml(pm, 'Data')) {
+            const v = enfantXml(d, 'value');
+            if (d.getAttribute('name')) p[d.getAttribute('name')] = v ? v.textContent.trim() : '';
+        }
+        for (const d of descendantsXml(pm, 'SimpleData')) {
+            if (d.getAttribute('name')) p[d.getAttribute('name')] = d.textContent.trim();
+        }
+        for (const g of descendantsXml(pm, 'Point')) {
+            const [c] = coordonneesKml(enfantXml(g, 'coordinates'));
+            if (c) entites.push({ geometrie: { type: 'Point', coordinates: c }, proprietes: p });
+        }
+        for (const g of descendantsXml(pm, 'LineString')) {
+            const c = coordonneesKml(enfantXml(g, 'coordinates'));
+            if (c.length >= 2) entites.push({ geometrie: { type: 'LineString', coordinates: c }, proprietes: p });
+        }
+        for (const g of descendantsXml(pm, 'Polygon')) {
+            const anneau = b => coordonneesKml(b && descendantsXml(b, 'coordinates')[0]);
+            const ext = anneau(enfantXml(g, 'outerBoundaryIs'));
+            if (ext.length < 3) continue;
+            const trous = [...g.children].filter(c => c.localName === 'innerBoundaryIs').map(anneau).filter(a => a.length >= 3);
+            entites.push({ geometrie: { type: 'Polygon', coordinates: [ext, ...trous] }, proprietes: p });
+        }
+    }
+    return { entites, crs: 4326 };
+}
+
+/** Les entités d'un GPX (analysé par DOMParser) : points de passage, routes et traces. */
+function lireGpx(doc) {
+    const entites = [];
+    const point = el => [Number(el.getAttribute('lon')), Number(el.getAttribute('lat'))];
+    const proprietes = el => {
+        const p = {};
+        for (const nom of ['name', 'desc', 'cmt', 'type', 'ele', 'time']) {
+            const c = enfantXml(el, nom);
+            if (c) p[nom] = c.textContent.trim();
+        }
+        return p;
+    };
+    for (const w of descendantsXml(doc, 'wpt')) {
+        const c = point(w);
+        if (c.every(Number.isFinite)) entites.push({ geometrie: { type: 'Point', coordinates: c }, proprietes: proprietes(w) });
+    }
+    for (const r of descendantsXml(doc, 'rte')) {
+        const c = descendantsXml(r, 'rtept').map(point).filter(x => x.every(Number.isFinite));
+        if (c.length >= 2) entites.push({ geometrie: { type: 'LineString', coordinates: c }, proprietes: proprietes(r) });
+    }
+    for (const t of descendantsXml(doc, 'trk')) {
+        const segments = descendantsXml(t, 'trkseg')
+            .map(s => descendantsXml(s, 'trkpt').map(point).filter(x => x.every(Number.isFinite)))
+            .filter(s => s.length >= 2);
+        if (segments.length) entites.push({ geometrie: { type: 'MultiLineString', coordinates: segments }, proprietes: proprietes(t) });
+    }
+    return { entites, crs: 4326 };
+}
+
+/** Lit un texte selon son contenu : JSON, XML (KML, GPX) ou CSV. */
+function lireTexteSource(texte) {
+    const debut = texte.replace(/^﻿/, '').trimStart();
+    if (debut[0] === '{' || debut[0] === '[') return { format: 'GeoJSON', ...lireGeoJson(debut) };
+    if (debut[0] === '<') {
+        const doc = new DOMParser().parseFromString(debut, 'application/xml');
+        if (doc.getElementsByTagName('parsererror').length) throw new Error('XML illisible');
+        const racine = doc.documentElement.localName;
+        if (racine === 'kml') return { format: 'KML', ...lireKml(doc) };
+        if (racine === 'gpx') return { format: 'GPX', ...lireGpx(doc) };
+        const exception = descendantsXml(doc, 'ExceptionText')[0];
+        if (exception) throw new Error('le service répond : ' + exception.textContent.trim().slice(0, 200));
+        throw new Error(`XML <${racine}> non reconnu (KML ou GPX attendus ; un WFS doit servir du GeoJSON)`);
+    }
+    return { format: 'CSV', ...lireCsv(texte) };
+}
+
+/** Quelques sommets de la source, un par entité, pour en reconnaître la projection. */
+function sommetsEchantillon(entites, n = 50) {
+    const pas = Math.max(1, Math.floor(entites.length / n));
+    const out = [];
+    for (let i = 0; i < entites.length && out.length < n; i += pas) {
+        let c = entites[i].geometrie.coordinates;
+        while (Array.isArray(c) && Array.isArray(c[0])) c = c[0];
+        if (Array.isArray(c) && Number.isFinite(c[0]) && Number.isFinite(c[1])) out.push([c[0], c[1]]);
+    }
+    return out;
+}
+
+/** Distance approchée, en km, entre deux [lon, lat]. */
+const ecartKm = (a, b) => Math.hypot((a[0] - b[0]) * 111.32 * Math.cos(b[1] * Math.PI / 180), (a[1] - b[1]) * 110.57);
+const dansFranceLarge = ([lo, la]) => lo >= FRANCE_LARGE.o && lo <= FRANCE_LARGE.e && la >= FRANCE_LARGE.s && la <= FRANCE_LARGE.n;
+const medianeDe = v => v.slice().sort((a, b) => a - b)[Math.floor(v.length / 2)];
+
+/**
+ * La projection des coordonnées d'une source : { epsg, libelle, versLonLat,
+ * detectee }. `versLonLat` (null en degrés) ramène un sommet en [lon, lat].
+ * Voulue (choisie dans la fenêtre, déclarée par le fichier) elle est prise
+ * telle quelle ; sinon reconnue sur un échantillon de sommets : en degrés si
+ * tous en ont l'air, sinon la projection de l'export qui les replace en France
+ * et le plus près de la scène. En degrés, un fichier écrit en (lat, lon) se
+ * reconnaît à ce que l'ordre inverse est bien plus près de la scène.
+ */
+function choisirProjection(entites, epsgVoulu, centre, projections) {
+    const ech = sommetsEchantillon(entites);
+    const degres = epsgVoulu === 4326 || (epsgVoulu == null && ech.length
+        && ech.every(([x, y]) => Math.abs(x) <= 180 && Math.abs(y) <= 90));
+    if (degres) {
+        const direct = ech.length ? medianeDe(ech.map(c => ecartKm(c, centre))) : 0;
+        const inverse = ech.length && ech.every(([x, y]) => Math.abs(x) <= 90)
+            ? medianeDe(ech.map(([x, y]) => ecartKm([y, x], centre))) : Infinity;
+        // Un facteur 4 : sans quoi un jeu loin de la scène, dans un sens comme
+        // dans l'autre, pourrait basculer à tort.
+        if (inverse * 4 < direct && ech.every(([x, y]) => dansFranceLarge([y, x]))) {
+            return { epsg: 4326, libelle: 'WGS 84, écrit (lat, lon)', versLonLat: ([x, y]) => [y, x], detectee: true };
+        }
+        return { epsg: 4326, libelle: 'WGS 84 · degrés', versLonLat: null, detectee: epsgVoulu == null };
+    }
+    const inverser = p => ([x, y]) => inverseProjection(p.vers, x, y, centre[0], centre[1]);
+    if (epsgVoulu != null) {
+        const p = projections.find(q => q.epsg === epsgVoulu);
+        if (!p) throw new Error(`projection EPSG:${epsgVoulu} non prise en charge : choisissez-en une dans la liste`);
+        return { epsg: p.epsg, libelle: p.description, versLonLat: inverser(p), detectee: false };
+    }
+    if (!ech.length) return { epsg: 4326, libelle: 'WGS 84 · degrés', versLonLat: null, detectee: true };
+    let meilleure = null;
+    for (const p of projections) {
+        const f = inverser(p);
+        const lonlat = ech.map(f);
+        // Newton converge vers un point que la projection renvoie bien là : sinon
+        // le jeu n'est pas dans cette projection.
+        const exact = lonlat.every((ll, k) => {
+            const [x, y] = p.vers(...ll);
+            return Math.hypot(x - ech[k][0], y - ech[k][1]) < 1;
+        });
+        if (!exact || !lonlat.every(dansFranceLarge)) continue;
+        const ecart = medianeDe(lonlat.map(ll => ecartKm(ll, centre)));
+        if (!meilleure || ecart < meilleure.ecart) meilleure = { p, f, ecart };
+    }
+    if (!meilleure) throw new Error('projection non reconnue : choisissez-la dans la liste');
+    return { epsg: meilleure.p.epsg, libelle: meilleure.p.description, versLonLat: meilleure.f, detectee: true };
+}
+
+/** Les mêmes entités, chaque sommet passé par `f` ([x, y] → [lon, lat]). */
+function reprojeterEntites(entites, f) {
+    const conv = c => typeof c[0] === 'number' ? f(c) : c.map(conv);
+    return entites.map(e => ({ ...e, geometrie: { type: e.geometrie.type, coordinates: conv(e.geometrie.coordinates) } }));
+}
+
+/** [o, s, e, n] des sommets d'une géométrie. */
+function boiteGeometrie(coordinates) {
+    const b = [Infinity, Infinity, -Infinity, -Infinity];
+    const voir = c => {
+        if (typeof c[0] === 'number') {
+            if (c[0] < b[0]) b[0] = c[0]; if (c[0] > b[2]) b[2] = c[0];
+            if (c[1] < b[1]) b[1] = c[1]; if (c[1] > b[3]) b[3] = c[1];
+        } else for (const x of c) voir(x);
+    };
+    voir(coordinates);
+    return b;
+}
+
+/** Aire signée (positive dans le sens trigonométrique) d'un triangle [[x, y]×3]. */
+const aireSignee = t => ((t[1][0] - t[0][0]) * (t[2][1] - t[0][1]) - (t[2][0] - t[0][0]) * (t[1][1] - t[0][1])) / 2;
+
+/**
+ * La région dessinable : les triangles d'un anneau en mètres locaux (le contour
+ * dessiné ou les quatre coins de l'emprise), chacun dans le sens
+ * trigonométrique et avec sa boîte. Un triangle est convexe : la découpe d'une
+ * source y est exacte (decouperTriangles), même sous un contour concave.
+ * `convexe` : l'anneau entier l'est (l'emprise, un contour simple).
+ */
+function regionDe(anneau) {
+    const pts = anneau.slice();
+    const [a, z] = [pts[0], pts[pts.length - 1]];
+    if (pts.length > 3 && a[0] === z[0] && a[1] === z[1]) pts.pop();
+    const v = pts.map(([x, y]) => new THREE.Vector2(x, y));
+    const tournants = pts.map((p, i) => {
+        const q = pts[(i + 1) % pts.length], r = pts[(i + 2) % pts.length];
+        return (q[0] - p[0]) * (r[1] - q[1]) - (q[1] - p[1]) * (r[0] - q[0]);
+    }).filter(c => Math.abs(c) > 1e-9);
+    const region = THREE.ShapeUtils.triangulateShape(v, []).map(f => {
+        let t = f.map(i => [v[i].x, v[i].y]);
+        if (aireSignee(t) < 0) t = [t[0], t[2], t[1]];
+        return { t, min: [Math.min(t[0][0], t[1][0], t[2][0]), Math.min(t[0][1], t[1][1], t[2][1])],
+                    max: [Math.max(t[0][0], t[1][0], t[2][0]), Math.max(t[0][1], t[1][1], t[2][1])] };
+    });
+    region.convexe = tournants.every(c => c > 0) || tournants.every(c => c < 0);
+    return region;
+}
+
+/** Le polygone `poly` coupé au demi-plan à gauche de a → b (Sutherland-Hodgman). */
+function couperDemiPlan(poly, a, b) {
+    const out = [];
+    const cote = p => (b[0] - a[0]) * (p[1] - a[1]) - (b[1] - a[1]) * (p[0] - a[0]);
+    for (let i = 0; i < poly.length; i++) {
+        const p = poly[i], q = poly[(i + 1) % poly.length];
+        const cp = cote(p), cq = cote(q);
+        if (cp >= 0) out.push(p);
+        if ((cp >= 0) !== (cq >= 0)) {
+            const s = cp / (cp - cq);
+            out.push([p[0] + (q[0] - p[0]) * s, p[1] + (q[1] - p[1]) * s]);
+        }
+    }
+    return out;
+}
+
+/** Le point [x, y] est-il dans le triangle `t` (sens trigonométrique), bord compris ? */
+function dansTriangle(p, t) {
+    for (let k = 0; k < 3; k++) {
+        const a = t[k], b = t[(k + 1) % 3];
+        if ((b[0] - a[0]) * (p[1] - a[1]) - (b[1] - a[1]) * (p[0] - a[0]) < -1e-9) return false;
+    }
+    return true;
+}
+
+const dansRegion = (p, region) => region.some(r => p[0] >= r.min[0] && p[0] <= r.max[0]
+    && p[1] >= r.min[1] && p[1] <= r.max[1] && dansTriangle(p, r.t));
+
+/**
+ * Les triangles `tris` (mètres locaux) ramenés à la région : gardés tels quels
+ * s'ils y sont en entier, sinon coupés à chacun de ses triangles et
+ * re-triangulés en éventail. Les triangles de la région ne se recouvrent pas :
+ * aucune surface n'est comptée deux fois. L'orientation est gardée. Dans une
+ * région convexe, un triangle dont les trois sommets y sont y est en entier :
+ * il n'est pas coupé le long des diagonales qui la triangulent.
+ */
+function decouperTriangles(tris, region) {
+    const out = [];
+    for (const t of tris) {
+        if (region.convexe && t.every(p => dansRegion(p, region))) { out.push(t); continue; }
+        const min = [Math.min(t[0][0], t[1][0], t[2][0]), Math.min(t[0][1], t[1][1], t[2][1])];
+        const max = [Math.max(t[0][0], t[1][0], t[2][0]), Math.max(t[0][1], t[1][1], t[2][1])];
+        for (const r of region) {
+            if (max[0] < r.min[0] || min[0] > r.max[0] || max[1] < r.min[1] || min[1] > r.max[1]) continue;
+            if (t.every(p => dansTriangle(p, r.t))) { out.push(t); break; }
+            let poly = t;
+            for (let k = 0; k < 3 && poly.length >= 3; k++) poly = couperDemiPlan(poly, r.t[k], r.t[(k + 1) % 3]);
+            for (let k = 1; k + 1 < poly.length; k++) {
+                const f = [poly[0], poly[k], poly[k + 1]];
+                if (Math.abs(aireSignee(f)) > 1e-6) out.push(f);
+            }
+        }
+    }
+    return out;
+}
+
+/** Le type d'une adresse : OGC API Features (…/collections/<id>), WFS, ou GeoJSON. */
+function typeAdresse(url, couche) {
+    if (/\/collections\/[^/?#]+/i.test(url)) return 'ogcapi';
+    if (couche || /[?&]service=wfs\b/i.test(url) || /\/wfs\b/i.test(url)) return 'wfs';
+    return 'geojson';
+}
+
+/**
+ * L'adresse lue pour une source, sur l'emprise `b` ({ o, s, e, n }, degrés) :
+ * un WFS 2.0 en GeoJSON, la boîte en EPSG:4326 écrite (lat, lon) comme
+ * l'axe de ce CRS le veut ; une collection OGC API, ses `items` sur la boîte en
+ * CRS84 ; un GeoJSON, tel quel. Les paramètres propres de l'adresse (une clé)
+ * sont gardés, ceux de la requête remplacés.
+ */
+function urlMaSource(src, b) {
+    const type = !src.type || src.type === 'auto' ? typeAdresse(src.url, src.couche) : src.type;
+    const u = new URL(src.url);
+    if (type === 'wfs') {
+        const couche = src.couche || u.searchParams.get('typeName') || u.searchParams.get('typeNames')
+            || u.searchParams.get('TYPENAME') || u.searchParams.get('TYPENAMES');
+        if (!couche) throw new Error('indiquez la couche du WFS (typeName)');
+        for (const k of [...u.searchParams.keys()]) {
+            if (/^(service|version|request|typenames?|outputformat|srsname|bbox|count|maxfeatures|startindex)$/i.test(k)) u.searchParams.delete(k);
+        }
+        u.searchParams.set('SERVICE', 'WFS');
+        u.searchParams.set('VERSION', '2.0.0');
+        u.searchParams.set('REQUEST', 'GetFeature');
+        u.searchParams.set('TYPENAMES', couche);
+        u.searchParams.set('OUTPUTFORMAT', 'application/json');
+        u.searchParams.set('SRSNAME', 'EPSG:4326');
+        u.searchParams.set('BBOX', `${b.s},${b.o},${b.n},${b.e},urn:ogc:def:crs:EPSG::4326`);
+        u.searchParams.set('COUNT', String(MES_SOURCES_OBJETS_SERVICE));
+    } else if (type === 'ogcapi') {
+        if (!/\/items\/?$/.test(u.pathname)) u.pathname = u.pathname.replace(/\/?$/, '/items');
+        u.searchParams.set('bbox', `${b.o},${b.s},${b.e},${b.n}`);
+        u.searchParams.set('limit', String(Math.min(MES_SOURCES_OBJETS_SERVICE, 1000)));
+    }
+    return { url: u.toString(), type };
+}
+
+// --- Mes sources : stockage, lecture, dessin -------------------------------------
+const BASE_MES_SOURCES = 'vue3d-mes-sources';
+function transactionMesSources(mode, faire) {
+    return new Promise((ok, ko) => {
+        const ouverture = indexedDB.open(BASE_MES_SOURCES, 1);
+        ouverture.onupgradeneeded = () => ouverture.result.createObjectStore('sources', { keyPath: 'id' });
+        ouverture.onerror = () => ko(ouverture.error);
+        ouverture.onsuccess = () => {
+            const db = ouverture.result;
+            const tx = db.transaction('sources', mode);
+            const req = faire(tx.objectStore('sources'));
+            tx.oncomplete = () => { db.close(); ok(req ? req.result : undefined); };
+            tx.onerror = tx.onabort = () => { db.close(); ko(tx.error); };
+        };
+    });
+}
+const enregistrerMaSource = src => transactionMesSources('readwrite', s => s.put(src));
+const effacerMaSource = id => transactionMesSources('readwrite', s => s.delete(id));
+
+/** Les données d'une source, lues de son texte ou de son adresse. */
+async function donneesMaSource(src) {
+    if (src.origine === 'fichier') return lireTexteSource(src.texte);
+    const { url, type } = urlMaSource(src, BORNES);
+    const entites = [];
+    let crs = null, format = null, page = url, total = null;
+    for (let n = 0; page && n < (type === 'ogcapi' ? MES_SOURCES_PAGES_MAX : 1); n++) {
+        let r;
+        try {
+            r = await fetch(page, { headers: { Accept: 'application/geo+json, application/json;q=0.9, */*;q=0.5' } });
+        } catch (e) {
+            throw new Error("adresse injoignable depuis le navigateur : réseau coupé, ou service qui n'autorise pas cette page (CORS)");
+        }
+        const texte = await r.text();
+        if (!r.ok) {
+            let detail = '';
+            try { lireTexteSource(texte); } catch (e) { detail = ' — ' + e.message; }
+            throw new Error(`le service répond HTTP ${r.status}${detail}`);
+        }
+        const lu = lireTexteSource(texte);
+        entites.push(...lu.entites);
+        crs = crs ?? lu.crs;
+        format = format || lu.format;
+        total = total ?? lu.total;
+        page = type === 'ogcapi' ? lu.suivant : null;
+    }
+    // Plus d'entités sur l'emprise que le service n'en a rendu : la fenêtre le dit.
+    const tronquee = (total != null && total > entites.length) || !!page;
+    return { entites, crs, format: type === 'wfs' ? 'WFS' : type === 'ogcapi' ? 'OGC API Features' : format, tronquee };
+}
+
+/** La région dessinable de la scène : le contour dessiné, sinon l'emprise. */
+function regionScene() {
+    const anneau = POLY ? POLY.map(([lat, lon]) => toLocal(lon, lat))
+        : [[BORNES.o, BORNES.s], [BORNES.e, BORNES.s], [BORNES.e, BORNES.n], [BORNES.o, BORNES.n]]
+            .map(([lo, la]) => toLocal(lo, la));
+    return regionDe(anneau);
+}
+
+function materiauxMaSource(src) {
+    const surface = new THREE.MeshStandardMaterial({
+        color: src.couleur, roughness: 0.9, transparent: true, opacity: src.opacite, depthWrite: false,
+        polygonOffset: true, polygonOffsetFactor: -5, polygonOffsetUnits: -5 });
+    const ligne = new THREE.MeshStandardMaterial({
+        color: src.couleur, roughness: 0.8, transparent: true, opacity: Math.max(src.opacite, 0.85),
+        polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -6 });
+    const epingle = new THREE.MeshStandardMaterial({ color: src.couleur, roughness: 0.6 });
+    return { surface, ligne, epingle };
+}
+
+/** Retire de la scène ce qu'une source y a posé. */
+function retirerMaSource(id) {
+    const etat = etatsMesSources.get(id);
+    if (!etat || !etat.groupe) return;
+    const meshes = new Set(etat.groupe.children);
+    drapes = drapes.filter(d => !meshes.has(d.mesh));
+    for (const m of meshes) m.geometry.dispose();
+    for (const m of Object.values(etat.materiaux || {})) m.dispose();
+    groupeMesSources.remove(etat.groupe);
+    etat.groupe = null;
+}
+
+/**
+ * Pose une source dans la scène : ses entités lues, reprojetées, gardées si
+ * elles touchent l'emprise, puis découpées à la région. Un maillage par genre
+ * (aplats, rubans, épingles) et par source : 5 000 parcelles feraient sinon
+ * 5 000 objets à dessiner. Le triangle ou l'instance touché par le survol
+ * retrouve son entité (`parTriangle`, `parInstance`).
+ */
+function dessinerMaSource(src, entites) {
+    const region = regionScene();
+    const marge = 0.001;   // ~100 m : une entité qui affleure le bord reste candidate
+    const dehors = b => b[2] < BORNES.o - marge || b[0] > BORNES.e + marge || b[3] < BORNES.s - marge || b[1] > BORNES.n + marge;
+    const surfaces = [], parSurface = [], rubans = [], parRuban = [], points = [];
+    let illisibles = 0, gardees = 0;
+    entites.forEach((e, i) => {
+        const g = e.geometrie;
+        if (dehors(boiteGeometrie(g.coordinates))) return;
+        const avant = surfaces.length + rubans.length + points.length;
+        try {
+            const polys = g.type === 'Polygon' ? [g.coordinates] : g.type === 'MultiPolygon' ? g.coordinates : [];
+            for (const p of polys) {
+                if (!p.length || p[0].length < 3) continue;
+                for (const t of subdiviser(decouperTriangles(trianglesPolygone(p), region), MES_SOURCES_MAILLE)) {
+                    surfaces.push(t); parSurface.push(i);
+                }
+            }
+            const lignes = g.type === 'LineString' ? [g.coordinates] : g.type === 'MultiLineString' ? g.coordinates : [];
+            for (const l of lignes) {
+                for (const t of decouperTriangles(trianglesRuban(l, MES_SOURCES_LARGEUR_LIGNE), region)) {
+                    rubans.push(t); parRuban.push(i);
+                }
+            }
+            const pts = g.type === 'Point' ? [g.coordinates] : g.type === 'MultiPoint' ? g.coordinates : [];
+            for (const [lo, la] of pts) {
+                if (dansRegion(toLocal(lo, la), region)) points.push({ lon: lo, lat: la, i });
+            }
+        } catch (err) {
+            illisibles++;
+        }
+        if (surfaces.length + rubans.length + points.length > avant) gardees++;
+        if (surfaces.length + rubans.length > MES_SOURCES_TRIANGLES_MAX) {
+            throw new Error('trop dense pour la vue sur cette emprise : réduisez la zone ou allégez la source');
+        }
+    });
+    const groupe = new THREE.Group();
+    groupe.visible = src.visible;
+    groupeMesSources.add(groupe);
+    const mats = materiauxMaSource(src);
+    const ud = parEntite => ({ maSource: { id: src.id, entites, ...parEntite } });
+    if (surfaces.length) {
+        const m = maillageDrape(surfaces, mats.surface, groupe, MES_SOURCES_DECALAGE);
+        m.receiveShadow = false;
+        m.userData = ud({ parTriangle: Uint32Array.from(parSurface) });
+    }
+    if (rubans.length) {
+        const m = maillageDrape(rubans, mats.ligne, groupe, MES_SOURCES_DECALAGE + 0.02);
+        m.receiveShadow = false;
+        m.userData = ud({ parTriangle: Uint32Array.from(parRuban) });
+    }
+    if (points.length) {
+        // L'épingle des cavités, plus basse : une tige depuis le sol, une tête pointée vers lui.
+        const h = MES_SOURCES_EPINGLE_M;
+        const tige = new THREE.CylinderGeometry(0.2, 0.2, h, 6);
+        tige.translate(0, h / 2, 0);
+        const tete = new THREE.ConeGeometry(1.6, 3.5, 12);
+        tete.rotateX(Math.PI);
+        tete.translate(0, h + 1.75, 0);
+        for (const geom of [tige, tete]) {
+            const mesh = new THREE.InstancedMesh(geom, mats.epingle, points.length);
+            mesh.castShadow = geom === tete;
+            mesh.userData = ud({ points, parInstance: points.map(p => p.i) });
+            groupe.add(mesh);
+        }
+    }
+    placerDrapes();
+    placerMesSources();
+    return { groupe, materiaux: mats, gardees, illisibles };
+}
+
+/** Les épingles des points suivent le relief (exagération, relief rechargé). */
+function placerMesSources() {
+    const matrice = new THREE.Matrix4();
+    for (const groupe of groupeMesSources.children) {
+        for (const mesh of groupe.children) {
+            if (!mesh.isInstancedMesh) continue;
+            mesh.userData.maSource.points.forEach((p, k) => {
+                const [x, y] = toLocal(p.lon, p.lat);
+                mesh.setMatrixAt(k, matrice.makeTranslation(x, ySol(p.lon, p.lat), -y));
+            });
+            mesh.instanceMatrix.needsUpdate = true;
+            mesh.computeBoundingSphere();
+        }
+    }
+}
+
+/** Lit et pose une source ; l'état dit à la fenêtre où elle en est. */
+async function construireMaSource(src) {
+    retirerMaSource(src.id);
+    const jeton = {};
+    const etat = { etat: 'lecture', jeton };
+    etatsMesSources.set(src.id, etat);
+    majListeMesSources();
+    try {
+        const lu = await donneesMaSource(src);
+        if (etat.jeton !== jeton || !mesSources.includes(src)) return;   // retirée ou relancée entre-temps
+        if (lu.entites.length > MES_SOURCES_ENTITES_MAX) {
+            throw new Error(`${lu.entites.length.toLocaleString('fr-FR')} entités : la vue en prend ${MES_SOURCES_ENTITES_MAX.toLocaleString('fr-FR')} au plus`);
+        }
+        const proj = choisirProjection(lu.entites, src.epsg ?? lu.crs ?? null, CENTER, PROJECTIONS);
+        const entites = proj.versLonLat ? reprojeterEntites(lu.entites, proj.versLonLat) : lu.entites;
+        const { groupe, materiaux, gardees, illisibles } = dessinerMaSource(src, entites);
+        Object.assign(etat, { etat: gardees ? 'ok' : 'vide', groupe, materiaux, n: gardees, total: lu.entites.length,
+                              illisibles, ignorees: lu.ignorees || 0, tronquee: !!lu.tronquee,
+                              format: lu.format, projection: proj });
+    } catch (err) {
+        if (etat.jeton !== jeton) return;
+        Object.assign(etat, { etat: 'echec', message: err.message });
+    }
+    majCiblesSurvol();
+    majCredits();
+    majListeMesSources();
+}
+
+let mesSourcesLues = false;
+function construireMesSources() {
+    if (!reliefRegle || !mesSourcesLues) return;
+    for (const src of mesSources) {
+        if (!etatsMesSources.has(src.id)) construireMaSource(src);
+    }
+}
+
+/** L'infobulle d'une entité : son nom s'il en a un, puis ses propriétés simples. */
+function infobulleMaSource(ud, touche) {
+    const m = ud.maSource;
+    const i = touche.instanceId != null && m.parInstance ? m.parInstance[touche.instanceId]
+                                                         : m.parTriangle[touche.faceIndex];
+    const e = m.entites[i];
+    const src = mesSources.find(s => s.id === m.id);
+    if (!e || !src) return null;
+    const props = Object.entries(e.proprietes || {})
+        .filter(([, v]) => v != null && v !== '' && typeof v !== 'object');
+    const cleNom = props.findIndex(([k]) => /^(nom|name|libelle|label|title|titre|intitule)$/i.test(k));
+    const titre = cleNom >= 0 ? props.splice(cleNom, 1)[0][1] : src.nom;
+    const montrees = props.slice(0, 10);
+    return `<b>${echapper(String(titre).slice(0, 120))}</b>`
+        + montrees.map(([k, v]) => `<br>${echapper(k)} : ${echapper(String(v).slice(0, 120))}`).join('')
+        + (props.length > montrees.length ? `<br>… ${props.length - montrees.length} autre(s) propriété(s)` : '')
+        + `<br><i>${echapper(src.nom)} · ma source</i>`;
+}
 
 // --- Nuage LiDAR HD ------------------------------------------------------------
 // Le bâti du nuage de points LiDAR HD (/api/nuage, vue3d/nuage.py), lu après la
@@ -12829,6 +13567,7 @@ fetch('api/sources', { cache: 'no-store' })
 document.getElementById('btn-donnees').addEventListener('click', () => {
     fenetreDonnees.showModal();
     construireFenetreDonnees();
+    construireListeMesSources();
 });
 document.getElementById('btn-donnees-defaut').addEventListener('click', () => {
     for (const id of [...preferencesDonnees.eteintes]) {
@@ -12840,6 +13579,228 @@ document.getElementById('btn-donnees-defaut').addEventListener('click', () => {
     appliquerEpingles();
     majFenetreDonnees();
 });
+
+// --- Mes sources : la fenêtre « Données » -----------------------------------------
+const listeMesSources = document.getElementById('mes-sources');
+const noteAjoutSource = document.getElementById('source-note');
+
+/** Ce que la fenêtre dit d'une source de l'utilisateur. */
+function etatMaSource(src) {
+    const e = etatsMesSources.get(src.id);
+    if (!e) return [reliefRegle ? 'en attente' : 'à la prochaine scène', false];
+    if (e.etat === 'lecture') return ['lecture…', false];
+    if (e.etat === 'echec') return ['en échec : ' + e.message, true];
+    const n = x => x.toLocaleString('fr-FR');
+    const bilan = e.etat === 'vide'
+        ? 'rien dans cette scène' + (src.origine === 'fichier' && e.total ? ` (${n(e.total)} entité(s) ailleurs)` : '')
+        : `${n(e.n)} entité(s) ici sur ${n(e.total)}`;
+    return [bilan
+        + (e.tronquee ? ' — le service en a plus que la vue n\'en a demandé' : '')
+        + (e.illisibles ? ` — ${n(e.illisibles)} géométrie(s) illisible(s)` : '')
+        + (e.ignorees ? ` — ${n(e.ignorees)} ligne(s) sans coordonnées` : ''), !!(e.illisibles || e.ignorees)];
+}
+
+function majListeMesSources() {
+    if (!listeMesSources || !fenetreDonnees.open) return;
+    for (const bloc of listeMesSources.children) {
+        const src = mesSources.find(s => s.id === bloc.dataset.source);
+        if (!src) continue;
+        const [texte, alerte] = etatMaSource(src);
+        const etat = bloc.querySelector('.source-etat');
+        etat.textContent = texte;
+        etat.classList.toggle('echec', alerte);
+        const e = etatsMesSources.get(src.id);
+        const proj = bloc.querySelector('select');
+        const auto = proj.querySelector('option[value=""]');
+        auto.textContent = e && e.projection && src.epsg == null
+            ? `Projection : ${e.projection.libelle} (reconnue)` : 'Projection : reconnue d\'après les coordonnées';
+        bloc.querySelector('.format').textContent = e && e.format ? ` · ${e.format}` : '';
+    }
+}
+
+/** Les lignes « Mes sources » de la fenêtre, reconstruites à chaque ouverture. */
+function construireListeMesSources() {
+    listeMesSources.replaceChildren();
+    if (!mesSources.length) {
+        const vide = document.createElement('p');
+        vide.className = 'note';
+        vide.textContent = 'Aucune pour l\'instant.';
+        listeMesSources.append(vide);
+        return;
+    }
+    for (const src of mesSources) {
+        const bloc = document.createElement('section');
+        bloc.className = 'source ma-source';
+        bloc.dataset.source = src.id;
+        const tete = document.createElement('div');
+        tete.className = 'source-tete';
+        const couleur = document.createElement('input');
+        couleur.type = 'color';
+        couleur.value = src.couleur;
+        couleur.title = 'Couleur de la source';
+        const nom = document.createElement('b');
+        nom.textContent = src.nom;
+        const etat = document.createElement('span');
+        etat.className = 'source-etat';
+        const afficher = document.createElement('button');
+        afficher.type = 'button';
+        afficher.className = 'toggle' + (src.visible ? ' on' : '');
+        afficher.textContent = 'Afficher';
+        const retirer = document.createElement('button');
+        retirer.type = 'button';
+        retirer.className = 'epingle';
+        retirer.textContent = '🗑';
+        retirer.title = 'Retirer de ce navigateur';
+        retirer.setAttribute('aria-label', `Retirer « ${src.nom} » de ce navigateur`);
+        tete.append(couleur, nom, afficher, retirer);
+        const prov = document.createElement('div');
+        prov.className = 'source-prov';
+        const origine = document.createElement('span');
+        origine.textContent = src.origine === 'fichier' ? `fichier ${src.nom_fichier}` : src.url;
+        const format = document.createElement('span');
+        format.className = 'format';
+        prov.append(origine, format);
+        const reglages = document.createElement('div');
+        reglages.className = 'reglages-source';
+        const proj = document.createElement('select');
+        proj.setAttribute('aria-label', 'Projection des coordonnées');
+        proj.append(new Option('Projection : reconnue d\'après les coordonnées', ''),
+                    new Option('WGS 84 · degrés (lon, lat)', '4326'),
+                    ...PROJECTIONS.map(p => new Option(`${p.description} (EPSG:${p.epsg})`, String(p.epsg))));
+        proj.value = src.epsg == null ? '' : String(src.epsg);
+        const opacite = document.createElement('input');
+        opacite.type = 'range';
+        Object.assign(opacite, { min: '0.1', max: '1', step: '0.05', value: String(src.opacite) });
+        opacite.title = 'Opacité des aplats';
+        reglages.append(proj, opacite);
+        bloc.append(tete, etat, prov, reglages);
+        listeMesSources.append(bloc);
+
+        const materiaux = () => etatsMesSources.get(src.id)?.materiaux || {};
+        afficher.addEventListener('click', () => {
+            src.visible = !src.visible;
+            afficher.classList.toggle('on', src.visible);
+            const g = etatsMesSources.get(src.id)?.groupe;
+            if (g) g.visible = src.visible;
+            enregistrerMaSource(src).catch(() => {});
+            majCiblesSurvol();
+            majCredits();
+        });
+        couleur.addEventListener('input', () => {
+            src.couleur = couleur.value;
+            for (const m of Object.values(materiaux())) m.color.set(src.couleur);
+        });
+        couleur.addEventListener('change', () => enregistrerMaSource(src).catch(() => {}));
+        opacite.addEventListener('input', () => {
+            src.opacite = Number(opacite.value);
+            const { surface, ligne } = materiaux();
+            if (surface) surface.opacity = src.opacite;
+            if (ligne) ligne.opacity = Math.max(src.opacite, 0.85);
+        });
+        opacite.addEventListener('change', () => enregistrerMaSource(src).catch(() => {}));
+        proj.addEventListener('change', () => {
+            src.epsg = proj.value ? Number(proj.value) : null;
+            enregistrerMaSource(src).catch(() => {});
+            if (reliefRegle) construireMaSource(src);
+        });
+        retirer.addEventListener('click', async () => {
+            if (!confirm(`Retirer « ${src.nom} » de ce navigateur ? Le fichier d'origine n'est pas touché.`)) return;
+            retirerMaSource(src.id);
+            etatsMesSources.delete(src.id);
+            mesSources = mesSources.filter(s => s !== src);
+            try { await effacerMaSource(src.id); } catch (e) { /* elle reviendrait à la prochaine visite */ }
+            majCiblesSurvol();
+            majCredits();
+            construireListeMesSources();
+        });
+    }
+    majListeMesSources();
+}
+
+const idMaSource = () => (crypto.randomUUID ? crypto.randomUUID()
+    : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`);
+
+/** Ajoute une source : vérifiée lisible d'abord, gardée ensuite. */
+async function ajouterMaSource(src) {
+    src = { id: idMaSource(), epsg: null, opacite: 0.5, visible: true,
+            couleur: COULEURS_MES_SOURCES[mesSources.length % COULEURS_MES_SOURCES.length],
+            ajoutee_le: new Date().toISOString(), ...src };
+    mesSources.push(src);
+    try {
+        await enregistrerMaSource(src);
+    } catch (e) {
+        mesSources = mesSources.filter(s => s !== src);
+        throw new Error("ce navigateur refuse de la garder (stockage plein ou navigation privée)");
+    }
+    construireListeMesSources();
+    if (reliefRegle) await construireMaSource(src);
+    return src;
+}
+
+const champFichierSource = document.getElementById('source-fichier');
+champFichierSource.addEventListener('change', async () => {
+    const fichier = champFichierSource.files[0];
+    if (!fichier) return;
+    noteAjoutSource.classList.remove('echec');
+    try {
+        if (fichier.size > MES_SOURCES_OCTETS_MAX) {
+            throw new Error(`${enMo(fichier.size)} Mo : la vue en prend ${enMo(MES_SOURCES_OCTETS_MAX)} au plus`);
+        }
+        const texte = await fichier.text();
+        const lu = lireTexteSource(texte);
+        if (!lu.entites.length) throw new Error('aucune entité lisible');
+        await ajouterMaSource({ nom: fichier.name.replace(/\.[^.]+$/, ''), origine: 'fichier',
+                                nom_fichier: fichier.name, texte });
+        noteAjoutSource.textContent = `« ${fichier.name} » ajouté : ${lu.format}, `
+            + `${lu.entites.length.toLocaleString('fr-FR')} entité(s).`;
+    } catch (err) {
+        noteAjoutSource.textContent = `« ${fichier.name} » non ajouté : ${err.message}.`;
+        noteAjoutSource.classList.add('echec');
+    }
+    champFichierSource.value = '';
+});
+
+async function ajouterAdresseSource() {
+    const url = document.getElementById('source-url').value.trim();
+    const type = document.getElementById('source-type').value;
+    const couche = document.getElementById('source-couche').value.trim();
+    noteAjoutSource.classList.remove('echec');
+    try {
+        let u;
+        try { u = new URL(url); } catch (e) { throw new Error('adresse invalide'); }
+        if (!/^https?:$/.test(u.protocol)) throw new Error('seules les adresses http et https sont lues');
+        const src = { origine: 'adresse', url, type, couche: couche || null,
+                      nom: couche || decodeURIComponent(u.pathname.split('/').filter(Boolean).pop() || u.hostname) };
+        // Lue avant d'être gardée : une adresse injoignable ne s'ajoute pas.
+        const lu = await donneesMaSource(src);
+        await ajouterMaSource(src);
+        noteAjoutSource.textContent = `Adresse ajoutée : ${lu.format}, `
+            + `${lu.entites.length.toLocaleString('fr-FR')} entité(s) lue(s) sur l'emprise.`;
+        document.getElementById('source-url').value = '';
+        document.getElementById('source-couche').value = '';
+    } catch (err) {
+        noteAjoutSource.textContent = `Adresse non ajoutée : ${err.message}.`;
+        noteAjoutSource.classList.add('echec');
+    }
+}
+document.getElementById('btn-source-ajouter').addEventListener('click', ajouterAdresseSource);
+// La fenêtre est un <form method="dialog"> : Entrée dans un champ la fermerait.
+for (const id of ['source-url', 'source-couche']) {
+    document.getElementById(id).addEventListener('keydown', e => {
+        if (e.key === 'Enter') { e.preventDefault(); ajouterAdresseSource(); }
+    });
+}
+
+transactionMesSources('readonly', s => s.getAll())
+    .then(liste => {
+        mesSources = (liste || []).sort((a, b) => String(a.ajoutee_le).localeCompare(String(b.ajoutee_le)));
+    })
+    .catch(() => { /* IndexedDB fermée (navigation privée) : aucune source gardée */ })
+    .finally(() => {
+        mesSourcesLues = true;
+        construireMesSources();
+        if (fenetreDonnees.open) construireListeMesSources();
+    });
 
 // --- La fenêtre d'export -------------------------------------------------------
 const fenetreExport = document.getElementById('export-dialogue');
@@ -13371,6 +14332,15 @@ renderer.domElement.addEventListener('pointermove', e => {
             + '<br><i>BD TOPO</i>';
         placerTip(e, r);
         return;
+    }
+
+    if (touche && touche.object.userData.maSource) {
+        const html = infobulleMaSource(touche.object.userData, touche);
+        if (html) {
+            tip.innerHTML = html;
+            placerTip(e, r);
+            return;
+        }
     }
 
     if (touche && touche.object.userData.infobulle) {

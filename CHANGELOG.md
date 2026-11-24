@@ -13,6 +13,22 @@ messages de commit et dans les commentaires des modules.
 
 ## Scène v16 — 26 octobre 2026
 
+- **Mes sources** (24 novembre 2026) : la fenêtre « Données et couches »
+  accepte les données de l'utilisateur — fichiers GeoJSON, KML, GPX et CSV,
+  adresses GeoJSON, WFS et OGC API Features. Elles vivent dans le navigateur
+  (IndexedDB) et ne passent jamais par le serveur ; une adresse est lue par
+  le navigateur, sous réserve de CORS. La projection est reconnue d'après les
+  coordonnées (degrés, y compris écrits en (lat, lon), Lambert-93, CC42 à
+  CC50, UTM 30 à 32, Web Mercator) ou choisie ; chaque source est découpée
+  exactement au contour ou à l'emprise, puis posée en aplats drapés, rubans de
+  1,5 m ou épingles de 15 m, avec couleur, opacité, infobulle de ses
+  propriétés et mention aux crédits. Vérifié à Gordes : KML, GPX, CSV (un
+  point hors scène écarté), GeoJSON en Lambert-93 sans `crs`, et le WFS
+  `BDTOPO_V3:zone_d_activite_ou_d_interet` de la Géoplateforme lu depuis le
+  navigateur (14 zones sur l'emprise, 6 dans un contour triangulaire).
+  `outils/verifier-sources.mjs` vérifie la lecture, la projection (aller-retour
+  à 1e-7°) et le découpage (aires exactes sous un contour concave). Pas
+  encore dans l'export IFC et CityGML.
 - **Les risques dans l'export IFC et CityGML** (24 novembre 2026) : trois
   interrupteurs de plus, « Zones inondables », « Débroussaillement » et
   « Cavités », éteints quand la scène ne porte pas la couche. Les zonages
