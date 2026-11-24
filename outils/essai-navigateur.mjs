@@ -137,6 +137,15 @@ await page.click('#t-bornes');
 // Exports IFC et CityGML : chaque fichier arrive dans le dossier de la
 // capture, et la note dit sa taille et ce qu'il contient.
 // outils/valider_ifc.py et outils/valider_citygml.py les valident ensuite.
+// L'export se découpe par couche par défaut, en archive zip : l'essai demande
+// un seul fichier, dans la fenêtre ouverte, pour en lire le début et la fin.
+try {
+  await page.click('#btn-reglages-export');
+  await page.click('[data-export-fichiers="unique"]');
+  await page.$eval('#export-dialogue', d => d.close());
+} catch (e) {
+  erreurs.push('export : choix d\'un seul fichier impossible — ' + e.message);
+}
 for (const [format, bouton, debutFichier, finFichier] of [
   ['ifc', '#btn-ifc', 'ISO-10303-21;', 'END-ISO-10303-21;\n'],
   ['gml', '#btn-citygml', '<?xml version="1.0" encoding="UTF-8"?>', '</core:CityModel>\n']]) {

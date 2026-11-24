@@ -77,14 +77,15 @@ const NOMS = ['etendre', 'coniqueConforme', 'versLambert93', 'versUtm', 'versMer
               'trianglesRelief', 'trianglesTronc', 'tubeCable', 'ecrireIfc', 'alea', 'portDe', 'portMesure',
               'aUnTronc', 'gabaritTronc', 'gabaritHouppier', 'ajouterHouppierSimple', 'polygonesPlans',
               'contoursRegion', 'solsOuverts', 'ecrireCityGml', 'inverseProjection', 'planOrtho',
-              'reechantillonnerOrtho', 'fichierJgw', 'wktProjection', 'crc32', 'archiveZip', 'comprimer',
+              'reechantillonnerOrtho', 'fichierJgw', 'wktProjection', 'crc32', 'archiveZip', 'comprimer', 'modelesParCouche',
               'compresserDeflate', 'ecrireGeoTiff'];
-const CONSTS = ['GRS80', 'WGS84', 'PROJECTIONS', 'ALPHABET_IFC', 'ENTITES_IFC', 'reelIfc', 'STYLES_IFC', 'PORTS', 'EMPRISE_HOUPPIER', 'ENFONCEMENT',
+const CONSTS = ['GRS80', 'WGS84', 'PROJECTIONS', 'ALPHABET_IFC', 'ENTITES_IFC', 'COUCHE_DU_GENRE', 'FICHIERS_COUCHES', 'reelIfc', 'STYLES_IFC', 'PORTS', 'EMPRISE_HOUPPIER', 'ENFONCEMENT',
                 'HAUTEUR_MIN_TRONC', 'SEGMENTS_SIMPLE', 'PLAN_COS', 'PLAN_ECART_M', 'texteXml', 'ESPACES_CITYGML', 'ORTHO_NOEUDS', 'TABLE_CRC32'];
 const { etendre, versLambert93, PROJECTIONS, guidIfc, idGml, chaineIfc, angleIfc, facettesIfc, trianglesRelief, trianglesTronc,
         tubeCable, ecrireIfc, aUnTronc, portDe, ajouterHouppierSimple, polygonesPlans, solsOuverts, ecrireCityGml,
         ALPHABET_IFC, ENTITES_IFC, STYLES_IFC, ENFONCEMENT, inverseProjection, planOrtho, reechantillonnerOrtho,
-        fichierJgw, wktProjection, crc32, archiveZip, comprimer, compresserDeflate, ecrireGeoTiff } =
+        fichierJgw, wktProjection, crc32, archiveZip, comprimer, compresserDeflate, ecrireGeoTiff,
+        modelesParCouche, COUCHE_DU_GENRE, FICHIERS_COUCHES } =
   new Function('THREE', CONSTS.map(extraireConst).join('\n') + '\n' + NOMS.map(extraire).join('\n')
     + `\nreturn { ${[...NOMS, ...CONSTS].join(', ')} };`)(THREE);
 
@@ -597,6 +598,38 @@ const classerMurs = nz => nz < -0.5 ? 'GroundSurface' : nz <= 0.5 ? 'WallSurface
   // table des scénarios d'inondation (`style: 'inondationRare'`).
   const styles = new Set([...src.matchAll(/style: '(\w+)'/g)].map(m => m[1]));
   const sansTeinte = [...styles].filter(s => (STYLES_IFC[s] || []).length !== 3);
+  // L'export par couche : chaque genre a sa couche, chaque élément un fichier
+  // et un seul, et chaque fichier son projet et son site — deux modèles qui
+  // partageraient un GlobalId de projet se confondraient chez qui les fédère.
+  const sansCouche = [...genres].filter(g => !COUCHE_DU_GENRE[g]);
+  verifier(!sansCouche.length && Object.values(COUCHE_DU_GENRE).every(c => FICHIERS_COUCHES[c]),
+           `par couche : ${genres.size} genres de la page, chacun sa couche et son nom de fichier`
+           + (sansCouche.length ? ` — manquent ${sansCouche.join(', ')}` : ''));
+  const ordre = Object.keys(FICHIERS_COUCHES);
+  const parties = modelesParCouche(modele, ordre, { batiments: 'Bâtiments' });
+  const repartis = parties.flatMap(x => x.modele.elements);
+  verifier(repartis.length === modele.elements.length && new Set(repartis).size === repartis.length
+           && parties.every(x => x.modele.elements.every(el => (el.couche || COUCHE_DU_GENRE[el.genre]) === x.couche)),
+           `par couche : ${modele.elements.length} éléments répartis en ${parties.length} fichiers, chacun une fois`);
+  verifier(parties.map(x => x.couche).join() === ordre.filter(c => parties.some(x => x.couche === c)).join()
+           && parties.find(x => x.couche === 'batiments').modele.nom.endsWith('— Bâtiments')
+           && parties.every(x => x.modele.base === `${modele.base}_${FICHIERS_COUCHES[x.couche]}`),
+           `par couche : fichiers dans l'ordre de la fenêtre, nommés ${parties.map(x => x.modele.base.slice(modele.base.length)).join(' ')}`);
+  const projets = new Set(), sites = new Set();
+  let fichiersComplets = true;
+  for (const { modele: m } of parties) {
+    const t = ecrireIfc(m);
+    projets.add(t.match(/IFCPROJECT\('([^']+)'/)[1]);
+    sites.add(t.match(/IFCSITE\('([^']+)'/)[1]);
+    const def = new Set([...t.matchAll(/^#(\d+)=/gm)].map(x => x[1]));
+    fichiersComplets &&= [...t.matchAll(/#(\d+)(?!\d|=)/g)].every(x => def.has(x[1]))
+      && t.includes('IFCMAPCONVERSION') && /FILE_NAME\('essai_/.test(t);
+  }
+  verifier(fichiersComplets && projets.size === parties.length && sites.size === parties.length,
+           'par couche : chaque IFC complet, géoréférencé, avec son projet et son site');
+  verifier(!(() => { try { modelesParCouche({ ...modele, elements: [{ cle: 'x', genre: 'inconnu' }] }, ordre, {}); }
+                     catch (e) { return false; } return true; })(),
+           'par couche : un élément sans couche est refusé, jamais égaré');
   verifier(styles.has('inondationRare') && !sansTeinte.length, `IFC : ${styles.size} styles de la page, chacun sa teinte`
            + (sansTeinte.length ? ` — manquent ${sansTeinte.join(', ')}` : ''));
   // Le CRS écrit est celui du modèle : une autre projection se lit dans

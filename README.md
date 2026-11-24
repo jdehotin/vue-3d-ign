@@ -415,6 +415,17 @@ et les emprises de la BD TOPO — cimetières, aérodromes et leurs pistes,
 postes de transformation, haies. Une couche que la scène ne porte pas
 s'éteint d'elle-même dans la fenêtre.
 
+**Un fichier par couche**, par défaut : l'IFC ou le CityGML se découpe selon
+les couches de données — `<nom>_relief`, `_batiments`, `_monuments-osm`,
+`_arbres`, `_routes`, `_hydrographie`, `_ouvrages`, `_lignes-ht`,
+`_postes-hta-bt`, `_zones-inondables`… —, réunis et comprimés dans une
+archive zip. Tous partagent l'origine, la projection et l'ancrage : chargés
+ensemble (une fédération Revit, Trimble Connect, un projet QGIS), ils se
+superposent exactement, et chacun s'affiche ou se masque à part. Chaque
+fichier a son propre projet et son propre site IFC ; les éléments gardent
+leurs identifiants. Vers Trimble Connect, chaque fichier est déposé à part
+dans le dossier choisi. « Un seul fichier » rend l'export d'avant.
+
 - **IFC 4**, pour un logiciel de conception — Revit, ArchiCAD, Vectorworks,
   Allplan, Bonsai : des maillages, autour d'une origine au point visé. 5 à
   9 Mo dans l'emprise de 356 m, environ 25 Mo en zone de 1 000 m, 35 avec

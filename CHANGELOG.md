@@ -13,6 +13,20 @@ messages de commit et dans les commentaires des modules.
 
 ## Scène v16 — 26 octobre 2026
 
+- **Export par couche** (24 novembre 2026) : l'IFC et le CityGML se
+  découpent désormais en un fichier par couche de données — relief,
+  bâtiments, monuments OSM, arbres, masses, routes, hydrographie, ouvrages,
+  lignes HT, aérodromes, postes, haies, réseaux, panneaux, postes HTA/BT,
+  zones inondables —, comprimés ensemble dans une archive zip, l'orthophoto
+  du relief texturé à côté. Les fichiers partagent origine, projection et
+  ancrage et se superposent ; chacun a son projet et son site. Vers Trimble
+  Connect, chaque fichier est déposé à part. « Un seul fichier », dans la
+  fenêtre d'export, rend l'export d'avant. Vérifié à Gordes (zone de 350 m) :
+  4 IFC complets, 0,9 Mo comprimés pour 3,2 Mo, la somme exacte de l'IFC
+  unique ; 4 CityGML valides, 1,3 Mo pour 22,6 Mo. `outils/verifier-export.mjs`
+  contrôle le découpage : chaque genre a sa couche, chaque élément un seul
+  fichier, chaque fichier son projet. `outils/essai-navigateur.mjs` choisit
+  « Un seul fichier » avant ses exports.
 - **Risques réduits aux surfaces inondables des TRI** (24 novembre 2026) : le
   zonage des obligations légales de débroussaillement, les cavités
   souterraines et la fiche « Risques de la commune » (AZI, PAPI, arrêtés

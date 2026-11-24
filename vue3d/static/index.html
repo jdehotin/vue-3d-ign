@@ -996,6 +996,13 @@
                         <button type="button" role="radio" aria-checked="false"
                                 data-export-format="ortho" title="La photo aérienne de la scène, en GeoTIFF géoréférencé, dans une archive zip. Les couches ne s'appliquent pas.">Orthophoto <span>· image</span></button>
                     </div>
+                    <div class="sous-titre" id="export-fichiers-titre">Fichiers</div>
+                    <div class="choix-format" role="radiogroup" aria-label="Découpage en fichiers" id="export-fichiers">
+                        <button type="button" role="radio" class="on" aria-checked="true" data-export-fichiers="couches"
+                                title="Un fichier par couche de données (bâtiments, arbres, routes, zones inondables…), tous rapportés à la même origine pour se superposer, dans une archive zip. Vers Trimble Connect, chacun est déposé à part.">Un par couche <span>· archive zip</span></button>
+                        <button type="button" role="radio" aria-checked="false" data-export-fichiers="unique"
+                                title="Toutes les couches cochées dans un seul fichier.">Un seul fichier</button>
+                    </div>
                     <div class="toggles" id="export-texture-bloc" hidden>
                         <button type="button" class="toggle" id="x-texture"
                                 title="Colle la photo aérienne sur le relief, en IFC (IfcImageTexture) comme en CityGML (Appearance). Le fichier devient une archive zip : le modèle et l'image .jpg qu'il désigne. Il faut le relief. Beaucoup de logiciels IFC (Revit, ArchiCAD, Trimble Connect) ignorent les textures IFC.">Orthophoto sur le terrain</button>
@@ -12134,6 +12141,56 @@ function toitDessine(ud) {
  * postes_enedis, inondations }.
  */
 
+/**
+ * La couche de données de chaque genre d'élément : celle de son interrupteur
+ * dans la fenêtre d'export (COUCHES_EXPORT), et donc de son fichier quand
+ * l'export se découpe par couche. Deux genres se décident à l'élément : un
+ * bâtiment à parties OpenStreetMap va aux monuments, et un poste HTA/BT
+ * d'Enedis, écrit en bâtiment, à sa couche (`couche`, posé par modeleExport).
+ */
+const COUCHE_DU_GENRE = {
+    terrain: 'relief', batiment: 'batiments', arbre: 'arbres', masse: 'masses',
+    route: 'routes', surface_eau: 'eau', cours_d_eau: 'eau',
+    mur: 'ouvrages', pont: 'ouvrages', voie_ferree: 'ouvrages', terrain_sport: 'ouvrages',
+    pylone: 'lignes', ligne_ht: 'lignes',
+    aerodrome: 'aerodromes', piste: 'aerodromes', poste: 'postes', haie: 'haies',
+    reseau: 'reseaux', panneau_solaire: 'panneaux', zone_inondable: 'inondations',
+};
+// Le nom de chaque couche dans celui de son fichier : sans accent ni espace,
+// lisible dans une liste de fichiers ou un projet Trimble Connect.
+const FICHIERS_COUCHES = {
+    relief: 'relief', batiments: 'batiments', monuments: 'monuments-osm', arbres: 'arbres',
+    masses: 'masses-sursol', routes: 'routes', eau: 'hydrographie', ouvrages: 'ouvrages',
+    lignes: 'lignes-ht', aerodromes: 'aerodromes', postes: 'postes-electriques', haies: 'haies',
+    reseaux: 'reseaux', panneaux: 'panneaux-solaires', postes_enedis: 'postes-hta-bt',
+    inondations: 'zones-inondables',
+};
+
+/**
+ * Le modèle d'export découpé par couche de données : [{ couche, modele }],
+ * dans l'ordre de `ordre` (les clés de COUCHES_EXPORT), une couche vide omise.
+ * Chaque modèle garde l'origine, le CRS, l'ancrage et le nord du modèle
+ * entier : les fichiers se superposent exactement une fois chargés ensemble.
+ * Il a sa propre clé — d'où les GlobalId de son projet et de son site, qu'un
+ * logiciel qui fédère les modèles ne doit pas confondre —, son nom de base
+ * (`<base>_<couche>`) et son nom ; ses éléments gardent les leurs, et donc
+ * leurs GlobalId. `libelles` : { couche: libellé lisible }.
+ */
+function modelesParCouche(modele, ordre, libelles) {
+    const parCouche = new Map(ordre.map(c => [c, []]));
+    for (const el of modele.elements) {
+        const couche = el.couche || COUCHE_DU_GENRE[el.genre];
+        if (!parCouche.has(couche)) throw new Error(`élément sans couche d'export : ${el.genre} (${el.cle})`);
+        parCouche.get(couche).push(el);
+    }
+    return [...parCouche].filter(([, elements]) => elements.length).map(([couche, elements]) => ({
+        couche,
+        modele: { ...modele, elements, cle: `${modele.cle}|${couche}`,
+                  base: `${modele.base}_${FICHIERS_COUCHES[couche] || couche}`,
+                  nom: `${modele.nom} — ${libelles[couche] || couche}` },
+    }));
+}
+
 /** Le libellé et le jeu de propriétés de chaque sous-couche d'emprises. */
 const LIBELLES_EMPRISE = {
     aerodrome: ['VueIGN_Aerodrome', 'Aérodrome'],
@@ -12464,6 +12521,7 @@ function modeleExport(options) {
             elements.push({
                 cle: 'batiment|' + (p.cleabs || `${elements.length}`),
                 genre: 'batiment',
+                couche: b.monument ? 'monuments' : 'batiments',
                 nom: p.usage_1 || p.nature || (b.ud.monument && b.ud.monument.nom) || 'Bâtiment',
                 description: `Hauteur ${source}, toit ${toitTexte}`, tag: p.cleabs,
                 proprietes: { nom: 'VueIGN_Batiment', valeurs: [
@@ -12708,6 +12766,7 @@ function modeleExport(options) {
                         elements.push({
                             cle: `poste-enedis|${inst}`,
                             genre: 'batiment',
+                            couche: 'postes_enedis',
                             nom: 'Poste HTA/BT Enedis',
                             description: pe.commune || 'Poste Enedis (Licence Ouverte 2.0)',
                             tag: null,
@@ -13692,6 +13751,18 @@ document.getElementById('btn-reglages-export').addEventListener('click', () => {
 });
 
 let formatExport = 'ifc';
+// Un fichier par couche (le défaut) ou un seul : l'orthophoto n'en a qu'un.
+let fichiersExport = 'couches';
+const boutonsFichiers = [...fenetreExport.querySelectorAll('[data-export-fichiers]')];
+for (const b of boutonsFichiers) {
+    b.addEventListener('click', () => {
+        fichiersExport = b.dataset.exportFichiers;
+        for (const x of boutonsFichiers) {
+            x.classList.toggle('on', x === b);
+            x.setAttribute('aria-checked', String(x === b));
+        }
+    });
+}
 const boutonsFormat = [...fenetreExport.querySelectorAll('[data-export-format]')];
 for (const b of boutonsFormat) {
     b.addEventListener('click', () => {
@@ -13708,6 +13779,8 @@ for (const b of boutonsFormat) {
         document.getElementById('export-texture-bloc').hidden = formatExport === 'ortho';
         document.getElementById('export-couches').hidden = formatExport === 'ortho';
         document.getElementById('export-couches-titre').hidden = formatExport === 'ortho';
+        document.getElementById('export-fichiers').hidden = formatExport === 'ortho';
+        document.getElementById('export-fichiers-titre').hidden = formatExport === 'ortho';
     });
 }
 
@@ -13792,6 +13865,92 @@ async function envoyerAuProjet(fichier, nomFichier, modele, choix) {
         + resumeDe(modele, choix) + '.');
 }
 
+/** Les octets d'un texte écrit en morceaux (ecrireIfc, ecrireCityGml), sans
+ *  jamais le joindre en une seule chaîne : un CityGML dépasse vite la plus
+ *  longue que le navigateur sache tenir. */
+async function octetsDe(texte) {
+    return new Uint8Array(await new Blob([].concat(texte)).arrayBuffer());
+}
+
+/**
+ * L'export découpé par couche de données (modelesParCouche) : un fichier par
+ * couche. Téléchargé ou enregistré, une archive zip qui les réunit, comprimés,
+ * avec l'orthophoto du relief texturé ; vers Trimble Connect, chacun déposé
+ * à part — le relief texturé, avec son image, en archive comme avant.
+ */
+async function exporterParCouche({ modele, choix, ecrire, extensionModele, avecTexture, mode,
+                                   flux, poignee, nomFichier, reperes, abandonner }) {
+    const base = nomFichierExport();
+    const libelles = Object.fromEntries(COUCHES_EXPORT.map(([cle, id]) =>
+        [cle, document.getElementById(id).textContent.trim()]));
+    // Les fichiers portent le nom choisi dans la fenêtre, comme l'archive.
+    const parties = modelesParCouche({ ...modele, base }, COUCHES_EXPORT.map(([cle]) => cle), libelles);
+    let image = null;
+    if (avecTexture) {
+        const { plan, jpeg } = await imageOrtho();
+        image = { jpeg, texture: { image: `${base}.jpg`, minX: plan.minX, minY: plan.maxY - plan.hauteur * plan.pasY,
+                                   largeurM: plan.largeur * plan.pasX, hauteurM: plan.hauteur * plan.pasY } };
+    }
+    // Un fichier par couche : son nom, ses octets et, à défaut de
+    // CompressionStream, rien de comprimé (archiveZip les stocke alors tels quels).
+    const fichiers = [];
+    for (const { couche, modele: m } of parties) {
+        if (image && couche === 'relief') m.texture = image.texture;
+        noterExport(`Écriture de ${m.base}.${extensionModele}…`);
+        await new Promise(ok => setTimeout(ok));
+        const octets = await octetsDe(ecrire(m));
+        fichiers.push({ couche, nom: `${m.base}.${extensionModele}`, octets, modele: m });
+    }
+    const taille = fichiers.reduce((t, f) => t + f.octets.length, 0);
+    const liste = fichiers.map(f => libelles[f.couche] || f.couche).join(', ');
+    if (mode === 'projet') {
+        for (const f of fichiers) {
+            let blob = new Blob([f.octets], { type: 'application/octet-stream' }), nom = f.nom;
+            if (image && f.couche === 'relief') {
+                nom = `${f.modele.base}.zip`;
+                blob = new Blob(archiveZip([{ nom: f.nom, octets: f.octets, deflate: await compresserDeflate(f.octets) },
+                                            { nom: `${base}.jpg`, octets: image.jpeg }]), { type: 'application/zip' });
+            }
+            await envoyerAuProjet(blob, nom, f.modele, choix);
+        }
+        noterExport(`${fichiers.length} fichier(s) déposé(s) dans le projet${tcAuth.nom ? ' ' + tcAuth.nom : ''} : `
+            + `${liste}. ` + resumeDe(modele, choix) + '. ' + reperes(modele));
+        return;
+    }
+    noterExport(`Compression de ${fichiers.length} fichier(s)…`);
+    const entrees = [];
+    for (const f of fichiers) entrees.push({ nom: f.nom, octets: f.octets, deflate: await compresserDeflate(f.octets) });
+    if (image) entrees.push({ nom: `${base}.jpg`, octets: image.jpeg });
+    const archive = new Blob(archiveZip(entrees), { type: 'application/zip' });
+    let ecrit = nomFichier, repli = !flux && mode === 'enregistrer';
+    if (flux) {
+        try {
+            await flux.write(archive);
+            await flux.close();
+            ecrit = poignee.name;
+        } catch (err) {
+            console.warn('Écriture impossible dans le fichier choisi :', err);
+            await abandonner();
+            flux = null;
+            repli = true;
+        }
+    }
+    if (!flux) {
+        const lien = document.createElement('a');
+        lien.href = URL.createObjectURL(archive);
+        lien.download = nomFichier;
+        document.body.append(lien);
+        lien.click();
+        lien.remove();
+        setTimeout(() => URL.revokeObjectURL(lien.href), 60000);
+    }
+    noterExport((repli ? 'Écriture directe refusée, fichier téléchargé : ' : '')
+        + `${ecrit} : ${enMo(archive.size)} Mo comprimés (${enMo(taille)} Mo de modèles), `
+        + `${fichiers.length} fichier(s) .${extensionModele}, un par couche — ${liste}. `
+        + resumeDe(modele, choix) + '. ' + reperes(modele)
+        + (image ? ` Orthophoto collée sur le relief ; l'image .jpg est dans l'archive, à côté du relief.` : ''));
+}
+
 /**
  * Écrit le fichier du format demandé, avec les couches cochées. `mode` :
  * 'telecharger' (le dossier de téléchargement du navigateur), 'enregistrer'
@@ -13829,8 +13988,10 @@ async function exporter(format, mode = 'telecharger') {
     // Un IFC ou un CityGML texturé n'est plus un fichier seul : le modèle et
     // l'image qu'il désigne, en archive zip. Sans relief, rien à texturer.
     const avecTexture = !estOrtho && textureTerrain && choix.relief;
+    // Un fichier par couche : une archive zip, un modèle par couche de données.
+    const parCouche = !estOrtho && fichiersExport === 'couches';
     const extensionModele = extension;
-    if (avecTexture) { extension = 'zip'; type = 'application/zip'; }
+    if (avecTexture || parCouche) { extension = 'zip'; type = 'application/zip'; }
     const nomFichier = `${nomFichierExport()}.${extension}`;
     // Le flux d'écriture s'ouvre tout de suite, avant le calcul. Deux raisons :
     // Chromium exige une activation utilisateur pour la fenêtre — appelée après
@@ -13876,6 +14037,11 @@ async function exporter(format, mode = 'telecharger') {
         if (!estOrtho && !modele.elements.length) {
             await abandonner();
             noterExport('Rien à écrire : les couches cochées sont vides dans cette scène.');
+            return;
+        }
+        if (parCouche) {
+            await exporterParCouche({ modele, choix, ecrire, extensionModele, avecTexture, mode,
+                                      flux, poignee, nomFichier, reperes, abandonner });
             return;
         }
         let texte;

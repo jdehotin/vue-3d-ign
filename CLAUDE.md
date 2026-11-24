@@ -175,6 +175,13 @@ l'étage `export` du Dockerfile.
   réseaux passent par la branche générique (`ecrireCityGml` inchangé) ;
   `outils/valider_citygml.py` ne demande un volume tourné vers l'extérieur
   qu'aux surfaces fermées, un aplat ou un câble n'enfermant rien.
+- **Un export par couche se superpose, il ne se recale pas.** Le modèle est
+  calculé une fois, puis découpé (`modelesParCouche`) : chaque fichier garde
+  l'origine, le CRS, l'ancrage et le nord du modèle entier, et prend sa
+  propre clé — d'où des GlobalId de projet et de site distincts, qu'un
+  logiciel qui fédère ne confondrait pas. Un genre d'élément nouveau doit
+  entrer dans `COUCHE_DU_GENRE` : `modelesParCouche` refuse un élément sans
+  couche, et `outils/verifier-export.mjs` le contrôle sur les genres de la page.
 - **Un grand tableau s'ajoute avec `etendre()`, jamais `push(...valeurs)`.**
   L'export rassemble les tableaux de la scène — 62 208 valeurs pour le tube
   d'un conducteur HT, des dizaines de milliers pour un aplat — et les passer
