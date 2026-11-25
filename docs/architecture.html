@@ -1,0 +1,587 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vue 3D IGN — architecture, complétude et chantiers</title>
+<style>
+  :root {
+    --fond: #0f1b2d; --fond2: #16263d; --fond3: #1e3250; --trait: #2c4466;
+    --texte: #e6edf6; --pale: #9fb2cc; --orange: #f39c3d; --vert: #5cc07a;
+    --bleu: #5aa9f0; --rouge: #e5605a; --jaune: #e8c14a; --violet: #a98be8; --rose: #ff6fb5;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--fond); color: var(--texte);
+         font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  header { padding: 28px 32px 18px; border-bottom: 1px solid var(--trait);
+           background: linear-gradient(180deg, var(--fond2), var(--fond)); }
+  header h1 { margin: 0 0 4px; font-size: 26px; }
+  header h1 span { color: var(--orange); }
+  header p { margin: 0; color: var(--pale); }
+  nav { display: flex; gap: 18px; padding: 10px 32px; position: sticky; top: 0; z-index: 5;
+        background: rgba(15,27,45,.95); border-bottom: 1px solid var(--trait); }
+  nav a { color: var(--pale); text-decoration: none; font-size: 14px; }
+  nav a:hover { color: var(--orange); }
+  main { max-width: 1240px; margin: 0 auto; padding: 8px 32px 60px; }
+  h2 { margin: 40px 0 6px; font-size: 20px; border-left: 4px solid var(--orange); padding-left: 10px; }
+  h2 + p.sous { margin: 0 0 18px; color: var(--pale); }
+  code { background: var(--fond3); padding: 1px 5px; border-radius: 4px; font-size: 13px; }
+
+  /* Indicateurs */
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
+  .kpi { background: var(--fond2); border: 1px solid var(--trait); border-radius: 10px; padding: 14px 16px; }
+  .kpi b { display: block; font-size: 28px; line-height: 1.1; }
+  .kpi span { color: var(--pale); font-size: 13px; }
+
+  /* Schéma en couches */
+  .etage { background: var(--fond2); border: 1px solid var(--trait); border-radius: 12px;
+           padding: 12px 14px 14px; position: relative; }
+  .etage > h3 { margin: 0 0 10px; font-size: 13px; letter-spacing: .06em; text-transform: uppercase; color: var(--pale); }
+  .etage > h3 em { font-style: normal; color: var(--texte); text-transform: none; letter-spacing: 0; margin-left: 6px; }
+  .boites { display: flex; flex-wrap: wrap; gap: 8px; }
+  .boite { background: var(--fond3); border: 1px solid var(--trait); border-left: 4px solid var(--c, var(--bleu));
+           border-radius: 7px; padding: 6px 10px; font-size: 13px; min-width: 120px; cursor: default; }
+  .boite b { display: block; font-size: 13.5px; }
+  .boite small { color: var(--pale); }
+  .boite.off { opacity: .55; border-style: dashed; border-left-style: solid; }
+  /* Apports depuis le fork */
+  .boite { position: relative; }
+  .boite.neuf { border-color: var(--rose); box-shadow: 0 0 0 1px var(--rose), 0 0 14px rgba(255,111,181,.25); }
+  .boite.neuf::after { content: "NOUVEAU"; position: absolute; top: -8px; right: 6px; font-size: 9.5px;
+                       font-weight: 700; letter-spacing: .05em; background: var(--rose); color: #2a0b1c;
+                       padding: 0 5px; border-radius: 4px; }
+  .boite.modif::after { content: attr(data-delta); position: absolute; top: -8px; right: 6px; font-size: 9.5px;
+                        font-weight: 700; background: var(--fond); color: var(--rose); border: 1px solid var(--rose);
+                        padding: 0 4px; border-radius: 4px; }
+  .neuf-txt { color: var(--rose); }
+  .fork-plus { color: var(--vert); } .fork-moins { color: var(--rouge); }
+  .apports { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; margin-top: 14px; }
+  .apport { background: var(--fond2); border: 1px solid var(--trait); border-top: 3px solid var(--rose); border-radius: 10px; padding: 12px 14px; }
+  .apport h4 { margin: 0 0 6px; font-size: 15px; }
+  .apport ul { margin: 0; padding-left: 18px; color: var(--pale); font-size: 13.5px; }
+  .apport li { margin: 2px 0; }
+  .delta { display: flex; height: 14px; border-radius: 4px; overflow: hidden; background: var(--fond3); margin: 4px 0 2px; }
+  .delta > div { height: 100%; }
+  .fleche { text-align: center; color: var(--pale); font-size: 12px; margin: 4px 0; }
+  .fleche::before { content: "▼"; display: block; color: var(--orange); font-size: 16px; line-height: 1; }
+  .colonnes { display: grid; grid-template-columns: 1.15fr 1fr 0.8fr; gap: 12px; }
+  @media (max-width: 900px) { .colonnes { grid-template-columns: 1fr; } }
+  .legende { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 12px; font-size: 13px; color: var(--pale); }
+  .legende i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+
+  /* Tableau de complétude */
+  .filtres { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+  .filtres button { background: var(--fond2); color: var(--texte); border: 1px solid var(--trait);
+                    border-radius: 20px; padding: 4px 12px; cursor: pointer; font-size: 13px; }
+  .filtres button.actif { border-color: var(--orange); color: var(--orange); }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { padding: 7px 8px; border-bottom: 1px solid var(--trait); text-align: left; vertical-align: middle; }
+  th { color: var(--pale); font-weight: 600; font-size: 12.5px; text-transform: uppercase; letter-spacing: .04em; cursor: pointer; user-select: none; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .ok { color: var(--vert); } .ko { color: var(--rouge); } .mi { color: var(--jaune); }
+  .barre { height: 8px; background: var(--fond3); border-radius: 5px; overflow: hidden; min-width: 90px; }
+  .barre > div { height: 100%; border-radius: 5px; }
+  .pastille { font-size: 11.5px; padding: 1px 8px; border-radius: 10px; background: var(--fond3); white-space: nowrap; }
+
+  /* Avancement */
+  .frise { position: relative; margin: 10px 0 0 8px; padding-left: 22px; border-left: 2px solid var(--trait); }
+  .jalon { position: relative; margin-bottom: 14px; }
+  .jalon::before { content: ""; position: absolute; left: -29px; top: 5px; width: 12px; height: 12px;
+                   border-radius: 50%; background: var(--c, var(--orange)); border: 2px solid var(--fond); }
+  .jalon time { color: var(--pale); font-size: 13px; margin-right: 8px; }
+  .jalon b { color: var(--texte); }
+  .jalon p { margin: 2px 0 0; color: var(--pale); font-size: 14px; }
+  .chemin { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+  .axe { background: var(--fond2); border: 1px solid var(--trait); border-radius: 10px; padding: 12px 14px; }
+  .axe h4 { margin: 0 0 6px; font-size: 15px; display: flex; justify-content: space-between; }
+  .axe p { margin: 6px 0 0; color: var(--pale); font-size: 13px; }
+
+  /* Chantiers */
+  .todos { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 12px; }
+  .todo { background: var(--fond2); border: 1px solid var(--trait); border-radius: 10px; padding: 12px 14px; }
+  .todo label { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; }
+  .todo input { margin-top: 4px; accent-color: var(--vert); }
+  .todo.fait { opacity: .5; } .todo.fait .titre { text-decoration: line-through; }
+  .todo .titre { font-weight: 600; }
+  .todo p { margin: 4px 0 0 26px; color: var(--pale); font-size: 13.5px; }
+  .todo .etiq { margin: 6px 0 0 26px; display: flex; gap: 6px; flex-wrap: wrap; }
+  .p1 { background: rgba(229,96,90,.18); color: #ff8f88; }
+  .p2 { background: rgba(243,156,61,.18); color: var(--orange); }
+  .p3 { background: rgba(90,169,240,.18); color: var(--bleu); }
+  footer { color: var(--pale); font-size: 12.5px; text-align: center; padding: 20px; border-top: 1px solid var(--trait); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Vue 3D <span>IGN</span> — architecture</h1>
+  <p>Modules, apports depuis le fork, complétude, avancement et chantiers ouverts · état du dépôt au 25 novembre 2026 (commit <code>43bc599</code>, scène v16)</p>
+</header>
+<nav>
+  <a href="#synthese">Synthèse</a><a href="#fork">Depuis le fork</a><a href="#schema">Schéma</a><a href="#completude">Complétude</a>
+  <a href="#avancement">Avancement</a><a href="#todos">Chantiers</a><a href="#methode">Méthode</a>
+</nav>
+<main>
+
+<!-- ───────────────────────── Synthèse ───────────────────────── -->
+<h2 id="synthese">Synthèse</h2>
+<p class="sous">Chiffres relevés dans le dépôt, pas estimés.</p>
+<div class="kpis" id="kpis"></div>
+
+<!-- ───────────────────────── Depuis le fork ───────────────────────── -->
+<h2 id="fork">Depuis le fork</h2>
+<p class="sous">Comparaison de <code>main</code> avec son point de divergence d'avec le dépôt amont
+  <code>ysimonx/vue-3d-ign</code> : commit <code>be88288</code> du 18 octobre 2026 (<code>git merge-base main upstream/main</code>).
+  Dans tout le document, <span class="neuf-txt">■ NOUVEAU</span> marque un module ajouté depuis, et <span class="neuf-txt">+n/−n</span> un module retouché.</p>
+<div class="kpis" id="kpis-fork"></div>
+<h3 style="margin:22px 0 4px;font-size:15px">Lignes ajoutées et retirées par fichier <span style="color:var(--pale);font-weight:400;font-size:13px">— hors index.html, échelle commune</span></h3>
+<div id="deltas" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:4px 24px;font-size:13px"></div>
+<div class="apports">
+  <div class="apport"><h4>Nouvelles couches de données</h4><ul>
+    <li>Emprises : aérodromes, pistes, postes, haies (<code>emprises.py</code>)</li>
+    <li>Canalisations BD TOPO (<code>reseaux.py</code>)</li>
+    <li>Postes HTA/BT Enedis (<code>postes_enedis.py</code>)</li>
+    <li>Surfaces inondables des TRI (<code>georisques.py</code>)</li>
+    <li>BD Forêt, RPG, chemins : écrits, pas encore servis</li></ul></div>
+  <div class="apport"><h4>Zone et service</h4><ul>
+    <li>Contour libre <code>?poly=</code> au lieu du carré (<code>polygone.py</code>)</li>
+    <li>Relief LiDAR HD selon la source du RGE ALTI (<code>relief.py</code> +153)</li>
+    <li>Aire maximale réglable, <code>malloc_trim</code>, seuil de toit plat réglable</li>
+    <li>Catalogue <code>/api/sources</code> (<code>sources.py</code>)</li>
+    <li>Déploiement Render (<code>render.yaml</code>)</li></ul></div>
+  <div class="apport"><h4>Exports</h4><ul>
+    <li>Fenêtre de couches, un fichier par couche en zip</li>
+    <li>Projection au choix, déclarée dans le fichier ; ancrage origine / site</li>
+    <li>Orthophoto drapée en IFC et CityGML, et en GeoTIFF</li>
+    <li>Zones inondables exportées</li></ul></div>
+  <div class="apport"><h4>Trimble Connect</h4><ul>
+    <li>Emprise du projet lue par le serveur et tracée sur la carte</li>
+    <li>Dépôt des exports dans le projet, choix du dossier</li>
+    <li>Nom de fichier par défaut : projet + <code>_ContexteIgn3D</code></li>
+    <li>Routes <code>/api/connect/*</code></li></ul></div>
+  <div class="apport"><h4>Page</h4><ul>
+    <li>Carte d'accueil avant la scène, three.js chargé au clic</li>
+    <li>Fenêtre « Données et couches », « Mes sources » (IndexedDB)</li>
+    <li>Nouvelle charte : orange, vert, fond bleu ; panneau en accordéon</li>
+    <li><code>index.html</code> : +5 401 / −482 lignes</li></ul></div>
+  <div class="apport"><h4>Retiré ou mis de côté</h4><ul>
+    <li>Route <code>/api/dvf</code> et couche des cimetières retirées</li>
+    <li>Géorisques réduit aux surfaces inondables des TRI</li>
+    <li>Tests de <code>test_toits_rapides.py</code> sautés (« Stabilisation CI »)</li>
+    <li>18 commits amont non repris depuis le fork</li></ul></div>
+</div>
+
+<!-- ───────────────────────── Schéma ───────────────────────── -->
+<h2 id="schema">Schéma de l'application</h2>
+<p class="sous">Du service de données au navigateur. Survolez un module pour sa taille et ses tests ; en pointillé, les modules présents mais non servis.</p>
+
+<div class="etage">
+  <h3>Sources externes <em>— données ouvertes, sans clé d'API</em></h3>
+  <div class="boites">
+    <div class="boite" style="--c:var(--bleu)"><b>Géoplateforme IGN</b><small>WFS BD TOPO, BD Forêt · WMS MNS/MNT/MNH, RGE ALTI, ortho · WMTS · LiDAR HD COPC</small></div>
+    <div class="boite" style="--c:var(--violet)"><b>Overpass (OSM)</b><small>building:part des monuments</small></div>
+    <div class="boite" style="--c:var(--violet)"><b>ADEME</b><small>DPE</small></div>
+    <div class="boite" style="--c:var(--violet)"><b>data.gouv.fr</b><small>IRVE (bornes)</small></div>
+    <div class="boite neuf" style="--c:var(--violet)"><b>Géorisques</b><small>TRI inondables (WFS)</small></div>
+    <div class="boite neuf" style="--c:var(--violet)"><b>Enedis open data</b><small>postes HTA/BT</small></div>
+    <div class="boite neuf" style="--c:var(--violet)"><b>Trimble Connect API</b><small>emprise, dossiers, dépôt</small></div>
+    <div class="boite" style="--c:var(--jaune)"><b>OpenPVMapper</b><small>SQLite R-tree, optionnel</small></div>
+    <div class="boite" style="--c:var(--jaune)"><b>Poids ONNX</b><small>RTMDet-R / YOLO11-OBB, hors dépôt</small></div>
+  </div>
+</div>
+<div class="fleche">GET avec reprise · 8 places pour tout le service · abandon au premier échec</div>
+<div class="etage">
+  <h3>Accès réseau</h3>
+  <div class="boites" data-groupe="acces"></div>
+</div>
+<div class="fleche">GeoJSON découpé à l'emprise ou au contour <code>?poly=</code></div>
+
+<div class="colonnes">
+  <div class="etage">
+    <h3>Scène <em>— calcul MNH, cache disque, complète ou absente</em></h3>
+    <div class="boites" data-groupe="scene"></div>
+  </div>
+  <div class="etage">
+    <h3>Couches à part <em>— chargées après la scène</em></h3>
+    <div class="boites" data-groupe="couche"></div>
+  </div>
+  <div class="etage">
+    <h3>À la demande <em>— lues au clic</em></h3>
+    <div class="boites" data-groupe="clic"></div>
+    <h3 style="margin-top:14px">Non servis <em>— modules orphelins</em></h3>
+    <div class="boites" data-groupe="orphelin"></div>
+  </div>
+</div>
+<div class="fleche">assemblage · cache <code>cache/v16/…</code> · quota de scènes neuves par IP</div>
+<div class="etage">
+  <h3>Service Flask</h3>
+  <div class="boites" data-groupe="service"></div>
+</div>
+<div class="fleche">JSON gzippé · tuiles · <code>/api/avancement</code></div>
+<div class="etage">
+  <h3>Navigateur <em>— un seul fichier statique, sans build</em></h3>
+  <div class="boites">
+    <div class="boite modif" data-delta="+5401/−482" style="--c:var(--orange)"><b>static/index.html</b><small>16 368 lignes · three.js r160 · HTML, CSS, JS</small></div>
+    <div class="boite neuf" style="--c:var(--orange)"><b>Carte d'accueil</b><small>zone tracée avant la scène</small></div>
+    <div class="boite" style="--c:var(--orange)"><b>Vue 3D</b><small>terrain drapé, toits en pans, houppiers, horizon</small></div>
+    <div class="boite neuf" style="--c:var(--orange)"><b>Mes sources</b><small>IndexedDB, jamais envoyées au serveur</small></div>
+    <div class="boite neuf" style="--c:var(--orange)"><b>Fenêtre « Données »</b><small>catalogue /api/sources</small></div>
+    <div class="boite modif" data-delta="étendu" style="--c:var(--vert)"><b>Export IFC 4</b><small>ancrage origine / site, par couche en zip</small></div>
+    <div class="boite modif" data-delta="étendu" style="--c:var(--vert)"><b>Export CityGML 2.0</b><small>CRS choisi, ortho drapée</small></div>
+    <div class="boite neuf" style="--c:var(--vert)"><b>GeoTIFF</b><small>orthophoto</small></div>
+    <div class="boite neuf" style="--c:var(--vert)"><b>Trimble Connect</b><small>/api/connect/*, sans archive</small></div>
+  </div>
+</div>
+<div class="legende">
+  <span><i style="background:var(--bleu)"></i>IGN</span>
+  <span><i style="background:var(--violet)"></i>autre source publique</span>
+  <span><i style="background:var(--jaune)"></i>optionnel</span>
+  <span><i style="background:var(--orange)"></i>page</span>
+  <span><i style="background:var(--vert)"></i>export</span>
+  <span><i style="background:var(--rose)"></i>NOUVEAU : ajouté depuis le fork · +n/−n : retouché</span>
+</div>
+
+<!-- ───────────────────────── Complétude ───────────────────────── -->
+<h2 id="completude">Taux de complétude par module</h2>
+<p class="sous">Trois critères vérifiables, un tiers chacun : <b>servi</b> (une route ou la scène l'appelle), <b>testé</b> (un fichier <code>tests/test_*.py</code> dédié), <b>documenté</b> (présent dans l'architecture de <code>CLAUDE.md</code>). Cliquez un en-tête pour trier.</p>
+<div class="filtres" id="filtres"></div>
+<table id="table">
+  <thead><tr>
+    <th data-cle="nom">Module</th><th data-cle="groupe">Rôle</th><th data-cle="lignes" class="num">Lignes</th>
+    <th data-cle="tests" class="num">Tests</th><th data-cle="forkTri">Depuis le fork</th><th>Servi</th><th>Testé</th><th>Documenté</th><th data-cle="score">Complétude</th>
+  </tr></thead>
+  <tbody></tbody>
+</table>
+
+<!-- ───────────────────────── Avancement ───────────────────────── -->
+<h2 id="avancement">Avancement</h2>
+<p class="sous">Par axe, une appréciation qualitative fondée sur le CHANGELOG et les « Pistes ouvertes » de CONTRIBUTING.md — à ne pas lire comme une mesure.</p>
+<div class="chemin" id="axes"></div>
+
+<h3 style="margin:28px 0 8px;font-size:16px">Jalons</h3>
+<div class="frise">
+  <div class="jalon"><time>27 sept. 2026</time><b>Scènes v1 à v6</b><p>Bâtiments, MNH, houppiers, relief, orthophoto : la première vue complète.</p></div>
+  <div class="jalon"><time>28–30 sept.</time><b>Scènes v7 à v13</b><p>Corrections de toits et de houppiers, invariant « complète ou absente ».</p></div>
+  <div class="jalon"><time>1er oct.</time><b>Scène v14</b><p>Toits en pans fermés et vérifiés, accélération des toitures au bit près.</p></div>
+  <div class="jalon"><time>15 oct.</time><b>Scène v15</b><p>Couches à part : ouvrages, emprises, nuage LiDAR, véhicules, panneaux.</p></div>
+  <div class="jalon"><time>21–26 oct.</time><b>Scène v16</b><p>Contour libre <code>?poly=</code>, exports IFC 4 et CityGML 2.0, projections.</p></div>
+  <div class="jalon" style="--c:var(--vert)"><time>9–24 nov.</time><b>Page et exports</b><p>Ortho en GeoTIFF, nouvelle charte, Enedis, réseaux, Géorisques, fenêtre « Données », Mes sources, export par couche, Trimble Connect.</p></div>
+</div>
+
+<!-- ───────────────────────── Chantiers ───────────────────────── -->
+<h2 id="todos">Chantiers ouverts</h2>
+<p class="sous">Pistes mesurées de CONTRIBUTING.md et écarts relevés en préparant cette page. Les cases se cochent et restent cochées dans ce navigateur (localStorage).</p>
+<div class="filtres" id="filtres-todo"></div>
+<div class="todos" id="liste-todos"></div>
+
+<!-- ───────────────────────── Méthode ───────────────────────── -->
+<h2 id="methode">D'où viennent les chiffres</h2>
+<p class="sous" style="max-width:860px">
+  Lignes : <code>wc -l vue3d/*.py</code>. Tests : nombre de <code>def test_</code> par fichier ; la suite
+  <code>pytest</code> lancée le 25 novembre 2026 donne <b>516 réussis, 25 sautés, 0 échec</b> en 18,5 s ; les 25 sauts
+  sont tous dans <code>tests/test_toits_rapides.py</code>, marqués « Stabilisation CI ». Apports du fork :
+  <code>git diff --numstat be88288 main</code> et <code>--diff-filter=A</code>. « Servi » : route dans <code>vue3d/app.py</code> ou appel depuis
+  <code>scene.py</code>. Le rendu de la page n'est pas couvert par pytest : il se vérifie par
+  <code>outils/essai-navigateur.mjs</code> et les scripts <code>verifier-*.mjs</code>. Cette page est statique :
+  après un changement d'architecture, ses tableaux <code>MODULES</code> et <code>TODOS</code> sont à mettre à jour à la main.
+</p>
+</main>
+<footer>Vue 3D IGN · documentation interne · générée à partir du dépôt, sans donnée personnelle</footer>
+
+<script>
+// groupe : acces | scene | couche | clic | orphelin | service
+// servi / doc : true, false ; tests : nombre de def test_ du fichier dédié (0 = aucun)
+const MODULES = [
+  { nom: 'geopf.py',        groupe: 'acces',   lignes: 270,  tests: 15, servi: true,  doc: true,  role: 'GET avec reprise, places partagées' },
+  { nom: 'tuiles.py',       groupe: 'acces',   lignes: 268,  tests: 17, servi: true,  doc: true,  role: 'tuiles WMTS, stock 90 jours' },
+  { nom: 'polygone.py',     groupe: 'acces',   lignes: 286,  tests: 23, servi: true,  doc: false, role: 'contour libre ?poly=' },
+  { nom: 'releves.py',      groupe: 'acces',   lignes: 363,  tests: 14, servi: true,  doc: true,  role: 'détections par rectangle' },
+
+  { nom: 'couches.py',      groupe: 'scene',   lignes: 89,   tests: 3,  servi: true,  doc: true,  role: 'lecture WFS' },
+  { nom: 'batiments.py',    groupe: 'scene',   lignes: 102,  tests: 6,  servi: true,  doc: true,  role: 'bâtiments découpés' },
+  { nom: 'mnh.py',          groupe: 'scene',   lignes: 248,  tests: 8,  servi: true,  doc: true,  role: 'sursol LiDAR HD' },
+  { nom: 'toits.py',        groupe: 'scene',   lignes: 1590, tests: 60, servi: true,  doc: true,  role: 'gouttière, faîtage, bassin' },
+  { nom: 'pans.py',         groupe: 'scene',   lignes: 812,  tests: 9,  servi: true,  doc: true,  role: 'toits en pans fermés' },
+  { nom: 'houppiers.py',    groupe: 'scene',   lignes: 809,  tests: 20, servi: true,  doc: true,  role: 'segmentation des arbres' },
+  { nom: 'constructions.py',groupe: 'scene',   lignes: 412,  tests: 22, servi: true,  doc: true,  role: 'réservoirs, ponctuels' },
+  { nom: 'ortho.py',        groupe: 'scene',   lignes: 227,  tests: 9,  servi: true,  doc: true,  role: 'ExG, mosaïque' },
+  { nom: 'relief.py',       groupe: 'scene',   lignes: 391,  tests: 9,  servi: true,  doc: true,  role: 'RGE ALTI, anneau' },
+  { nom: 'eau.py',          groupe: 'scene',   lignes: 167,  tests: 7,  servi: true,  doc: true,  role: 'étendues, cours d\'eau' },
+  { nom: 'lignes.py',       groupe: 'scene',   lignes: 103,  tests: 4,  servi: true,  doc: true,  role: 'lignes HT, supports' },
+
+  { nom: 'monuments.py',    groupe: 'couche',  lignes: 320,  tests: 13, servi: true,  doc: true,  role: 'OSM building:part' },
+  { nom: 'ouvrages.py',     groupe: 'couche',  lignes: 392,  tests: 13, servi: true,  doc: true,  role: 'murs, ponts, voies' },
+  { nom: 'emprises.py',     groupe: 'couche',  lignes: 185,  tests: 9,  servi: true,  doc: true,  role: 'aérodromes, postes, haies' },
+  { nom: 'nuage.py',        groupe: 'couche',  lignes: 585,  tests: 22, servi: true,  doc: true,  role: 'nuage LiDAR COPC' },
+  { nom: 'reseaux.py',      groupe: 'couche',  lignes: 84,   tests: 0,  servi: true,  doc: false, role: 'canalisations BD TOPO' },
+  { nom: 'postes_enedis.py',groupe: 'couche',  lignes: 126,  tests: 0,  servi: true,  doc: false, role: 'postes HTA/BT Enedis' },
+  { nom: 'vehicules.py',    groupe: 'couche',  lignes: 1081, tests: 49, servi: true,  doc: true,  role: 'ONNX, optionnel' },
+  { nom: 'panneaux.py',     groupe: 'couche',  lignes: 231,  tests: 7,  servi: true,  doc: true,  role: 'OpenPVMapper, optionnel' },
+  { nom: 'georisques.py',   groupe: 'couche',  lignes: 204,  tests: 10, servi: true,  doc: true,  role: 'TRI inondables' },
+
+  { nom: 'dpe.py',          groupe: 'clic',    lignes: 255,  tests: 8,  servi: true,  doc: true,  role: 'DPE ADEME' },
+  { nom: 'bornes.py',       groupe: 'clic',    lignes: 184,  tests: 5,  servi: true,  doc: true,  role: 'IRVE par station' },
+
+  { nom: 'dvf.py',          groupe: 'orphelin',lignes: 234,  tests: 7,  servi: false, doc: true,  role: 'ventes DVF, route retirée' },
+  { nom: 'foret.py',        groupe: 'orphelin',lignes: 95,   tests: 0,  servi: false, doc: false, role: 'BD Forêt v2 en couche' },
+  { nom: 'rpg.py',          groupe: 'orphelin',lignes: 99,   tests: 0,  servi: false, doc: false, role: 'parcelles RPG' },
+  { nom: 'chemins.py',      groupe: 'orphelin',lignes: 110,  tests: 0,  servi: false, doc: false, role: 'voies piétonnes, cyclables' },
+
+  { nom: 'app.py',          groupe: 'service', lignes: 1195, tests: 56, servi: true,  doc: true,  role: 'routes Flask, quota' },
+  { nom: 'scene.py',        groupe: 'service', lignes: 1726, tests: 63, servi: true,  doc: true,  role: 'assemblage, cache' },
+  { nom: 'sources.py',      groupe: 'service', lignes: 113,  tests: 0,  servi: true,  doc: true,  role: 'catalogue des sources' },
+];
+
+// git diff --numstat be88288 main -- vue3d : [lignes ajoutées, lignes retirées].
+// Absent = inchangé depuis le fork. NOUVEAUX = fichiers créés depuis (--diff-filter=A).
+const FORK = {
+  'app.py': [633, 49], 'batiments.py': [7, 1], 'bornes.py': [7, 1], 'chemins.py': [110, 0],
+  'dpe.py': [3, 2], 'eau.py': [8, 4], 'emprises.py': [185, 0], 'foret.py': [95, 0],
+  'georisques.py': [204, 0], 'houppiers.py': [10, 1], 'monuments.py': [30, 15], 'nuage.py': [10, 3],
+  'ouvrages.py': [2, 1], 'panneaux.py': [7, 2], 'polygone.py': [286, 0], 'postes_enedis.py': [126, 0],
+  'relief.py': [153, 5], 'reseaux.py': [84, 0], 'rpg.py': [99, 0], 'scene.py': [345, 62],
+  'sources.py': [113, 0], 'toits.py': [33, 7], 'vehicules.py': [11, 3],
+};
+const NOUVEAUX = new Set(['chemins.py', 'emprises.py', 'foret.py', 'georisques.py', 'polygone.py',
+                          'postes_enedis.py', 'reseaux.py', 'rpg.py', 'sources.py']);
+MODULES.forEach(m => {
+  m.nouveau = NOUVEAUX.has(m.nom);
+  m.fork = FORK[m.nom] || [0, 0];
+  // Tri : nouveaux d'abord, puis par volume de changement.
+  m.forkTri = (m.nouveau ? 1e6 : 0) + m.fork[0] + m.fork[1];
+});
+
+const GROUPES = {
+  acces: 'Accès réseau', scene: 'Scène', couche: 'Couche à part',
+  clic: 'À la demande', orphelin: 'Non servi', service: 'Service',
+};
+const COULEUR_GROUPE = {
+  acces: 'var(--bleu)', scene: 'var(--vert)', couche: 'var(--orange)',
+  clic: 'var(--violet)', orphelin: 'var(--rouge)', service: 'var(--jaune)',
+};
+
+const TODOS = [
+  { id: 'quota', p: 1, axe: 'Service', titre: 'Respecter les quotas de la Géoplateforme',
+    texte: 'Dans geopf.py : un débit maximal par service (≈ 25/s WFS, 35/s WMS) en plus des places, et attendre Retry-After sur un 429 au lieu des 3 s fixes. Tester sans réseau puis mesurer plusieurs scènes ensemble.' },
+  { id: 'toits-rapides', p: 1, axe: 'Tests', titre: 'Réactiver tests/test_toits_rapides.py',
+    texte: 'Ses 25 tests sont sautés (« Stabilisation CI ») depuis le 23 oct., après le fork. Ce sont eux qui garantissent qu\'un calcul plus rapide rend la même scène au bit près : l\'invariant n\'est plus vérifié.' },
+  { id: 'amont', p: 2, axe: 'Fork', titre: 'Examiner les 18 commits amont',
+    texte: 'upstream/main a avancé de 18 commits depuis be88288. Les passer en revue (git log main..upstream/main) et reprendre ceux qui corrigent la scène.' },
+  { id: 'orphelins', p: 1, axe: 'Cohérence', titre: 'Brancher ou retirer foret.py, rpg.py, chemins.py',
+    texte: 'Leur docstring et celle d\'app.py annoncent /api/foret, /api/rpg, /api/chemins, mais aucune route ni la page ne les appelle. Décider : les servir (avec tests) ou les supprimer.' },
+  { id: 'dvf', p: 2, axe: 'Cohérence', titre: 'Statuer sur dvf.py',
+    texte: 'La route /api/dvf a été retirée (« retirer DVF et cimetières », 21 nov.) mais le module et ses 7 tests restent, et CLAUDE.md liste encore /api/dvf.' },
+  { id: 'tests-couches', p: 2, axe: 'Tests', titre: 'Tester reseaux.py, postes_enedis.py et sources.py',
+    texte: 'Trois modules servis sans fichier de test dédié. postes_enedis lit une API paginée hors Géoplateforme : vérifier la pagination et l\'échec sans réseau.' },
+  { id: 'doc', p: 2, axe: 'Documentation', titre: 'Mettre à jour l\'architecture de CLAUDE.md',
+    texte: 'Absents : reseaux.py, postes_enedis.py, polygone.py, et les routes /api/reseaux, /api/postes_enedis, /api/connect/* (Trimble Connect).' },
+  { id: 'strasbourg', p: 2, axe: 'Toits', titre: 'Toits en pans à Strasbourg',
+    texte: '55 % passent en pans contre 87 % à Gordes ; douze refus prolongent un plan de plus de 2 m au-dessus des cellules mesurées. Inspection visuelle avant tout seuil.' },
+  { id: 'fermes', p: 2, axe: 'Toits', titre: 'Volumes en pans non fermés',
+    texte: 'Cinq toits refusés (quatre à Strasbourg, un à Gordes) parce que leur volume ne se ferme pas, avant ou après l\'arrondi. Cause à diagnostiquer.' },
+  { id: 'yolo', p: 3, axe: 'Performance', titre: 'Accélérer YOLO',
+    texte: '40 s en zone de 1 000 m sur CoreML. Piste : ne présenter que les tuiles proches d\'une route ou d\'un bâtiment — change le résultat, donc à mesurer.' },
+  { id: 'osm', p: 3, axe: 'Données', titre: 'Extrait OSM France des monuments',
+    texte: '134 446 building:part, 10 à 20 Mo compressé, publié en fichier de release : supprimerait l\'attente d\'Overpass hors des lieux d\'exemple.' },
+  { id: 'ponts', p: 3, axe: 'Données', titre: 'Ponts : piles, arches, voies portées',
+    texte: 'La BD TOPO ne décrit que le tablier. Dessiner à leur altitude les voies que porte un pont ; piste OSM bridge:structure pour les ouvrages remarquables.' },
+  { id: 'constructions', p: 3, axe: 'Données', titre: 'Constructions non dessinées',
+    texte: 'Éoliennes, croix et calvaires, murs de soutènement ; sphères de gaz et toits flottants non distingués des réservoirs cylindriques.' },
+  { id: 'tuyauterie', p: 3, axe: 'Végétation', titre: 'Tuyauterie des sites industriels',
+    texte: '2 660 houppiers et masses restent sur quatre parcs de stockage, surtout portiques et tuyaux ; la couche canalisation n\'en donne que l\'axe.' },
+  { id: 'falaises', p: 3, axe: 'Végétation', titre: 'Arbres des falaises',
+    texte: '7 houppiers de 42 à 60 m à Rocamadour. Plafond par essence ou pente du terrain sous le houppier, à mesurer.' },
+  { id: 'sous-arbres', p: 3, axe: 'Bâtiments', titre: 'Règle « bâtiments sous les arbres »',
+    texte: 'Trop sévère dans les tissus denses et arborés, où l\'orthophoto décale les feuillages sur les emprises voisines.' },
+  { id: 'lidar', p: 3, axe: 'Données', titre: 'Couverture LiDAR HD',
+    texte: '≈ 77 % des bâtiments couverts ; ailleurs le repli photogrammétrique lisse faîtages et cimes. Dépend de l\'IGN, à suivre.' },
+];
+
+const AXES = [
+  { nom: 'Scène 3D (bâti, toits, arbres)', pct: 85, coul: 'var(--vert)',  note: 'Toits en pans 87 % à Gordes, 55 % à Strasbourg ; falaises et tissus arborés à reprendre.' },
+  { nom: 'Couches à part',                 pct: 80, coul: 'var(--orange)',note: '11 couches servies ; 3 modules écrits mais non branchés (forêt, RPG, chemins).' },
+  { nom: 'Exports BIM et SIG',             pct: 90, coul: 'var(--vert)',  note: 'IFC 4, CityGML 2.0, GeoTIFF, par couche, projections vérifiées contre pyproj.' },
+  { nom: 'Robustesse du service',          pct: 70, coul: 'var(--jaune)', note: 'Reprise et places en place ; débit par service et Retry-After encore à faire.' },
+  { nom: 'Tests et vérification',          pct: 82, coul: 'var(--bleu)',  note: '516 tests verts, mais 25 tests des toits rapides sautés ; 6 modules sans test dédié ; rendu vérifié hors pytest.' },
+  { nom: 'Documentation',                  pct: 78, coul: 'var(--violet)',note: 'README, CONTRIBUTING, CHANGELOG riches ; CLAUDE.md en retard sur novembre.' },
+];
+
+const score = m => Math.round(100 * ((m.servi ? 1 : 0) + (m.tests > 0 ? 1 : 0) + (m.doc ? 1 : 0)) / 3);
+MODULES.forEach(m => m.score = score(m));
+const couleurScore = s => s >= 100 ? 'var(--vert)' : s >= 66 ? 'var(--jaune)' : 'var(--rouge)';
+const fmt = n => n.toLocaleString('fr-FR');
+const el = (tag, attrs = {}, html = '') => Object.assign(document.createElement(tag), attrs, { innerHTML: html });
+
+// Indicateurs
+(() => {
+  const lignesPy = MODULES.reduce((s, m) => s + m.lignes, 0);
+  const servis = MODULES.filter(m => m.servi).length;
+  const moyen = Math.round(MODULES.reduce((s, m) => s + m.score, 0) / MODULES.length);
+  const ouverts = TODOS.length;
+  const kpis = [
+    [MODULES.length, 'modules Python'],
+    [fmt(lignesPy), 'lignes Python'],
+    ['16 368', 'lignes de la page'],
+    [`${servis}/${MODULES.length}`, 'modules servis'],
+    [`${moyen} %`, 'complétude moyenne'],
+    ['516 ✓', 'tests réussis · 0 échec · 25 sautés (toits rapides)'],
+    ['v16', 'format de la scène'],
+    [ouverts, 'chantiers ouverts'],
+  ];
+  const zone = document.getElementById('kpis');
+  kpis.forEach(([v, l]) => zone.append(el('div', { className: 'kpi' }, `<b>${v}</b><span>${l}</span>`)));
+})();
+
+// Depuis le fork : indicateurs et barres de changement
+(() => {
+  const nouveaux = MODULES.filter(m => m.nouveau);
+  const retouches = MODULES.filter(m => !m.nouveau && m.fork[0] + m.fork[1] > 0);
+  const plus = MODULES.reduce((s, m) => s + m.fork[0], 0);
+  const moins = MODULES.reduce((s, m) => s + m.fork[1], 0);
+  const lignesNeuves = nouveaux.reduce((s, m) => s + m.lignes, 0);
+  const kpis = [
+    ['74', 'commits depuis le fork'],
+    [`${nouveaux.length}`, 'modules Python ajoutés'],
+    [fmt(lignesNeuves), 'lignes dans ces modules'],
+    [`${retouches.length}`, 'modules retouchés'],
+    [`<span class="fork-plus">+${fmt(plus)}</span> <span class="fork-moins">−${fmt(moins)}</span>`, 'lignes Python'],
+    ['<span class="fork-plus">+5 401</span> <span class="fork-moins">−482</span>', 'lignes de la page'],
+    ['3 + 1', 'fichiers de test et outil ajoutés'],
+    ['18', 'commits amont non repris'],
+  ];
+  const zone = document.getElementById('kpis-fork');
+  kpis.forEach(([v, l]) => {
+    const k = el('div', { className: 'kpi' }, `<b>${v}</b><span>${l}</span>`);
+    k.style.borderTop = '3px solid var(--rose)';
+    zone.append(k);
+  });
+
+  const max = Math.max(...MODULES.map(m => m.fork[0] + m.fork[1]));
+  const deltas = document.getElementById('deltas');
+  MODULES.filter(m => m.fork[0] + m.fork[1] > 0)
+    .sort((a, b) => (b.fork[0] + b.fork[1]) - (a.fork[0] + a.fork[1]))
+    .forEach(m => {
+      const [p, n] = m.fork;
+      deltas.append(el('div', {}, `
+        <div style="display:flex;justify-content:space-between"><span><code>${m.nom}</code>${m.nouveau ? ' <b class="neuf-txt" style="font-size:11px">NOUVEAU</b>' : ''}</span>
+        <span><span class="fork-plus">+${p}</span> <span class="fork-moins">−${n}</span></span></div>
+        <div class="delta"><div style="width:${100 * p / max}%;background:${m.nouveau ? 'var(--rose)' : 'var(--vert)'}"></div><div style="width:${100 * n / max}%;background:var(--rouge)"></div></div>`));
+    });
+})();
+
+// Schéma
+document.querySelectorAll('[data-groupe]').forEach(zone => {
+  MODULES.filter(m => m.groupe === zone.dataset.groupe).forEach(m => {
+    const [plus, moins] = m.fork;
+    const retouche = !m.nouveau && plus + moins >= 20;
+    const b = el('div', {
+      className: 'boite' + (m.servi ? '' : ' off') + (m.nouveau ? ' neuf' : retouche ? ' modif' : ''),
+      title: `${m.nom} — ${fmt(m.lignes)} lignes, ${m.tests} tests, complétude ${m.score} %`
+        + (m.nouveau ? ' — ajouté depuis le fork' : plus + moins ? ` — +${plus}/−${moins} depuis le fork` : ' — inchangé depuis le fork'),
+    }, `<b>${m.nom}</b><small>${m.role}</small>`);
+    if (retouche) b.dataset.delta = `+${plus}/−${moins}`;
+    b.style.setProperty('--c', COULEUR_GROUPE[m.groupe]);
+    zone.append(b);
+  });
+});
+
+// Tableau de complétude
+let filtre = 'tous', tri = { cle: 'groupe', sens: 1 };
+const ordreGroupe = Object.keys(GROUPES);
+function rendreTable() {
+  const corps = document.querySelector('#table tbody');
+  corps.innerHTML = '';
+  const garde = m => filtre === 'tous' ? true : filtre === 'incomplet' ? m.score < 100
+    : filtre === 'nouveau' ? m.nouveau : filtre === 'retouche' ? !m.nouveau && m.fork[0] + m.fork[1] > 0
+    : m.groupe === filtre;
+  const lignes = MODULES.filter(garde)
+    .sort((a, b) => {
+      const k = tri.cle;
+      const va = k === 'groupe' ? ordreGroupe.indexOf(a.groupe) : a[k];
+      const vb = k === 'groupe' ? ordreGroupe.indexOf(b.groupe) : b[k];
+      return (va > vb ? 1 : va < vb ? -1 : a.nom.localeCompare(b.nom)) * tri.sens;
+    });
+  const coche = v => v ? '<span class="ok">✔</span>' : '<span class="ko">✘</span>';
+  const celluleFork = m => m.nouveau ? '<span class="pastille" style="background:var(--rose);color:#2a0b1c;font-weight:700">NOUVEAU</span>'
+    : m.fork[0] + m.fork[1] ? `<span class="fork-plus">+${m.fork[0]}</span> <span class="fork-moins">−${m.fork[1]}</span>`
+    : '<span style="color:var(--pale)">inchangé</span>';
+  lignes.forEach(m => corps.append(el('tr', m.nouveau ? { style: 'background:rgba(255,111,181,.06)' } : {}, `
+    <td><code>${m.nom}</code></td>
+    <td><span class="pastille" style="color:${COULEUR_GROUPE[m.groupe]}">${GROUPES[m.groupe]}</span> <small style="color:var(--pale)">${m.role}</small></td>
+    <td class="num">${fmt(m.lignes)}</td>
+    <td class="num">${m.tests || '<span class="ko">0</span>'}</td>
+    <td style="white-space:nowrap">${celluleFork(m)}</td>
+    <td>${coche(m.servi)}</td><td>${coche(m.tests > 0)}</td><td>${coche(m.doc)}</td>
+    <td><div style="display:flex;gap:8px;align-items:center"><div class="barre" style="flex:1"><div style="width:${m.score}%;background:${couleurScore(m.score)}"></div></div><b style="min-width:48px;text-align:right;white-space:nowrap">${m.score} %</b></div></td>`)));
+}
+(() => {
+  const zone = document.getElementById('filtres');
+  const compte = {
+    tous: MODULES.length,
+    incomplet: MODULES.filter(m => m.score < 100).length,
+    nouveau: MODULES.filter(m => m.nouveau).length,
+    retouche: MODULES.filter(m => !m.nouveau && m.fork[0] + m.fork[1] > 0).length,
+  };
+  [['tous', 'Tous'], ['nouveau', '★ Ajoutés depuis le fork'], ['retouche', 'Retouchés'], ['incomplet', 'Incomplets'],
+   ...Object.entries(GROUPES)].forEach(([cle, lib]) => {
+    const n = cle in compte ? compte[cle] : MODULES.filter(m => m.groupe === cle).length;
+    const b = el('button', { type: 'button', className: cle === filtre ? 'actif' : '' }, `${lib} (${n})`);
+    b.onclick = () => { filtre = cle; zone.querySelectorAll('button').forEach(x => x.classList.remove('actif')); b.classList.add('actif'); rendreTable(); };
+    zone.append(b);
+  });
+  document.querySelectorAll('#table th[data-cle]').forEach(th => th.onclick = () => {
+    const cle = th.dataset.cle;
+    tri = { cle, sens: tri.cle === cle ? -tri.sens : (cle === 'nom' || cle === 'groupe' ? 1 : -1) };
+    // forkTri, lignes, tests, score : du plus grand au plus petit au premier clic.
+    rendreTable();
+  });
+  rendreTable();
+})();
+
+// Axes d'avancement
+(() => {
+  const zone = document.getElementById('axes');
+  AXES.forEach(a => zone.append(el('div', { className: 'axe' }, `
+    <h4><span>${a.nom}</span><span style="color:${a.coul}">${a.pct} %</span></h4>
+    <div class="barre"><div style="width:${a.pct}%;background:${a.coul}"></div></div>
+    <p>${a.note}</p>`)));
+})();
+
+// Chantiers
+(() => {
+  const CLE = 'vue3d-architecture-todos';
+  let faits = {};
+  try { faits = JSON.parse(localStorage.getItem(CLE)) || {}; } catch { faits = {}; }
+  const zone = document.getElementById('liste-todos');
+  const filtres = document.getElementById('filtres-todo');
+  let prio = 0;
+  const libPrio = { 1: 'Priorité haute', 2: 'Priorité moyenne', 3: 'À mesurer' };
+  function rendre() {
+    zone.innerHTML = '';
+    TODOS.filter(t => !prio || t.p === prio).sort((a, b) => a.p - b.p).forEach(t => {
+      const carte = el('div', { className: 'todo' + (faits[t.id] ? ' fait' : '') }, `
+        <label><input type="checkbox" ${faits[t.id] ? 'checked' : ''}><span class="titre">${t.titre}</span></label>
+        <p>${t.texte}</p>
+        <div class="etiq"><span class="pastille p${t.p}">${libPrio[t.p]}</span><span class="pastille">${t.axe}</span></div>`);
+      carte.querySelector('input').onchange = e => {
+        faits[t.id] = e.target.checked;
+        try { localStorage.setItem(CLE, JSON.stringify(faits)); } catch {}
+        carte.classList.toggle('fait', e.target.checked);
+        majFiltres();
+      };
+      zone.append(carte);
+    });
+  }
+  function majFiltres() {
+    filtres.innerHTML = '';
+    const restants = TODOS.filter(t => !faits[t.id]).length;
+    [[0, `Tous (${restants}/${TODOS.length} ouverts)`], [1, libPrio[1]], [2, libPrio[2]], [3, libPrio[3]]].forEach(([p, lib]) => {
+      const b = el('button', { type: 'button', className: p === prio ? 'actif' : '' }, lib);
+      b.onclick = () => { prio = p; majFiltres(); rendre(); };
+      filtres.append(b);
+    });
+  }
+  majFiltres(); rendre();
+})();
+</script>
+</body>
+</html>
