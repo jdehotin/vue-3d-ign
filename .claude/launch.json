@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "vue3d-flask",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "flask", "--app", "vue3d.app", "run", "--port", "8080"],
+      "port": 8080
+    }
+  ]
+}
