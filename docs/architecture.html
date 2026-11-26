@@ -114,7 +114,7 @@
 <body>
 <header>
   <h1>Vue 3D <span>IGN</span> — architecture</h1>
-  <p>Modules, apports depuis le fork, complétude, avancement et chantiers ouverts · état du dépôt au 25 novembre 2026 (commit <code>43bc599</code>, scène v16)</p>
+  <p>Modules, apports depuis le fork, complétude, avancement et chantiers ouverts · état du dépôt au 26 novembre 2026 (scène v16)</p>
 </header>
 <nav>
   <a href="#synthese">Synthèse</a><a href="#fork">Depuis le fork</a><a href="#schema">Schéma</a><a href="#completude">Complétude</a>
@@ -124,7 +124,7 @@
 
 <!-- ───────────────────────── Synthèse ───────────────────────── -->
 <h2 id="synthese">Synthèse</h2>
-<p class="sous">Chiffres relevés dans le dépôt, pas estimés.</p>
+<p class="sous">Chiffres relevés dans le dépôt, pas estimés. Relevés le 26 novembre 2026.</p>
 <div class="kpis" id="kpis"></div>
 
 <!-- ───────────────────────── Depuis le fork ───────────────────────── -->
@@ -141,7 +141,7 @@
     <li>Canalisations BD TOPO (<code>reseaux.py</code>)</li>
     <li>Postes HTA/BT Enedis (<code>postes_enedis.py</code>)</li>
     <li>Surfaces inondables des TRI (<code>georisques.py</code>)</li>
-    <li>BD Forêt, RPG, chemins : écrits, pas encore servis</li></ul></div>
+</ul></div>
   <div class="apport"><h4>Zone et service</h4><ul>
     <li>Contour libre <code>?poly=</code> au lieu du carré (<code>polygone.py</code>)</li>
     <li>Relief LiDAR HD selon la source du RGE ALTI (<code>relief.py</code> +153)</li>
@@ -164,15 +164,16 @@
     <li>Nouvelle charte : orange, vert, fond bleu ; panneau en accordéon</li>
     <li><code>index.html</code> : +5 401 / −482 lignes</li></ul></div>
   <div class="apport"><h4>Retiré ou mis de côté</h4><ul>
-    <li>Route <code>/api/dvf</code> et couche des cimetières retirées</li>
+    <li>DVF, cimetières, BD Forêt, RPG et chemins retirés ; leurs modules supprimés le 25 nov.</li>
     <li>Géorisques réduit aux surfaces inondables des TRI</li>
     <li>Tests de <code>test_toits_rapides.py</code> sautés (« Stabilisation CI »)</li>
-    <li>18 commits amont non repris depuis le fork</li></ul></div>
+    <li><code>dvf.py</code>, module du dépôt amont, supprimé (−234 lignes)</li>
+    <li>84 commits amont non repris depuis le fork (relevé le 26 nov.)</li></ul></div>
 </div>
 
 <!-- ───────────────────────── Schéma ───────────────────────── -->
 <h2 id="schema">Schéma de l'application</h2>
-<p class="sous">Du service de données au navigateur. Survolez un module pour sa taille et ses tests ; en pointillé, les modules présents mais non servis.</p>
+<p class="sous">Du service de données au navigateur. Survolez un module pour sa taille et ses tests.</p>
 
 <div class="etage">
   <h3>Sources externes <em>— données ouvertes, sans clé d'API</em></h3>
@@ -207,8 +208,6 @@
   <div class="etage">
     <h3>À la demande <em>— lues au clic</em></h3>
     <div class="boites" data-groupe="clic"></div>
-    <h3 style="margin-top:14px">Non servis <em>— modules orphelins</em></h3>
-    <div class="boites" data-groupe="orphelin"></div>
   </div>
 </div>
 <div class="fleche">assemblage · cache <code>cache/v16/…</code> · quota de scènes neuves par IP</div>
@@ -277,7 +276,7 @@
 <h2 id="methode">D'où viennent les chiffres</h2>
 <p class="sous" style="max-width:860px">
   Lignes : <code>wc -l vue3d/*.py</code>. Tests : nombre de <code>def test_</code> par fichier ; la suite
-  <code>pytest</code> lancée le 25 novembre 2026 donne <b>516 réussis, 25 sautés, 0 échec</b> en 18,5 s ; les 25 sauts
+  <code>pytest</code> relancée le 26 novembre 2026, après la suppression des couches retirées, donne <b>534 réussis, 25 sautés, 0 échec</b> en 17,4 s ; les 25 sauts
   sont tous dans <code>tests/test_toits_rapides.py</code>, marqués « Stabilisation CI ». Apports du fork :
   <code>git diff --numstat be88288 main</code> et <code>--diff-filter=A</code>. « Servi » : route dans <code>vue3d/app.py</code> ou appel depuis
   <code>scene.py</code>. Le rendu de la page n'est pas couvert par pytest : il se vérifie par
@@ -288,12 +287,12 @@
 <footer>Vue 3D IGN · documentation interne · générée à partir du dépôt, sans donnée personnelle</footer>
 
 <script>
-// groupe : acces | scene | couche | clic | orphelin | service
+// groupe : acces | scene | couche | clic | service
 // servi / doc : true, false ; tests : nombre de def test_ du fichier dédié (0 = aucun)
 const MODULES = [
   { nom: 'geopf.py',        groupe: 'acces',   lignes: 270,  tests: 15, servi: true,  doc: true,  role: 'GET avec reprise, places partagées' },
   { nom: 'tuiles.py',       groupe: 'acces',   lignes: 268,  tests: 17, servi: true,  doc: true,  role: 'tuiles WMTS, stock 90 jours' },
-  { nom: 'polygone.py',     groupe: 'acces',   lignes: 286,  tests: 23, servi: true,  doc: false, role: 'contour libre ?poly=' },
+  { nom: 'polygone.py',     groupe: 'acces',   lignes: 286,  tests: 23, servi: true,  doc: true,  role: 'contour libre ?poly=' },
   { nom: 'releves.py',      groupe: 'acces',   lignes: 363,  tests: 14, servi: true,  doc: true,  role: 'détections par rectangle' },
 
   { nom: 'couches.py',      groupe: 'scene',   lignes: 89,   tests: 3,  servi: true,  doc: true,  role: 'lecture WFS' },
@@ -312,8 +311,8 @@ const MODULES = [
   { nom: 'ouvrages.py',     groupe: 'couche',  lignes: 392,  tests: 13, servi: true,  doc: true,  role: 'murs, ponts, voies' },
   { nom: 'emprises.py',     groupe: 'couche',  lignes: 185,  tests: 9,  servi: true,  doc: true,  role: 'aérodromes, postes, haies' },
   { nom: 'nuage.py',        groupe: 'couche',  lignes: 585,  tests: 22, servi: true,  doc: true,  role: 'nuage LiDAR COPC' },
-  { nom: 'reseaux.py',      groupe: 'couche',  lignes: 84,   tests: 0,  servi: true,  doc: false, role: 'canalisations BD TOPO' },
-  { nom: 'postes_enedis.py',groupe: 'couche',  lignes: 126,  tests: 0,  servi: true,  doc: false, role: 'postes HTA/BT Enedis' },
+  { nom: 'reseaux.py',      groupe: 'couche',  lignes: 84,   tests: 7,  servi: true,  doc: true,  role: 'canalisations BD TOPO' },
+  { nom: 'postes_enedis.py',groupe: 'couche',  lignes: 137,  tests: 13, servi: true,  doc: true,  role: 'postes HTA/BT Enedis' },
   { nom: 'vehicules.py',    groupe: 'couche',  lignes: 1081, tests: 49, servi: true,  doc: true,  role: 'ONNX, optionnel' },
   { nom: 'panneaux.py',     groupe: 'couche',  lignes: 231,  tests: 7,  servi: true,  doc: true,  role: 'OpenPVMapper, optionnel' },
   { nom: 'georisques.py',   groupe: 'couche',  lignes: 204,  tests: 10, servi: true,  doc: true,  role: 'TRI inondables' },
@@ -321,28 +320,24 @@ const MODULES = [
   { nom: 'dpe.py',          groupe: 'clic',    lignes: 255,  tests: 8,  servi: true,  doc: true,  role: 'DPE ADEME' },
   { nom: 'bornes.py',       groupe: 'clic',    lignes: 184,  tests: 5,  servi: true,  doc: true,  role: 'IRVE par station' },
 
-  { nom: 'dvf.py',          groupe: 'orphelin',lignes: 234,  tests: 7,  servi: false, doc: true,  role: 'ventes DVF, route retirée' },
-  { nom: 'foret.py',        groupe: 'orphelin',lignes: 95,   tests: 0,  servi: false, doc: false, role: 'BD Forêt v2 en couche' },
-  { nom: 'rpg.py',          groupe: 'orphelin',lignes: 99,   tests: 0,  servi: false, doc: false, role: 'parcelles RPG' },
-  { nom: 'chemins.py',      groupe: 'orphelin',lignes: 110,  tests: 0,  servi: false, doc: false, role: 'voies piétonnes, cyclables' },
 
   { nom: 'app.py',          groupe: 'service', lignes: 1195, tests: 56, servi: true,  doc: true,  role: 'routes Flask, quota' },
-  { nom: 'scene.py',        groupe: 'service', lignes: 1726, tests: 63, servi: true,  doc: true,  role: 'assemblage, cache' },
-  { nom: 'sources.py',      groupe: 'service', lignes: 113,  tests: 0,  servi: true,  doc: true,  role: 'catalogue des sources' },
+  { nom: 'scene.py',        groupe: 'service', lignes: 1727, tests: 63, servi: true,  doc: true,  role: 'assemblage, cache' },
+  { nom: 'sources.py',      groupe: 'service', lignes: 113,  tests: 8,  servi: true,  doc: true,  role: 'catalogue des sources' },
 ];
 
 // git diff --numstat be88288 main -- vue3d : [lignes ajoutées, lignes retirées].
 // Absent = inchangé depuis le fork. NOUVEAUX = fichiers créés depuis (--diff-filter=A).
 const FORK = {
-  'app.py': [633, 49], 'batiments.py': [7, 1], 'bornes.py': [7, 1], 'chemins.py': [110, 0],
-  'dpe.py': [3, 2], 'eau.py': [8, 4], 'emprises.py': [185, 0], 'foret.py': [95, 0],
+  'app.py': [633, 49], 'batiments.py': [7, 1], 'bornes.py': [7, 1],
+  'dpe.py': [3, 2], 'eau.py': [8, 4], 'emprises.py': [183, 0],
   'georisques.py': [204, 0], 'houppiers.py': [10, 1], 'monuments.py': [30, 15], 'nuage.py': [10, 3],
-  'ouvrages.py': [2, 1], 'panneaux.py': [7, 2], 'polygone.py': [286, 0], 'postes_enedis.py': [126, 0],
-  'relief.py': [153, 5], 'reseaux.py': [84, 0], 'rpg.py': [99, 0], 'scene.py': [345, 62],
+  'ouvrages.py': [2, 1], 'panneaux.py': [7, 2], 'polygone.py': [286, 0], 'postes_enedis.py': [137, 0],
+  'relief.py': [153, 5], 'reseaux.py': [84, 0], 'scene.py': [346, 62],
   'sources.py': [113, 0], 'toits.py': [33, 7], 'vehicules.py': [11, 3],
 };
-const NOUVEAUX = new Set(['chemins.py', 'emprises.py', 'foret.py', 'georisques.py', 'polygone.py',
-                          'postes_enedis.py', 'reseaux.py', 'rpg.py', 'sources.py']);
+const NOUVEAUX = new Set(['emprises.py', 'georisques.py', 'polygone.py', 'postes_enedis.py',
+                          'reseaux.py', 'sources.py']);
 MODULES.forEach(m => {
   m.nouveau = NOUVEAUX.has(m.nom);
   m.fork = FORK[m.nom] || [0, 0];
@@ -352,28 +347,22 @@ MODULES.forEach(m => {
 
 const GROUPES = {
   acces: 'Accès réseau', scene: 'Scène', couche: 'Couche à part',
-  clic: 'À la demande', orphelin: 'Non servi', service: 'Service',
+  clic: 'À la demande', service: 'Service',
 };
 const COULEUR_GROUPE = {
   acces: 'var(--bleu)', scene: 'var(--vert)', couche: 'var(--orange)',
-  clic: 'var(--violet)', orphelin: 'var(--rouge)', service: 'var(--jaune)',
+  clic: 'var(--violet)', service: 'var(--jaune)',
 };
 
 const TODOS = [
+  { id: 'demo-video', p: 3, axe: 'Outils', titre: 'Refaire les films DVF de demo-video.mjs',
+    texte: 'Les films « foncier » et « dpe-dvf » cliquent t-dvf, bouton retiré : ils échouent. Les recentrer sur le DPE (et les bornes) ou les retirer, README compris.' },
   { id: 'quota', p: 1, axe: 'Service', titre: 'Respecter les quotas de la Géoplateforme',
     texte: 'Dans geopf.py : un débit maximal par service (≈ 25/s WFS, 35/s WMS) en plus des places, et attendre Retry-After sur un 429 au lieu des 3 s fixes. Tester sans réseau puis mesurer plusieurs scènes ensemble.' },
   { id: 'toits-rapides', p: 1, axe: 'Tests', titre: 'Réactiver tests/test_toits_rapides.py',
     texte: 'Ses 25 tests sont sautés (« Stabilisation CI ») depuis le 23 oct., après le fork. Ce sont eux qui garantissent qu\'un calcul plus rapide rend la même scène au bit près : l\'invariant n\'est plus vérifié.' },
-  { id: 'amont', p: 2, axe: 'Fork', titre: 'Examiner les 18 commits amont',
-    texte: 'upstream/main a avancé de 18 commits depuis be88288. Les passer en revue (git log main..upstream/main) et reprendre ceux qui corrigent la scène.' },
-  { id: 'orphelins', p: 1, axe: 'Cohérence', titre: 'Brancher ou retirer foret.py, rpg.py, chemins.py',
-    texte: 'Leur docstring et celle d\'app.py annoncent /api/foret, /api/rpg, /api/chemins, mais aucune route ni la page ne les appelle. Décider : les servir (avec tests) ou les supprimer.' },
-  { id: 'dvf', p: 2, axe: 'Cohérence', titre: 'Statuer sur dvf.py',
-    texte: 'La route /api/dvf a été retirée (« retirer DVF et cimetières », 21 nov.) mais le module et ses 7 tests restent, et CLAUDE.md liste encore /api/dvf.' },
-  { id: 'tests-couches', p: 2, axe: 'Tests', titre: 'Tester reseaux.py, postes_enedis.py et sources.py',
-    texte: 'Trois modules servis sans fichier de test dédié. postes_enedis lit une API paginée hors Géoplateforme : vérifier la pagination et l\'échec sans réseau.' },
-  { id: 'doc', p: 2, axe: 'Documentation', titre: 'Mettre à jour l\'architecture de CLAUDE.md',
-    texte: 'Absents : reseaux.py, postes_enedis.py, polygone.py, et les routes /api/reseaux, /api/postes_enedis, /api/connect/* (Trimble Connect).' },
+  { id: 'amont', p: 2, axe: 'Fork', titre: 'Examiner les 84 commits amont',
+    texte: 'upstream/main a avancé de 84 commits depuis be88288 (18 le 25 nov., 84 le 26 nov.), un écart qui se creuse vite. Les passer en revue (git log main..upstream/main) et reprendre ceux qui corrigent la scène.' },
   { id: 'strasbourg', p: 2, axe: 'Toits', titre: 'Toits en pans à Strasbourg',
     texte: '55 % passent en pans contre 87 % à Gordes ; douze refus prolongent un plan de plus de 2 m au-dessus des cellules mesurées. Inspection visuelle avant tout seuil.' },
   { id: 'fermes', p: 2, axe: 'Toits', titre: 'Volumes en pans non fermés',
@@ -398,11 +387,11 @@ const TODOS = [
 
 const AXES = [
   { nom: 'Scène 3D (bâti, toits, arbres)', pct: 85, coul: 'var(--vert)',  note: 'Toits en pans 87 % à Gordes, 55 % à Strasbourg ; falaises et tissus arborés à reprendre.' },
-  { nom: 'Couches à part',                 pct: 80, coul: 'var(--orange)',note: '11 couches servies ; 3 modules écrits mais non branchés (forêt, RPG, chemins).' },
+  { nom: 'Couches à part',                 pct: 90, coul: 'var(--orange)',note: 'Toutes servies et testées ; plus de code mort des couches retirées.' },
   { nom: 'Exports BIM et SIG',             pct: 90, coul: 'var(--vert)',  note: 'IFC 4, CityGML 2.0, GeoTIFF, par couche, projections vérifiées contre pyproj.' },
   { nom: 'Robustesse du service',          pct: 70, coul: 'var(--jaune)', note: 'Reprise et places en place ; débit par service et Retry-After encore à faire.' },
-  { nom: 'Tests et vérification',          pct: 82, coul: 'var(--bleu)',  note: '516 tests verts, mais 25 tests des toits rapides sautés ; 6 modules sans test dédié ; rendu vérifié hors pytest.' },
-  { nom: 'Documentation',                  pct: 78, coul: 'var(--violet)',note: 'README, CONTRIBUTING, CHANGELOG riches ; CLAUDE.md en retard sur novembre.' },
+  { nom: 'Tests et vérification',          pct: 82, coul: 'var(--bleu)',  note: '534 tests verts, mais 25 tests des toits rapides sautés ; chaque module a ses tests ; rendu vérifié hors pytest.' },
+  { nom: 'Documentation',                  pct: 85, coul: 'var(--violet)',note: 'README, CLAUDE.md et CHANGELOG à jour des couches ; demo-video.mjs décrit encore les films DVF.' },
 ];
 
 const score = m => Math.round(100 * ((m.servi ? 1 : 0) + (m.tests > 0 ? 1 : 0) + (m.doc ? 1 : 0)) / 3);
@@ -423,7 +412,7 @@ const el = (tag, attrs = {}, html = '') => Object.assign(document.createElement(
     ['16 368', 'lignes de la page'],
     [`${servis}/${MODULES.length}`, 'modules servis'],
     [`${moyen} %`, 'complétude moyenne'],
-    ['516 ✓', 'tests réussis · 0 échec · 25 sautés (toits rapides)'],
+    ['534 ✓', 'tests réussis · 0 échec · 25 sautés (toits rapides)'],
     ['v16', 'format de la scène'],
     [ouverts, 'chantiers ouverts'],
   ];
@@ -445,8 +434,8 @@ const el = (tag, attrs = {}, html = '') => Object.assign(document.createElement(
     [`${retouches.length}`, 'modules retouchés'],
     [`<span class="fork-plus">+${fmt(plus)}</span> <span class="fork-moins">−${fmt(moins)}</span>`, 'lignes Python'],
     ['<span class="fork-plus">+5 401</span> <span class="fork-moins">−482</span>', 'lignes de la page'],
-    ['3 + 1', 'fichiers de test et outil ajoutés'],
-    ['18', 'commits amont non repris'],
+    ['6 + 1', 'fichiers de test et outil ajoutés'],
+    ['84', 'commits amont non repris'],
   ];
   const zone = document.getElementById('kpis-fork');
   kpis.forEach(([v, l]) => {

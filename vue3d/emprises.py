@@ -1,5 +1,5 @@
-"""Emprises de la BD TOPO au sol : cimetières, aérodromes et leurs pistes,
-postes de transformation, et les haies qui s'y dressent.
+"""Emprises de la BD TOPO au sol : aérodromes et leurs pistes, postes de
+transformation, et les haies qui s'y dressent.
 
 Une couche à part de la scène, comme les ouvrages (vue3d/ouvrages.py) : la vue
 la demande une fois la scène affichée, elle a sa propre version
@@ -7,9 +7,10 @@ la demande une fois la scène affichée, elle a sa propre version
 calcul de la scène — ni toit, ni houppier. La liste des couches lues est donc
 indépendante de celle des ouvrages, et l'une peut changer sans refaire l'autre.
 
-Cinq couches, lues sur l'emprise de la scène et découpées sur elle :
+Quatre couches, lues sur l'emprise de la scène et découpées sur elle (les
+cimetières en ont été retirés le 21 novembre 2026) :
 
-- `cimetiere`, `aerodrome`, `piste_d_aerodrome`, `poste_de_transformation` :
+- `aerodrome`, `piste_d_aerodrome`, `poste_de_transformation` :
   des emprises, en aplats drapés sur le relief ;
 - `haie` : des lignes, dressées en volume.
 
@@ -29,13 +30,10 @@ haut, épaisse de 1,5 m. C'est l'ordre de grandeur d'une haie taillée de jardin
 de bord de champ.
 
 **Rien de tout cela au centre-ville.** Sur la même emprise d'un kilomètre carré
-autour de la place Broglie, à Strasbourg, la couche ne trouve qu'un cimetière,
-aucun aérodrome et aucune haie : elle se voit donc surtout en périphérie et à la
-campagne, et une scène qui n'en porte pas ne montre aucun de ses boutons.
-
-**Un cimetière militaire ou civil.** La BD TOPO distingue les deux (`nature`) ;
-la vue les teinte différemment, comme un monument militaire se lit sur une
-carte. L'emprise, elle, reste un aplat de terrain clos.
+autour de la place Broglie, à Strasbourg, la couche ne trouvait qu'un
+cimetière, aucun aérodrome et aucune haie : elle se voit donc surtout en
+périphérie et à la campagne, et une scène qui n'en porte pas ne montre aucun de
+ses boutons.
 
 Ce que la couche ne dessine pas : les emprises « en projet » et « en
 construction », et les objets `fictif` — la même règle que les ouvrages.

@@ -66,12 +66,17 @@ En conteneur : `docker compose up -d --build`, sur le port 8080 (ou
 flowchart LR
     P["Page<br/>static/index.html<br/>three.js"] -->|"GET /api/scene"| A["app.py<br/>Flask"]
     P -.->|"GET /api/avancement<br/>toutes les 0,5 s"| A
-    P -.->|"GET /api/monuments<br/>GET /api/ouvrages<br/>GET /api/nuage<br/>après la scène"| A
+    P -.->|"après la scène : monuments, ouvrages,<br/>emprises, réseaux, postes Enedis, nuage,<br/>Géorisques, détections, panneaux"| A
+    P -.->|"au clic : DPE, bornes"| A
+    P -.->|"GET /api/sources<br/>fenêtre « Données »"| A
+    P <-.->|"jeton, emprise, dépôt<br/>/api/connect/*"| TC[("Trimble Connect")]
+    A -.-> TC
     A --> C{"Cache<br/>scene.py"}
-    C -->|"déjà construite"| D[("cache/vN/lat_lon/<br/>scene.json.gz · ortho.jpg<br/>monuments.json.gz<br/>ouvrages-vM.json.gz<br/>nuage-vM.json.gz")]
+    C -->|"déjà construite"| D[("cache/vN/lat_lon/<br/>(ou _poly-clé)<br/>scene.json.gz · ortho.jpg<br/>une couche à part<br/>par fichier versionné")]
     C -->|"absente : verrou par point"| B["construire()<br/>16 lectures ensemble"]
     C -.->|"tâche de fond"| OSM[("Overpass<br/>OpenStreetMap")]
-    C -.->|"tâche de fond :<br/>ouvrages"| G
+    C -.->|"tâche de fond :<br/>ouvrages, emprises, réseaux"| G
+    C -.->|"couche à part"| AUT[("Enedis · ADEME ·<br/>data.gouv.fr · Géorisques")]
     B --> G["geopf.get_avec_reprise<br/>3 essais, 8 places"]
     G --> IGN[("Géoplateforme IGN<br/>WFS · WMS")]
     B --> S["assembler()"]
@@ -112,12 +117,24 @@ Le trajet d'une demande, dans l'ordre :
    terrains de sport, calculés sur les quatre couches lues en tâche de fond,
    le relief de la scène (la hauteur d'un mur est l'altitude de son sommet
    moins le relief) et ses masses de sursol (celles qu'un ouvrage explique).
-8. Elle demande enfin `/api/nuage` : le bâti du nuage de points LiDAR HD, lu
+8. Elle demande ensuite `/api/nuage` : le bâti du nuage de points LiDAR HD, lu
    à ce moment-là et non en tâche de fond — ses dalles COPC se lisent par
    plages en 10 à 90 s, et leurs requêtes prendraient à la scène ses places
    vers la Géoplateforme. Un bâtiment dont le LiDAR voit le sol à travers
    l'emprise, et une structure dedans, est un ouvrage ajouré : la page
    dessine ses points à la place de son volume.
+9. Les autres couches à part suivent le même chemin (`_obtenir_couche`), chacune
+   avec son fichier de cache et sa version : emprises et canalisations BD TOPO,
+   postes HTA/BT d'Enedis, surfaces inondables de Géorisques (jamais lues
+   d'avance), et, si le service les a, détections sur l'orthophoto et panneaux
+   solaires. DPE et bornes de recharge ne sont lus qu'au clic. La fenêtre
+   « Données » lit leur provenance dans `/api/sources`.
+
+Une zone dessinée (`?poly=`) remplace le carré : les sources sont lues sur sa
+boîte englobante puis découpées au contour (`polygone.py`), et le cache est
+celui du contour. Ouverte depuis l'extension Trimble Connect, la page reçoit un
+jeton ; le serveur lit alors l'emprise du projet (`/api/connect/emprise`) et y
+dépose les exports (`/api/connect/fichier`).
 
 L'emprise d'une scène est un carré de ±0,0016° autour du point : environ
 ±178 m du nord au sud, et ±115 à 130 m d'est en ouest selon la latitude. Un
@@ -127,7 +144,7 @@ anneau de relief grossier s'étend au-delà, sur 2 km de côté.
 
 | Module | Rôle | À savoir |
 |---|---|---|
-| `app.py` | Routes Flask | `creer_app(dossier_cache, construire)` : la construction est injectable, c'est ainsi que les tests évitent le réseau |
+| `app.py` | Routes Flask | `creer_app(dossier_cache, construire)` : la construction et chaque lecteur de couche sont injectables, c'est ainsi que les tests évitent le réseau ; routes `/api/connect/*` vers Trimble Connect |
 | `scene.py` | Construction et cache | `SCENE_VERSION` (format), `ETAPES_SCENE` (suivi), `SceneIncomplete`, `Cache` et son verrou par point ; les couches à part y passent par le même chemin (`_prelire`, `_obtenir_couche`) |
 | `geopf.py` | GET avec reprise | 3 essais espacés de 3 s, sur **tout** échec, refus 4xx compris ; `place()` borne à 8 les requêtes simultanées du processus, `en_parallele` lance des lectures ensemble |
 | `batiments.py` | Bâtiments découpés sur l'emprise | Le WFS les rend entiers ; coupés à 1,25 m du bord pour que la grille MNH les encadre, ils portent `coupe` |
@@ -144,7 +161,17 @@ anneau de relief grossier s'étend au-delà, sur 2 km de côté.
 | `monuments.py` | Parties de monuments OSM | Seule source hors IGN, et la plus lente ; extrait embarqué pour les lieux d'exemple ; règle de remplacement aux deux tiers, enveloppes |
 | `ouvrages.py` | Murs, ponts, voies ferrées, terrains de sport | Couche à part, versionnée par `OUVRAGES_VERSION` ; hauteur d'un mur ou d'un pont = altitude de ses sommets − relief de la scène |
 | `nuage.py` | Bâti du nuage de points LiDAR HD, ouvrages ajourés | Couche à part, versionnée par `NUAGE_VERSION` ; dalles COPC lues par plages à travers `geopf` (laspy ne fait aucune requête), une à une : en 40 à la fois, la Géoplateforme répond 429 ; Lambert-93 écrit ici, vérifié contre pyproj au millimètre ; ajouré = sol vu sous une structure à travers l'emprise (une cour à ciel ouvert ne compte pas), ou emprise qui chevauche un ajouré |
-| `vehicules.py` | Véhicules et piscines lus sur l'orthophoto | Couche à part et **optionnelle** (`VUE3D_VEHICULES`) : un réseau ONNX à boîtes orientées sur l'orthophoto à 0,2 m, une passe par objet, chacun à son échelle ; fichier de cache au nom du détecteur ; sans la variable, ni onnxruntime ni réseau ne sont chargés |
+| `vehicules.py` | Véhicules, piscines et navires lus sur l'orthophoto | Couche à part et **optionnelle** (`VUE3D_VEHICULES`) : un réseau ONNX à boîtes orientées sur l'orthophoto à 0,2 m, une passe par objet, chacun à son échelle ; fichier de cache au nom du détecteur ; sans la variable, ni onnxruntime ni réseau ne sont chargés |
+| `emprises.py` | Aérodromes, pistes, postes de transformation, haies | Couche à part BD TOPO, versionnée par `EMPRISES_VERSION` ; aplats drapés sur le relief, haies dressées en volume |
+| `reseaux.py` | Canalisations | Couche à part BD TOPO (`canalisation`), versionnée par `RESEAUX_VERSION` ; segments drapés, position par rapport au sol gardée |
+| `postes_enedis.py` | Postes HTA/BT d'Enedis | Couche à part, API Data Fair paginée par curseur `after`, plafond de 2 000 postes, 3 essais ; postes gardés dans l'emprise et le contour |
+| `georisques.py` | Surfaces inondables des TRI | Couche à part, jamais lue d'avance ; chaque couche WFS comptée (`resultType=hits`) avant d'être lue, car un WFS vide répond 200 sans corps |
+| `dpe.py` | DPE de l'ADEME | Au clic seulement, daté (`lu_le`) ; rattaché par identifiant RNB, sinon par adresse à 5 m |
+| `bornes.py` | Bornes de recharge (IRVE) | Au clic seulement, daté ; API tabulaire de data.gouv.fr, réunies par station, gardées dans le contour |
+| `releves.py` | Détections rangées par rectangle de terrain | Un point décalé ne détecte que la bande nouvelle ; cœur et marge pour les objets à cheval |
+| `tuiles.py` | Tuiles WMTS de la page | Servies du stock, sinon redirigées vers l'IGN ; une tuile refusée au navigateur est relue ici et gardée 90 jours |
+| `polygone.py` | Contour libre `?poly=` | Analyse, découpage des sources au contour, masque des points (`masque`, `masque_tableau`) ; six décimales, comme la page |
+| `sources.py` | Catalogue des sources | Provenance, licence, mode (`scene`, `apres-scene`, `au-clic`) et disponibilité, pour la fenêtre « Données » |
 | `panneaux.py` | Panneaux solaires du registre OpenPVMapper | Couche à part et **optionnelle** (`VUE3D_PANNEAUX`) : une base SQLite à index R-tree préparée à la construction de l'image ; projection EPSG:3035 → WGS84 écrite ici, vérifiée contre pyproj à 0,7 mm |
 | `static/index.html` | La page entière | HTML, CSS et JavaScript dans un seul fichier, three.js r160 |
 
