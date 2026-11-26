@@ -114,10 +114,10 @@ await page.evaluate(() => { const h = document.getElementById('heure'); h.value 
 console.log('soleil au 21 décembre, 13 h :', await page.$eval('#s-date', e => e.textContent), '·', await page.$eval('#s-hauteur', e => e.textContent));
 await new Promise(r => setTimeout(r, 800));
 await page.screenshot({ path: sortie });
-// DPE, ventes DVF et bornes de recharge : lus seulement au clic (ADEME,
-// cadastre et fichiers DVF, data.gouv.fr), leur section du panneau s'ouvre ;
+// DPE et bornes de recharge : lus seulement au clic (ADEME, data.gouv.fr),
+// leur section du panneau s'ouvre ;
 // la fiche du bâtiment visé dit ses DPE, ou qu'il n'en a pas.
-for (const [bouton, section, resume] of [['#t-dpe', '#sec-dpe', '#dpe-resume'], ['#t-dvf', '#sec-dvf', '#dvf-resume'],
+for (const [bouton, section, resume] of [['#t-dpe', '#sec-dpe', '#dpe-resume'],
                                          ['#t-bornes', '#sec-bornes', '#bornes-resume']]) {
   try {
     await page.click(bouton);
@@ -129,10 +129,9 @@ for (const [bouton, section, resume] of [['#t-dpe', '#sec-dpe', '#dpe-resume'], 
 }
 console.log('fiche avec DPE :', (await page.$eval('#fiche-batiment', e => e.innerText.replace(/\s+/g, ' '))).match(/DPE.{0,120}/)?.[0] || '(aucun)');
 await new Promise(r => setTimeout(r, 800));
-await page.screenshot({ path: sortie.replace(/(\.png)?$/, '-dpe-dvf.png') });
+await page.screenshot({ path: sortie.replace(/(\.png)?$/, '-dpe-bornes.png') });
 // Éteints, pour que la suite voie la page telle qu'elle s'ouvre.
 await page.click('#t-dpe');
-await page.click('#t-dvf');
 await page.click('#t-bornes');
 // Exports IFC et CityGML : chaque fichier arrive dans le dossier de la
 // capture, et la note dit sa taille et ce qu'il contient.

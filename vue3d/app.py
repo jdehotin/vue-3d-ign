@@ -8,10 +8,8 @@
     GET /api/monuments?lat=…&lon=…   la couche des monuments OSM, JSON gzippé
     GET /api/ouvrages?lat=…&lon=…    la couche des ouvrages BD TOPO, JSON gzippé
     GET /api/emprises?lat=…&lon=…    la couche des emprises BD TOPO, JSON gzippé
-    GET /api/foret?lat=…&lon=…       les massifs forestiers BD Forêt v2, JSON gzippé
-    GET /api/rpg?lat=…&lon=…         les parcelles agricoles RPG, JSON gzippé
-    GET /api/chemins?lat=…&lon=…     les voies piétonnes et cyclables BD TOPO, JSON gzippé
     GET /api/reseaux?lat=…&lon=…     les canalisations BD TOPO, JSON gzippé
+    GET /api/postes_enedis?lat=…&lon=…   les postes HTA/BT d'Enedis, JSON gzippé
     GET /api/nuage?lat=…&lon=…       le bâti du nuage LiDAR HD, JSON gzippé
                                    `&proche=1` : d'abord le carré autour du point
     GET /api/piscines?lat=…&lon=…    les piscines de l'orthophoto, si le service a un détecteur
@@ -31,6 +29,8 @@
                                    CityGML, corps de la requête) à la racine du
                                    projet Trimble Connect ; le jeton d'accès est
                                    dans l'en-tête Authorization
+    GET /api/connect/dossiers?projet=…  l'arborescence des dossiers du projet
+                                   Trimble Connect, pour choisir où déposer
     GET /api/connect/emprise?projet=…   l'emprise du projet Trimble Connect, ou
                                    le message qui dit qu'elle reste à définir ;
                                    le jeton d'accès est dans l'en-tête Authorization

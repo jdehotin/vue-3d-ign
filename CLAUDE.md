@@ -32,7 +32,7 @@ npm install puppeteer-core && node outils/essai-navigateur.mjs "http://localhost
 
 ```
 vue3d/
-  app.py        Flask : /, /api/scene, /api/ortho, /api/monuments, /api/ouvrages, /api/emprises, /api/nuage, /api/piscines, /api/navires, /api/vehicules, /api/panneaux, /api/dpe, /api/dvf, /api/bornes, /api/georisques/<couche>, /api/avancement, /api/sources, /api/sante, /api/tuile, POST /api/reconstruire ; quota de scènes neuves par IP (VUE3D_QUOTA, VUE3D_PROXY derrière un proxy)
+  app.py        Flask : /, /api/scene, /api/ortho, /api/monuments, /api/ouvrages, /api/emprises, /api/reseaux, /api/postes_enedis, /api/nuage, /api/piscines, /api/navires, /api/vehicules, /api/panneaux, /api/dpe, /api/bornes, /api/georisques/<couche>, /api/avancement, /api/sources, /api/sante, /api/tuile, POST /api/reconstruire, /api/connect/* (Trimble Connect : emprise du projet, dossiers, dépôt des exports) ; quota de scènes neuves par IP (VUE3D_QUOTA, VUE3D_PROXY derrière un proxy)
   scene.py      assemblage d'une scène, cache disque par point arrondi
   couches.py    lecture WFS (bâtiments, végétation, BD Forêt, routes)
   batiments.py  bâtiments découpés sur l'emprise, en retrait du bord
@@ -47,14 +47,16 @@ vue3d/
   lignes.py     lignes à haute tension et hauteur de leurs supports
   monuments.py  parties de monuments OSM (building:part), seule source hors IGN
   ouvrages.py   murs, ponts, voies ferrées, terrains de sport : couche à part, chargée après la scène
-  emprises.py   cimetières, aérodromes et leurs pistes, postes de transformation, haies : couche à part, chargée après la scène
+  emprises.py   aérodromes et leurs pistes, postes de transformation, haies : couche à part, chargée après la scène
+  reseaux.py    canalisations BD TOPO, drapées sur le relief : couche à part, chargée après la scène
+  postes_enedis.py  postes HTA/BT de l'open data Enedis (API Data Fair paginée) : couche à part, gardés dans l'emprise et le contour
   nuage.py      bâti du nuage de points LiDAR HD (dalles COPC lues par plages, via geopf) ; ouvrages ajourés en points : couche à part, lue en deux temps (carré proche, puis zone entière)
   vehicules.py  véhicules, piscines et navires lus sur l'orthophoto par un réseau ONNX : couche à part, optionnelle (VUE3D_VEHICULES) ; les navires gardés sur l'eau, mer comprise (communes BD TOPO, RGE ALTI)
   releves.py    détections gardées par rectangle de terrain (cache/releves/) : un point décalé ne détecte que la bande nouvelle
   panneaux.py   panneaux solaires du registre OpenPVMapper (SQLite R-tree) : couche à part, optionnelle (VUE3D_PANNEAUX)
   dpe.py        DPE de l'ADEME rattachés aux bâtiments (RNB, sinon adresse à 5 m) : couche à part, lue au clic seulement, datée
-  dvf.py        ventes DVF (fichiers Etalab) jointes aux parcelles du cadastre IGN : couche à part, lue au clic seulement, datée
   bornes.py     bornes de recharge (Base nationale des IRVE, API tabulaire de data.gouv.fr) réunies par station : couche à part, lue au clic seulement, datée
+  polygone.py   contour libre `?poly=` : analyse, découpage des sources au contour, masque des points
   sources.py    catalogue des sources (provenance, licence, mode, disponibilité) pour la fenêtre « Données » de la page
   georisques.py surfaces inondables des TRI (WFS de Géorisques), drapées : couche à part, jamais lue d'avance ; chaque couche WFS se compte (resultType=hits) avant d'être lue
   geopf.py      GET avec reprise sur la Géoplateforme ; 8 places pour tout le service, lectures groupées abandonnées au premier échec

@@ -347,10 +347,10 @@ des arbres y rend 0 houppier sans la moindre erreur (2 160 en 3.12 sur Gordes,
 mêmes données). Et comme le cache ne périme pas, une scène construite ainsi
 resterait fausse.
 
-### DPE, ventes immobilières et bornes de recharge, à la demande
+### DPE et bornes de recharge, à la demande
 
-Trois boutons du panneau, éteints à l'ouverture : rien n'est demandé à
-l'ADEME, à DVF ni à data.gouv.fr tant qu'on ne clique pas, et rien n'est à
+Deux boutons du panneau, éteints à l'ouverture : rien n'est demandé à
+l'ADEME ni à data.gouv.fr tant qu'on ne clique pas, et rien n'est à
 installer.
 
 - **DPE** colore chaque bâtiment qui a des diagnostics de performance
@@ -366,18 +366,6 @@ installer.
   d'adresse, à 5 m près : la fiche le dit, le bâtiment peut alors être le
   voisin. Un DPE sans bâtiment à moins de 5 m est une pastille au sol, à son
   adresse.
-- **Ventes DVF** teinte les parcelles vendues depuis cinq ans (2021 à 2025
-  aujourd'hui) par leur prix au m² médian, en cinq classes aux quintiles de
-  l'emprise, et le bâtiment posé dessus en prend la couleur ; un contour
-  cyan le distingue même quand les DPE le colorent. Le survol donne les
-  dernières ventes, le clic toutes celles de la parcelle (un résumé au-delà
-  de huit) ; le panneau donne le prix médian des maisons et des
-  appartements. Le prix n'est ramené au m² que pour la vente d'un seul
-  logement, sur sa surface bâtie déclarée. Sources : les fichiers
-  [DVF géolocalisées](https://www.data.gouv.fr/fr/datasets/demandes-de-valeurs-foncieres-geolocalisees/)
-  d'Etalab (DGFiP) et le Parcellaire Express de l'IGN, joints par
-  l'identifiant de parcelle. **Pas de DVF en Alsace-Moselle**, où la
-  publicité foncière relève du livre foncier : la page le dit.
 - **Bornes de recharge** pose une borne par station de recharge pour
   véhicules électriques, et au-dessus d'elle une pastille à éclair teinte de
   sa puissance la plus haute (jusqu'à 22 kW, 23 à 149 kW, 150 kW et plus),
@@ -390,11 +378,9 @@ installer.
   consolidée chaque jour par data.gouv.fr, lue sur l'emprise par son API
   tabulaire.
 
-Les trois sont datés (« lus le … ») et gardés en cache avec la scène ;
+Les deux sont datés (« lus le … ») et gardés en cache avec la scène ;
 « Reconstruire la scène » les relit. Une seconde ou deux à la première
-lecture, en zone de 356 m. Les conditions de réutilisation de DVF
-interdisent de réidentifier les personnes et de laisser les moteurs de
-recherche indexer ces données : la page ne les publie nulle part.
+lecture, en zone de 356 m.
 
 ### Export BIM et SIG, en IFC 4 et CityGML 2.0
 
@@ -679,7 +665,6 @@ Toutes servies sans clé par la Géoplateforme de l'IGN, sous
 | Géocodage | `geocodage/search`, `geocodage/reverse` | La recherche d'un lieu (Base Adresse Nationale et lieux nommés, lus séparément), et la commune du point affiché ; appelé par le navigateur |
 | BD TOPO, hydrographie | WFS `surface_hydrographique`, `troncon_hydrographique` | Étendues et cours d'eau |
 | OpenStreetMap, `building:part` | API Overpass, © contributeurs OSM, [ODbL](https://www.openstreetmap.org/copyright) | Les monuments en vraie 3D, là où le LiDAR manque |
-| Parcellaire Express | WFS `CADASTRALPARCELS.PARCELLAIRE_EXPRESS:parcelle` | Les parcelles des ventes DVF, au clic |
 
 Hors du territoire, en mer et à l'étranger, où le RGE ALTI n'a pas
 d'altitude, l'horizon prend celle d'[AWS Terrain Tiles](https://github.com/tilezen/joerd/blob/master/docs/attribution.md)
@@ -696,8 +681,7 @@ individuel n'est trouvé que par son enseigne, jamais par le nom de la
 personne.
 
 Au clic seulement, hors IGN aussi : les DPE de l'API de l'ADEME
-(`data.ademe.fr`, jeux `dpe03existant` et `dpe02neuf`), les fichiers DVF
-géolocalisées d'Etalab (`files.data.gouv.fr/geo-dvf`) et la Base nationale
+(`data.ademe.fr`, jeux `dpe03existant` et `dpe02neuf`) et la Base nationale
 des IRVE (`tabular-api.data.gouv.fr`), sous Licence Ouverte 2.0, sans clé.
 Le lien « Y aller » d'un bâtiment ou d'une station ouvre l'itinéraire dans
 Plans (iPhone, iPad) ou Google Maps.
@@ -914,7 +898,9 @@ principales :
 | `GET /api/ortho?lat=…&lon=…` | L'orthophoto de la scène, en JPEG |
 | `GET /api/monuments?lat=…&lon=…` | La couche des monuments OSM, en JSON gzippé (`null` sans partie), que la page demande une fois la scène affichée |
 | `GET /api/ouvrages?lat=…&lon=…` | La couche des murs, ponts, voies ferrées et terrains de sport, en JSON gzippé (`null` sans ouvrage), demandée elle aussi après la scène |
-| `GET /api/emprises?lat=…&lon=…` | La couche des cimetières, aérodromes et leurs pistes, postes de transformation et haies, en JSON gzippé (`null` sans emprise), demandée elle aussi après la scène |
+| `GET /api/emprises?lat=…&lon=…` | La couche des aérodromes et leurs pistes, postes de transformation et haies, en JSON gzippé (`null` sans emprise), demandée elle aussi après la scène |
+| `GET /api/reseaux?lat=…&lon=…` | Les canalisations de la BD TOPO (`reseaux` : nature, position par rapport au sol, ligne), en JSON gzippé (`null` sans canalisation), demandées après la scène et drapées sur le relief |
+| `GET /api/postes_enedis?lat=…&lon=…` | Les postes HTA/BT de l'open data d'Enedis (`postes` : position, commune, IRIS, département), en JSON gzippé (`null` sans poste), demandés après la scène ; gardés dans l'emprise et dans le contour `poly` |
 | `GET /api/nuage?lat=…&lon=…` | Le bâti du nuage de points LiDAR HD, en JSON gzippé (`null` hors couverture), demandé après la scène : 10 à 90 s à la première demande. Avec `&proche=1`, d'abord un carré de 400 m autour du point, que la page affiche avant la zone entière (en zone de 800 m et plus) ; au-delà de 1 000 m, le kilomètre central seulement |
 | `GET /api/piscines?lat=…&lon=…` | Les piscines de l'orthophoto, en JSON gzippé, demandées après la scène ; `{"mode": "aucun", "piscines": []}` si le service n'a pas de détecteur |
 | `GET /api/navires?lat=…&lon=…` | Les bateaux de l'orthophoto, sur l'eau, en JSON gzippé, demandés après les piscines ; `{"mode": "aucun", "navires": []}` si le service n'a pas de détecteur, une liste vide loin de l'eau |
@@ -922,7 +908,6 @@ principales :
 | `GET /api/avancement?lat=…&lon=…` | L'étape de la construction en cours (18 au total), que la page affiche pendant l'attente |
 | `GET /api/panneaux?lat=…&lon=…` | Les panneaux solaires du registre, en JSON gzippé ; `{"actif": false, "panneaux": []}` si le service n'a pas de registre |
 | `GET /api/dpe?lat=…&lon=…` | Les DPE de l'ADEME réunis par bâtiment (`batiments`, par `cleabs`) et, sans bâtiment, par adresse (`adresses`), en JSON gzippé, datés (`lu_le`) ; demandés au clic seulement |
-| `GET /api/dvf?lat=…&lon=…` | Les ventes DVF des parcelles de l'emprise (`parcelles`, `ventes`, `resume`), en JSON gzippé, datées ; `absent` nomme les départements sans DVF (Alsace-Moselle) ; au clic seulement |
 | `GET /api/bornes?lat=…&lon=…` | Les bornes de recharge de l'emprise, réunies par station (`stations` : opérateur, points de charge, puissances, prises, accès), en JSON gzippé, datées ; au clic seulement |
 | `GET /api/georisques/inondations?lat=…&lon=…` | Les surfaces inondables des TRI de Géorisques sur l'emprise (`surfaces` : type, scénario, cours d'eau, TRI, géométrie), en JSON gzippé, datées ; `null` quand l'emprise n'est dans aucun TRI ; 503 si Géorisques n'a pas répondu, rien n'étant mis en cache |
 | `GET /api/sources` | `{"sources": [{"id", "libelle", "theme", "mode", "version", "fournisseur", "licence", "lien", "description", "disponible"}, …]}` : le catalogue lu par la fenêtre « Données et couches » de la page ; `mode` vaut `scene`, `apres-scene` ou `au-clic`, `disponible` dit si ce service sert la source (détecteur, registre) |
@@ -930,7 +915,7 @@ principales :
 | `POST /api/reconstruire?lat=…&lon=…` | Met de côté la scène et ses couches (202) : la demande suivante les reconstruit d'après les données de l'IGN du moment, l'ancienne revenant si l'IGN ne répond pas. 429 moins de 10 min après sa construction, 409 pendant qu'elle ou une de ses couches se calcule |
 
 Codes d'erreur : 400 sans coordonnées valides, 422 hors de France métropolitaine,
-503 si un service de l'IGN, l'ADEME ou les fichiers DVF n'ont pas répondu
+503 si un service de l'IGN, l'ADEME, Enedis ou data.gouv.fr n'a pas répondu
 (rien n'est mis en cache, réessayer).
 Tout ce qui vient du dossier d'une scène est revalidé à chaque visite (304
 tant que le fichier n'a pas été réécrit) : une scène reconstruite apparaît

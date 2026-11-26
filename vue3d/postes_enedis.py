@@ -24,7 +24,10 @@ import requests
 journal = logging.getLogger(__name__)
 
 # Format de la couche. L'incrémenter ne refait que la couche, pas les scènes.
-POSTES_ENEDIS_VERSION = 1
+# 2 : postes gardés dans l'emprise et dans le contour `?poly=` ; en 1, tout ce
+#     que l'API rendait pour la boîte englobante était dessiné, hors contour
+#     compris.
+POSTES_ENEDIS_VERSION = 2
 
 API_URL = ("https://opendata.enedis.fr/data-fair/api/v1/datasets/"
            "poste-electrique/lines")
@@ -92,11 +95,15 @@ def fetch_postes_enedis(west, south, east, north):
     return postes
 
 
-def postes_enedis_pour_emprise(west, south, east, north, brut):
+def postes_enedis_pour_emprise(west, south, east, north, brut, polygone=None):
     """Postes HTA/BT formatés pour la vue.
 
     Args:
         brut: liste de `fetch_postes_enedis`.
+        polygone: contour de la zone (vue3d/polygone.py), s'il y en a un : un
+            poste hors contour n'est ni dessiné ni exporté, comme une borne.
+            Hors de l'emprise, il est écarté dans tous les cas : le filtre
+            `bbox` de l'API n'est pas une garantie que la couche s'y fie.
 
     Returns:
         dict(version, postes) ; None si l'emprise n'a aucun poste.
@@ -112,6 +119,10 @@ def postes_enedis_pour_emprise(west, south, east, north, brut):
             lon = round(float(coords[0]), DECIMALES)
             lat = round(float(coords[1]), DECIMALES)
         except Exception:
+            continue
+        if not (west <= lon <= east and south <= lat <= north):
+            continue
+        if polygone is not None and not polygone.masque(lon, lat):
             continue
         postes.append({
             "lon": lon,

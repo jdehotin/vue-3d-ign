@@ -13,6 +13,24 @@ messages de commit et dans les commentaires des modules.
 
 ## Scène v16 — 26 octobre 2026
 
+- **Postes HTA/BT gardés dans le contour** (25 novembre 2026) : en zone
+  dessinée (`?poly=`), la couche Enedis dessinait et exportait tous les
+  postes que l'API rendait pour la boîte englobante, hors contour compris ;
+  ils sont désormais gardés dans l'emprise et dans le contour, comme les
+  bornes. La couche passe en version 2 (`postes-enedis-v2.json.gz`) : les
+  couches écrites avant sont relues, pas les scènes.
+- **Modules des couches retirées supprimés** (25 novembre 2026) :
+  `foret.py`, `rpg.py`, `chemins.py` et `dvf.py` (avec `tests/test_dvf.py`)
+  n'étaient plus appelés depuis le retrait de leurs couches le 21 novembre.
+  Contrairement à ce que disait cette entrée-là, `foret.py` ne servait pas
+  aux houppiers : la BD Forêt de la scène est lue par `couches.py`
+  (`COUCHE_FORET`), qui reste. README et CLAUDE.md ne décrivent plus DVF ;
+  `/api/reseaux` et `/api/postes_enedis` y sont documentées.
+  `outils/essai-navigateur.mjs` ne clique plus `#t-dvf`, bouton disparu, qui
+  faisait échouer l'essai. Nouveaux tests sans réseau : `test_reseaux.py`,
+  `test_postes_enedis.py` (pagination, plafond, reprise, contour) et
+  `test_sources.py`.
+
 - **Plus d'archive vers Trimble Connect** (24 novembre 2026) : le zip est
   réservé au téléchargement et à l'enregistrement local. Vers le projet, les
   fichiers des couches et l'image du relief texturé sont déposés tels quels,

@@ -1393,7 +1393,8 @@ class Cache:
             NOM_POSTES_ENEDIS, lat, lon, construire, self.lire_postes_enedis,
             lambda message: PostesEnedisIndisponibles(
                 f"Postes Enedis illisibles : {message}"),
-            lambda bbox, brut, scene: postes_enedis_pour_emprise(*bbox, brut),
+            lambda bbox, brut, scene: postes_enedis_pour_emprise(
+                *bbox, brut, polygone=zone if isinstance(zone, Polygone) else None),
             zone=zone)
 
     def obtenir_nuage(self, lat, lon, construire=construire, zone=None):

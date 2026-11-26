@@ -271,7 +271,7 @@ def decouper_sources(brut, polygone):
 
     Ne touche qu'aux GeoJSON et à leurs dictionnaires : une réponse lue sur la
     boîte du contour — les bâtiments, l'eau, les routes de la scène, les
-    ouvrages, les emprises, les parcelles DVF — est découpée au bord, et rien
+    ouvrages, les emprises, les canalisations — est découpée au bord, et rien
     n'est alors dessiné au-delà. Les autres formes (le nuage LiDAR en tableaux,
     les lignes ponctuelles des bornes ou des DPE) sont rendues telles quelles :
     c'est à leur couche de les filtrer, avec le même `polygone`.
