@@ -105,6 +105,10 @@ for (let t = 5; t <= duree; t += 5) {
             signal: document.getElementById('signal').hidden ? '' :
                 `${document.getElementById('signal').className} à ${document.getElementById('signal-d').textContent}`,
             images: window.__images, budget: V.budget,
+            iti: V.itineraire ? { longueur: V.itineraire.longueur, t: V.itineraire.t } : null,
+            guidage: V.guidage.etat, demandes: V.guidage.demandes, arrive: V.simu.arrive,
+            guide: document.getElementById('guide').hidden ? '' : ['guide-d', 'guide-consigne', 'guide-arrivee']
+                .map(id => document.getElementById(id)).filter(el => !el.hidden && el.textContent).map(el => el.textContent).join(' | '),
         };
     });
     const ips = (e.images - images0) / ((Date.now() - t0) / 1000);
@@ -121,7 +125,9 @@ for (let t = 5; t <= duree; t += 5) {
         + `  · carrés ${e.lus} lus, ${e.construits} construits, ${e.montres} montrés (${e.batiments} bât.)`
         + `  · ${e.pret}`
         + `  · sol ${e.solMontrees}/${e.sol}  · ${(e.triangles / 1e3).toFixed(0)} k tri, ${e.appels} appels`
-        + `  · ${ips.toFixed(0)} i/s`);
+        + `  · ${ips.toFixed(0)} i/s`
+        + (e.guidage ? `\n       guidage ${e.guidage}${e.arrive ? ' (arrivée)' : ''}, ${e.demandes} demande(s)`
+            + (e.iti ? `, ${Math.round(e.iti.t)} / ${Math.round(e.iti.longueur)} m du tracé` : '') + `  · ${e.guide || 'pas de consigne'}` : ''));
 }
 await page.screenshot({ path: sortie });
 // Durée de construction d'un carré (un par image au plus, carres/selection.js) :
@@ -167,6 +173,18 @@ console.log(`\nCarrés : ${carres.lus} lus au serveur, ${carres.caches} du cache
 const rattrapes = [...passagers.values()].filter(Boolean).length;
 if (passagers.size) console.log(`Refus passagers (503) : ${passagers.size}, dont ${rattrapes} rattrapés`);
 for (const [u, ok] of passagers) if (!ok) erreurs.push(`503 jamais rattrapé : ${u.slice(0, 100)}`);
+// Vers une destination (`vers=`) : un tracé, une consigne affichée ; avec
+// `devier=`, la voiture simulée quitte le tracé, et un nouveau est demandé.
+const params = new URL(url).searchParams;
+if (params.has('vers')) {
+    if (!releves.some(r => r.iti)) erreurs.push('aucun itinéraire');
+    if (!releves.some(r => r.guide && !/calcul|indisponible/i.test(r.guide))) erreurs.push('aucune consigne de guidage affichée');
+    if (params.has('devier')) {
+        const der = releves[releves.length - 1];
+        if (der.demandes < 2) erreurs.push('la voiture a quitté le tracé sans nouveau calcul');
+        else if (!['suivi', 'arrivee'].includes(der.guidage)) erreurs.push(`guidage « ${der.guidage} » en fin d'essai, après le nouveau calcul`);
+    }
+}
 const roule = releves.filter(r => r.vue && r.chemin);
 if (!roule.length) erreurs.push('la voiture n\'a jamais été calée sur une route');
 else if (!roule.slice(-3).some(r => /prêts sur/.test(r.pret) && !/prêts sur 0 m/.test(r.pret))) {

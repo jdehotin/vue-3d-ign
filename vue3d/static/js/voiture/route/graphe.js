@@ -144,7 +144,7 @@ export const permise = (b, n) => !(b.sens === '+' && b.n0 !== n) && !(b.sens ===
  * de la plus probable à la moins : tout droit, sur la même voie, de même
  * importance, en voiture. Les sens interdits sont écartés, le demi-tour aussi.
  */
-function suites(a, n, capArrivee) {
+export function suites(a, n, capArrivee) {
     const options = [];
     for (const b of n.aretes) {
         if (b === a || b.n0 === b.n1 || !permise(b, n)) continue;
@@ -201,6 +201,130 @@ export function suiteProbable(a, sens, n, etat, vues = null, hasard = 0) {
     return choix;
 }
 
+// --- Le tracé de l'itinéraire ------------------------------------------------
+// Le service d'itinéraire de l'IGN calcule sur la BD TOPO, comme les carrés :
+// sur 25 trajets tirés dans les carrés en cache (Paris, pays d'Aix ; 21 005
+// points tous les 5 m, le 27 novembre 2026), son tracé passe à 2 cm des
+// tronçons en médiane, à 0,15 m au 99e centile, à 4,1 m au pire (une version
+// plus récente de la BD TOPO). Une branche s'en écarte de plus de
+// TRACE_ECART_M : ce n'est pas la sienne.
+export const TRACE_ECART_M = 8;
+
+/** L'abscisse de la projection de (x, y) sur le tracé `tr`, cherchée entre `t0` et `t1` ; son écart `d`, l'indice `k` du segment. */
+export function projeterSurTrace(tr, x, y, t0 = 0, t1 = Infinity) {
+    const cum = tr.cum, n = cum.length;
+    let lo = 0, hi = n - 1;
+    while (hi - lo > 1) { const m = (lo + hi) >> 1; if (cum[m] <= t0) lo = m; else hi = m; }
+    let meilleur = null;
+    for (let k = lo; k < n - 1 && cum[k] <= t1; k++) {
+        const x0 = tr.xs[k], y0 = tr.ys[k], lx = tr.xs[k + 1] - x0, ly = tr.ys[k + 1] - y0, l2 = lx * lx + ly * ly;
+        let u = l2 ? ((x - x0) * lx + (y - y0) * ly) / l2 : 0;
+        const ua = (t0 - cum[k]) / (cum[k + 1] - cum[k] || 1), ub = (t1 - cum[k]) / (cum[k + 1] - cum[k] || 1);
+        u = Math.min(Math.max(u, 0, ua), 1, ub);
+        const d = Math.hypot(x - x0 - lx * u, y - y0 - ly * u);
+        // Le premier au plus près : un tracé qui repasse au même endroit
+        // (une boucle par `par`) se suit dans l'ordre.
+        if (!meilleur || d < meilleur.d - 0.01) meilleur = { t: cum[k] + (cum[k + 1] - cum[k]) * u, d, k };
+    }
+    return meilleur;
+}
+/** Le point du tracé à l'abscisse `t`, et son cap. */
+export function pointDuTrace(tr, t) {
+    const cum = tr.cum;
+    t = Math.min(Math.max(t, 0), tr.longueur);
+    let lo = 0, hi = cum.length - 1;
+    while (hi - lo > 1) { const m = (lo + hi) >> 1; if (cum[m] <= t) lo = m; else hi = m; }
+    const u = (t - cum[lo]) / (cum[hi] - cum[lo] || 1);
+    const lx = tr.xs[hi] - tr.xs[lo], ly = tr.ys[hi] - tr.ys[lo];
+    return { x: tr.xs[lo] + lx * u, y: tr.ys[lo] + ly * u, cap: Math.atan2(lx, ly) / RAD };
+}
+
+// Une branche courte ne se juge pas sur ses quelques mètres, tous près du
+// carrefour, donc du tracé : sur celles qui la prolongent, jusqu'à
+// BRANCHE_JUGEE_M. Si aucune ne colle au tracé (lui seul la prend, plus
+// loin, à contresens : voir suiteSurTrace), elle garde son propre écart,
+// plus SANS_SUITE_M : elle passe après une branche qui s'y prolonge (l'écart
+// des bonnes est de 0,15 m au 99e centile).
+const BRANCHE_JUGEE_M = 40, BRANCHE_PROFONDEUR = 3, SANS_SUITE_M = 2;
+/** L'écart au tracé, le pire, de la branche `b` prise depuis `n` dans le sens `sens`, quand la voiture est en `t` sur le tracé. */
+function ecartBranche(tr, b, sens, n, t, profondeur = 0) {
+    const reste = tr.longueur - t, lim = Math.min(b.L, reste + 2);
+    let pire = 0;
+    for (const d of [5, 15, 35, Infinity]) {
+        const dd = Math.min(d, lim);
+        const p = pointArete(b, sens > 0 ? dd : b.L - dd);
+        const q = projeterSurTrace(tr, p.x, p.y, t - 5, t + dd + 30);
+        pire = Math.max(pire, q ? q.d : Infinity);
+        if (pire > TRACE_ECART_M || dd >= lim) break;
+    }
+    if (pire > TRACE_ECART_M || b.L >= BRANCHE_JUGEE_M || lim < b.L || profondeur >= BRANCHE_PROFONDEUR) return pire;
+    const m = sens > 0 ? b.n1 : b.n0;
+    let suite = Infinity;
+    for (const c of m.aretes) {
+        if (c === b || c.n0 === c.n1 || !permise(c, m)) continue;
+        suite = Math.min(suite, ecartBranche(tr, c, c.n0 === m ? 1 : -1, m, t + b.L, profondeur + 1));
+    }
+    // Rien au-delà (une impasse, un carré pas encore lu) : la branche seule.
+    if (suite === Infinity) return pire;
+    return suite <= TRACE_ECART_M ? Math.max(pire, suite) : Math.min(pire + SANS_SUITE_M, TRACE_ECART_M);
+}
+
+/**
+ * La suite de `a` (sens `sens`) au nœud `n` le long du tracé, la voiture
+ * étant en `t` sur lui à ce nœud : la branche qui colle au tracé, et
+ * l'abscisse `t` du nœud, recalée. Au fond d'une impasse, le tracé peut
+ * revenir sur ses pas (un point de passage `par`). Null si aucune n'y colle.
+ *
+ * Les sens uniques des carrés d'abord ; si aucune branche permise n'y colle,
+ * le tracé même à contresens : le service lit une BD TOPO plus récente que
+ * les carrés gardés sur le disque. À Gardanne (27 novembre 2026), il prend
+ * la traverse de la Mairie dans le sens que le carré interdit, et la route
+ * prévue s'arrêtait à 160 m de l'arrivée.
+ */
+export function suiteSurTrace(a, sens, n, t) {
+    const tr = itineraire;
+    if (!tr) return null;
+    for (const sensUniques of [true, false]) {
+        const candidats = [];
+        for (const b of n.aretes) {
+            if (b === a || b.n0 === b.n1 || (sensUniques && !permise(b, n))) continue;
+            candidats.push({ a: b, sens: b.n0 === n ? 1 : -1 });
+        }
+        if (n.aretes.length === 1 && (!sensUniques || permise(a, n))) candidats.push({ a, sens: -sens });
+        let meilleur = null;
+        for (const c of candidats) {
+            const e = ecartBranche(tr, c.a, c.sens, n, t);
+            if (e <= TRACE_ECART_M && (!meilleur || e < meilleur.e)) meilleur = { ...c, e };
+        }
+        if (meilleur) return suiteRecalee(tr, meilleur, n, t);
+    }
+    return null;
+}
+function suiteRecalee(tr, meilleur, n, t) {
+    // L'abscisse du nœud, recalée sur le tracé : les longueurs des tronçons
+    // s'en écartent de quelques centimètres, qui s'ajouteraient.
+    const q = projeterSurTrace(tr, n.x, n.y, t - 20, t + 20);
+    return { a: meilleur.a, sens: meilleur.sens, t: q && q.d < TRACE_ECART_M ? q.t : t };
+}
+
+/** L'abscisse de l'arrivée sur `a`, pour qui y roule dans le sens `sens` depuis `s`, en `t` sur le tracé ; null si elle est plus loin. */
+export function arriveeSur(a, sens, s, t) {
+    const reste = itineraire.longueur - t, devant = sens > 0 ? a.L - s : s;
+    if (reste > devant + 1) return null;
+    return Math.min(Math.max(s + sens * reste, 0), a.L);
+}
+
+/** L'abscisse sur le tracé du point `s` de `a`, pris dans le sens `sens`, près de `t` ; null hors du tracé, ou à contresens. */
+export function surTrace(a, s, sens, t) {
+    const tr = itineraire;
+    if (!tr) return null;
+    const p = pointArete(a, s, sens);
+    const q = projeterSurTrace(tr, p.x, p.y, t - 150, t + 1500);
+    if (!q || q.d > TRACE_ECART_M) return null;
+    const capTrace = Math.atan2(tr.xs[q.k + 1] - tr.xs[q.k], tr.ys[q.k + 1] - tr.ys[q.k]) / RAD;
+    return Math.abs(ecartCap(capTrace, p.cap)) < 60 ? q.t : null;
+}
+
 // Passé sa longueur, la route prévue va jusqu'à la sortie du tunnel où elle
 // se trouve : sans GPS sous terre, la voiture y file jusqu'au jour
 // (route/voiture), et le tunnel de l'A86 fait 10 km, celui du Fréjus 13.
@@ -208,16 +332,18 @@ const TRAVERSEE_TUNNEL_MAX_M = 15000;
 
 /**
  * La route prévue depuis `depart` ({a, s, sens}), sur `longueur` mètres :
- * à chaque carrefour, la suite la plus probable. Elle s'arrête à une
- * impasse, ou au bord de ce qui est lu (`fin` = 'inconnu', `bout` : le
- * carré à demander).
+ * le tracé de l'itinéraire tant que la voiture est dessus, sur
+ * `longueurTrace` mètres ; sinon, à chaque carrefour, la suite la plus
+ * probable. Elle s'arrête à l'arrivée, à une impasse, ou au bord de ce qui
+ * est lu (`fin` = 'inconnu', `bout` : le carré à demander). `t0` : son
+ * abscisse sur le tracé au départ, null hors du tracé.
  */
-export function cheminDepuis(depart, longueur) {
+export function cheminDepuis(depart, longueur, longueurTrace = longueur) {
     const xs = [], ys = [], cum = [], parcours = [];
     let { a, s, sens } = depart;
-    // Sur l'itinéraire de la simulation : ses étapes, jusqu'à l'arrivée.
-    let k = itineraire ? itineraire.etapes.findIndex((e, i) => i >= itineraire.k && e.a === a && e.sens === sens) : -1;
-    if (k >= 0) itineraire.k = k;
+    let t = itineraire ? surTrace(a, s, sens, itineraire.t) : null;
+    const t0 = t;
+    if (t != null) longueur = longueurTrace;
     const p0 = pointArete(a, s, sens);
     xs.push(p0.x); ys.push(p0.y); cum.push(0);
     let total = 0, fin = 'complet', bout = null;
@@ -228,11 +354,11 @@ export function cheminDepuis(depart, longueur) {
         total += l;
         xs.push(x); ys.push(y); cum.push(total);
     };
-    for (;;) {
-        parcours.push({ a, sens, debut: total - (sens > 0 ? s : a.L - s) });
+    for (let garde = 0; garde < 20000; garde++) {
+        parcours.push({ a, sens, debut: total - (sens > 0 ? s : a.L - s), t });
         vues.add(a);
-        if (k >= 0 && k === itineraire.etapes.length - 1) {
-            const sf = itineraire.fin.s;
+        const sf = t != null ? arriveeSur(a, sens, s, t) : null;
+        if (sf != null) {
             if (sens > 0) { for (let q = 1; q < a.cum.length; q++) if (a.cum[q] > s && a.cum[q] < sf) ajouter(a.pts[2 * q], a.pts[2 * q + 1]); }
             else { for (let q = a.cum.length - 2; q >= 0; q--) if (a.cum[q] < s && a.cum[q] > sf) ajouter(a.pts[2 * q], a.pts[2 * q + 1]); }
             const pf = pointArete(a, sf, sens);
@@ -245,7 +371,14 @@ export function cheminDepuis(depart, longueur) {
         else { for (let k = a.cum.length - 2; k >= 0; k--) if (a.cum[k] < s) ajouter(a.pts[2 * k], a.pts[2 * k + 1]); }
         if (total >= longueur && (a.sol >= 0 || total >= longueur + TRAVERSEE_TUNNEL_MAX_M)) break;
         const n = sens > 0 ? a.n1 : a.n0;
-        const suite = k >= 0 ? itineraire.etapes[++k] : suiteProbable(a, sens, n, etat, vues);
+        let suite = null;
+        if (t != null) {
+            suite = suiteSurTrace(a, sens, n, t + (sens > 0 ? a.L - s : s));
+            if (suite) t = suite.t;
+            else if (!carrePret(n.x, n.y)) { fin = 'inconnu'; bout = [n.x, n.y]; break; }
+            else t = null;                    // le tracé quitte ce qu'on sait du réseau
+        }
+        if (!suite) suite = suiteProbable(a, sens, n, etat, vues);
         if (!suite) {
             fin = carrePret(n.x, n.y) ? 'impasse' : 'inconnu';
             bout = [n.x, n.y];
@@ -255,7 +388,7 @@ export function cheminDepuis(depart, longueur) {
         s = sens > 0 ? 0 : a.L;
     }
     if (!bout) bout = [xs[xs.length - 1], ys[ys.length - 1]];
-    return { xs, ys, cum, longueur: total, fin, bout, parcours };
+    return { xs, ys, cum, longueur: total, fin, bout, parcours, t0 };
 }
 
 /** Point du chemin à la distance `d` de son début, avec son cap ; null hors du chemin. */
@@ -335,16 +468,14 @@ export function caler(x, y, precision, cap) {
             }
         }
     }
-    // Sur l'itinéraire, son sens : à l'arrêt, sans cap, la voiture se
-    // calait dans l'autre, et la route prévue repartait au hasard.
-    // Une arête prise deux fois, à l'aller et au retour (le fond d'une
-    // impasse, sur un trajet par `par`) : son passage à venir, dans le sens
-    // du cap s'il y en a un ; le premier calait le retour à contresens.
-    if (meilleur && itineraire) {
-        const aVenir = (e, i) => i >= itineraire.k && e.a === meilleur.a;
-        const e = (cap != null && itineraire.etapes.find((e, i) => aVenir(e, i) && e.sens === meilleur.sens))
-            || itineraire.etapes.find(aVenir) || itineraire.etapes.find(e => e.a === meilleur.a);
-        if (e) meilleur.sens = e.sens;
+    // Sur le tracé de l'itinéraire, son sens : à l'arrêt, sans cap, la
+    // voiture se calait dans l'autre, et la route prévue repartait au hasard.
+    // Avec un cap qui s'y accorde, son sens même contre un sens unique du
+    // carré : le tracé lit une BD TOPO plus récente (suiteSurTrace).
+    if (meilleur && itineraire && surTrace(meilleur.a, meilleur.s, meilleur.sens, itineraire.t) == null) {
+        const autre = -meilleur.sens;
+        if (surTrace(meilleur.a, meilleur.s, autre, itineraire.t) != null
+            && (cap == null || Math.abs(ecartCap(cap, pointArete(meilleur.a, meilleur.s, autre).cap)) < 90)) meilleur.sens = autre;
     }
     return meilleur;
 }

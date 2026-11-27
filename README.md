@@ -654,9 +654,19 @@ Chaque premier chargement construit la scène, en quelques secondes.
   dressent au bord de la route, face à qui arrive, et le prochain de la
   route prévue s'annonce à côté de la limitation, avec sa distance, 8 s
   avant d'y être (150 m au moins) ; un panneau qui n'y est pas saisi n'est
-  pas annoncé. Pour l'essayer sans rouler : `/voiture?simu=1&lat=…&lon=…&vitesse=90`, une
-  conduite simulée (`vitesse=limite` : aux limitations) ; avec `&vers=lat,lon`, elle va quelque part, par le plus
-  court chemin, l'itinéraire tracé en bleu et la distance qui reste affichée.
+  pas annoncé. Avec une destination (bouton en forme de drapeau : un lieu,
+  une adresse, une entreprise, cherchés comme dans la page de la scène ; ou
+  « en 3D », à côté de « Y aller » dans la fiche d'un bâtiment), la page
+  guide : l'itinéraire vient du service d'itinéraire de l'IGN, calculé sur
+  toute la BD TOPO, et la route en bleu le suit carrefour par carrefour.
+  En haut, la prochaine manœuvre (tourner, serrer, prendre la sortie, le
+  numéro de la sortie d'un rond-point), sa distance, l'heure d'arrivée et
+  ce qui reste à parcourir ; à voix haute si on l'allume (bouton du
+  haut-parleur). Quand la voiture quitte l'itinéraire, un nouveau est
+  calculé depuis où elle est. Sans trafic ni fermetures de routes : le
+  temps est celui des vitesses de la BD TOPO. Pour l'essayer sans rouler : `/voiture?simu=1&lat=…&lon=…&vitesse=90`, une
+  conduite simulée (`vitesse=limite` : aux limitations) ; avec `&vers=lat,lon`, elle suit l'itinéraire jusque-là
+  (`&par=lat,lon;…` : en passant par ces points ; `&devier=30` : elle le quitte au bout de 30 s).
 - **Sur téléphone, sur l'écran d'une voiture, ou en plein écran** (le bouton
   au-dessus du drone) : la vue prend tout l'écran, et le panneau devient un
   tiroir ouvert par ☰. Un bâtiment touché ouvre sa fiche par « Voir la fiche ».
@@ -713,6 +723,7 @@ Toutes servies sans clé par la Géoplateforme de l'IGN, sous
 | Orthophoto | WMS, WMTS | La photo aérienne, et l'indice de verdure qui reconnaît le feuillage |
 | Plan IGN v2 | WMTS `GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2` | Le fond plan, au choix de la photo |
 | Géocodage | `geocodage/search`, `geocodage/reverse` | La recherche d'un lieu (Base Adresse Nationale et lieux nommés, lus séparément), et la commune du point affiché ; appelé par le navigateur |
+| Itinéraire | `navigation/itineraire` (`bdtopo-osrm`, voiture, le plus rapide) | L'itinéraire de la vue en voiture vers sa destination, calculé sur la BD TOPO, et le temps du trajet ; appelé par le navigateur |
 | BD TOPO, hydrographie | WFS `surface_hydrographique`, `troncon_hydrographique` | Étendues et cours d'eau |
 | OpenStreetMap, `building:part` | Base locale tirée de l'extrait France de Geofabrik, sinon API Overpass, © contributeurs OSM, [ODbL](https://www.openstreetmap.org/copyright) | Les monuments en vraie 3D, là où le LiDAR manque |
 | OpenStreetMap, `power=generator`, `generator:source=wind` | Base locale tirée de l'extrait France de Geofabrik, sinon API Overpass, par bloc de 0,05°, © contributeurs OSM, [ODbL](https://www.openstreetmap.org/copyright) | Les éoliennes : hauteur du moyeu, diamètre du rotor, modèle, puissance, exploitant |
@@ -958,7 +969,7 @@ principales :
 | Route | Réponse |
 |---|---|
 | `GET /?lat=…&lon=…` | La page ; `&vue=lat,lon,hauteur,distance,azimut,elevation` pose la caméra (cible, sa hauteur au-dessus du sol, recul en mètres, azimut depuis le nord et élévation en degrés), `&jour=MM-JJ` et `&heure=13.25` le soleil, `&couches=solaire,dpe,-vegetation` les couches allumées ou éteintes (le lien du bouton de partage) |
-| `GET /voiture` | La vue en voiture ; `?lat=…&lon=…` pour son départ en attendant le GPS, `&simu=1&vitesse=…` pour une conduite simulée, `&vue=2d`, `&fond=plan`, `&heure=…` |
+| `GET /voiture` | La vue en voiture ; `?lat=…&lon=…` pour son départ en attendant le GPS, `&vers=lat,lon` pour y être guidé (`&versnom=…`, `&par=lat,lon;…`), `&simu=1&vitesse=…` pour une conduite simulée (`&devier=…`), `&vue=2d`, `&fond=plan`, `&heure=…` |
 | `GET /api/scene?lat=…&lon=…` | La scène, en JSON gzippé |
 | `GET /api/ortho?lat=…&lon=…` | L'orthophoto de la scène, en JPEG |
 | `GET /api/monuments?lat=…&lon=…` | La couche des monuments OSM, en JSON gzippé (`null` sans partie), que la page demande une fois la scène affichée |
@@ -1009,6 +1020,8 @@ cherche un autre lieu et s'y rend, et échoue à la moindre erreur JavaScript :
 npm install puppeteer-core
 node outils/essai-navigateur.mjs "http://localhost:8080/?lat=43.9116&lon=5.2003" capture.png
 node outils/essai-voiture.mjs "http://localhost:8080/voiture?simu=1&lat=48.8706&lon=2.3055&vitesse=50" 60 voiture.png   # la vue en voiture, une minute de conduite simulée
+node outils/essai-voiture.mjs "http://localhost:8080/voiture?simu=1&lat=48.8532&lon=2.3692&vers=48.8483,2.3958&versnom=Nation&vitesse=40&devier=30" 100 guidage.png   # guidée, hors de l'itinéraire à 30 s : un nouveau est calculé
+node outils/essai-guidage.mjs "http://localhost:8080/voiture?simu=1&lat=43.5263&lon=5.4474&vers=43.4546,5.4697&versnom=Gardanne"   # la route prévue suit le tracé de l'IGN jusqu'à l'arrivée ; ses manœuvres
 node outils/film-voiture.mjs "http://localhost:8080/voiture?simu=1&lat=48.8532&lon=2.3692&vers=48.8483,2.3958&versnom=Nation&vitesse=40" docs/demo/demo-voiture-paysage.mp4   # le film d'un trajet, de la Bastille à la Nation
 node outils/verifier-recherche.mjs     # la recherche d'un lieu, sous Node, sans réseau
 node outils/verifier-export.mjs essai.ifc essai.gml   # les exports, sous Node (npm install three@0.160.0)

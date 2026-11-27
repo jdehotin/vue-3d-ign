@@ -19,6 +19,7 @@ import { majVoiture } from '../route/voiture.js';
 import { majRuban } from './ruban.js';
 import { majCiel } from './soleil.js';
 import { partirSimu, simu, majSimu } from '../route/simulation.js';
+import { guidage, majGuidage, prochaineManoeuvre } from '../route/guidage.js';
 import { blocsBornes, majBornes, desencombrerBornes } from '../couches/bornes.js';
 import {
     sommeils, compterImage, etatDiagnostic, signaler, majSignalements,
@@ -59,6 +60,7 @@ export function boucle(maintenant) {
     precedent = maintenant;
     if (SIMU && voiture.attendu) majSimu(dt, maintenant);
     majVoiture(dt, maintenant);
+    majGuidage(maintenant);
     majCamera(dt, maintenant);
     majCarres(maintenant);
     majDetailArbres(dt, maintenant);
@@ -79,6 +81,6 @@ export function boucle(maintenant) {
 // Pour les essais (outils/essai-voiture.mjs) : l'état, en lecture.
 window.__voiture = { voiture, carres, tuilesSol, aretes, camVue, camera, renderer, durees, dureesArbres, statsCache, simu,
                      reculDefaut: RECUL_DEFAUT,
-                     get itineraire() { return itineraire; }, partir: partirSimu, limites, signaux,
+                     get itineraire() { return itineraire; }, guidage, prochaineManoeuvre, partir: partirSimu, limites, signaux,
                      manquees, statsPrecharge, diagnostic: etatDiagnostic, signaler, blocsBornes,
                      get budget() { return budgetConstruction; }, get detailArbres() { return seuilDetailArbres(); } };

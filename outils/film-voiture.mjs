@@ -75,8 +75,8 @@ for (;;) {
     await new Promise(r => setTimeout(r, 1000));
 }
 const itineraire = await page.evaluate(() => {
-    const it = window.__voiture.itineraire;
-    return it && { metres: Math.round(it.longueur), rues: [...new Set(it.etapes.map(e => e.a.nom).filter(Boolean))] };
+    const it = window.__voiture.itineraire, ch = window.__voiture.voiture.chemin;
+    return it && { metres: Math.round(it.longueur), rues: [...new Set((ch ? ch.parcours : []).map(e => e.a.nom).filter(Boolean))] };
 });
 console.log('itinéraire :', itineraire ? `${itineraire.metres} m, ${itineraire.rues.join(' › ')}` : 'aucun');
 

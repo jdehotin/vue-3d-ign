@@ -4,7 +4,7 @@ import { PARAMS, RAD } from '../socle/parametres.js';
 import { versLambert93, convergence } from '../socle/lambert93.js';
 import { ORIGINE, RECALAGE_M, recaler } from '../socle/monde.js';
 import {
-    voiture, HAUTEUR_DEFAUT, camVue, ITINERAIRE_CHEMIN_MAX_M, itineraire,
+    voiture, HAUTEUR_DEFAUT, camVue, ITINERAIRE_CHEMIN_MAX_M,
 } from '../socle/etat.js';
 import { majLienQuitter } from '../interface/ecran.js';
 import { altitudeL93 } from '../sol/altitudes.js';
@@ -36,9 +36,9 @@ function recalculerChemin() {
     if (!an || !an.a) { voiture.chemin = null; return; }
     // Le chemin part de la position affichée, pas du relevé : il garde la
     // même abscisse pour la voiture, que la boucle fait avancer.
-    // Sur un itinéraire, jusqu'à l'arrivée (20 km au plus) : la distance qui
-    // reste se lit dès le départ.
-    voiture.chemin = cheminDepuis(an, itineraire ? ITINERAIRE_CHEMIN_MAX_M : longueurPrevue());
+    // Sur le tracé d'un itinéraire, jusqu'à l'arrivée (20 km au plus) : les
+    // carrés se lisent devant, et un film part sur une route toute prête.
+    voiture.chemin = cheminDepuis(an, longueurPrevue(), ITINERAIRE_CHEMIN_MAX_M);
     voiture.dChemin = 0;
     voiture.tChemin = an.t;
 }

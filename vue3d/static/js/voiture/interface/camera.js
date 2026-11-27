@@ -150,6 +150,7 @@ if (document.fullscreenEnabled) {
     });
 }
 window.addEventListener('keydown', e => {
+    if (e.target.closest && e.target.closest('input')) return;          // la destination qu'on tape
     if (e.key === '+' || e.key === '=') reglerRecul(camVue.recul / 1.4, camVue.hauteur / 1.4);
     else if (e.key === '-') reglerRecul(camVue.recul * 1.4, camVue.hauteur * 1.4);
     else if (e.key === 'v') boutonVue.click();

@@ -24,29 +24,41 @@ export const RECUL_DEFAUT = 20, PENTE_DEFAUT = 15, HAUTEUR_DEFAUT = 200;
 export const camVue = { mode: PARAMS.get('vue') === '2d' ? '2d' : '3d', recul: RECUL_DEFAUT, hauteur: HAUTEUR_DEFAUT,
                         lacet: 0, tangage: 0, dernierGeste: -Infinity, cap: 0, cible: new THREE.Vector3() };
 
-// `vers=lat,lon` (et `versnom`, pour l'affichage) : la voiture simulée va
-// quelque part, par le plus court chemin du graphe BD TOPO, sens interdits
-// respectés, grands axes préférés ; la route prévue devient cet itinéraire,
-// jusqu'à l'arrivée. Pour les films et les essais : la page n'a pas de saisie
-// de destination. Les carrés d'une bande de ITINERAIRE_BANDE_M autour de la
-// droite qui joint départ et arrivée sont lus d'abord.
+// `vers=lat,lon` (et `versnom`, pour l'affichage) : la destination, au GPS
+// comme en simulation. L'itinéraire est celui du service de l'IGN
+// (route/guidage), calculé sur la BD TOPO entière ; la route prévue le suit
+// sur le graphe des carrés, jusqu'à l'arrivée.
+const LAT_LON = /^\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*$/;
+// Le nom d'une destination cherchée dans la page (interface/destination) :
+// gardé pour la session seulement, jamais dans l'URL — une adresse tapée ne
+// doit finir ni dans l'historique ni dans un lien partagé, comme dans la page
+// de la scène.
+export const CLE_DESTINATION = 'vue3d-destination';
 export const VERS = (() => {
-    const m = /^\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*$/.exec(PARAMS.get('vers') || '');
-    if (!SIMU || !m) return null;
-    const [x, y] = versLambert93(Number(m[2]), Number(m[1]));
-    return { x, y, nom: PARAMS.get('versnom') || null };
+    const m = LAT_LON.exec(PARAMS.get('vers') || '');
+    if (!m) return null;
+    const lat = Number(m[1]), lon = Number(m[2]);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+    const [x, y] = versLambert93(lon, lat);
+    let nom = PARAMS.get('versnom') || null;
+    try {
+        const d = JSON.parse(sessionStorage.getItem(CLE_DESTINATION) || 'null');
+        if (!nom && d && Math.abs(d.lat - lat) < 1e-6 && Math.abs(d.lon - lon) < 1e-6) nom = d.nom;
+    } catch (e) { /* stockage refusé ou illisible : sans nom */ }
+    return { x, y, lat, lon, nom };
 })();
 // `par=lat,lon;lat,lon` : les points où passer avant `vers`, dans l'ordre —
 // un trajet tracé sur une carte, une boucle qui revient près de son départ.
-// Chaque étape a son plus court chemin et sa bande de carrés : une boucle de
-// 4,7 km (novembre 2026) passait à 600 m de la droite qui joignait ses deux
-// premiers points, hors de la bande, et la page en faisait un détour de 5 km.
 export const PAR = (() => {
     if (!VERS) return [];
     return (PARAMS.get('par') || '').split(';')
-        .map(t => /^\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*$/.exec(t)).filter(Boolean)
-        .map(m => { const [x, y] = versLambert93(Number(m[2]), Number(m[1])); return { x, y }; });
+        .map(t => LAT_LON.exec(t)).filter(Boolean)
+        .map(m => ({ lat: Number(m[1]), lon: Number(m[2]) }));
 })();
-export const ITINERAIRE_BANDE_M = 400, ITINERAIRE_CHEMIN_MAX_M = 20000;
-export let itineraire = null;                   // { etapes: [{ a, sens }], fin: { a, s }, k, longueur }
+// La route prévue s'étend jusqu'à l'arrivée, à ITINERAIRE_CHEMIN_MAX_M au
+// plus : la distance qui reste se lit sur le tracé, au-delà.
+export const ITINERAIRE_CHEMIN_MAX_M = 20000;
+// Le tracé de l'IGN en Lambert-93 : { xs, ys, cum, longueur, duree, etD,
+// etT, bornes, t } ; `t`, l'abscisse de la voiture sur lui (route/guidage).
+export let itineraire = null;
 export function poserItineraire(it) { itineraire = it; }

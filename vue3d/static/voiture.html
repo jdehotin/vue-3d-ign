@@ -16,6 +16,12 @@
 <body>
 <div id="vue" aria-label="Vue 3D qui suit la voiture"></div>
 
+<div id="guide" class="cartouche" hidden>
+    <svg viewBox="0 0 48 48" aria-hidden="true"><circle id="guide-anneau" cx="24" cy="20" r="8"/><path id="guide-fleche"/></svg>
+    <div class="texte"><b id="guide-d"></b><span id="guide-consigne"></span><small id="guide-arrivee"></small></div>
+    <button type="button" id="b-voix" aria-pressed="false" aria-label="Guidage à voix haute" hidden>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path class="ondes" d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/></svg></button>
+</div>
 <div id="rue" class="cartouche" hidden><span id="rue-numero" class="numero" hidden></span><b id="rue-nom"></b></div>
 <div id="etat" class="cartouche"><span class="rond perdu"></span><span id="etat-gps">Position attendue</span><br><span id="etat-carres"></span></div>
 <button type="button" id="boussole" class="cartouche" title="Le nord ; un appui remet la vue derrière la voiture" aria-label="Boussole">
@@ -39,6 +45,9 @@
         title="Signaler un défaut de l'affichage : une capture de l'écran, la position et l'état du sol partent au serveur, pour l'analyse">
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5L2.5 20h19z"/><path d="M12 9.5v5M12 17.4v.1"/></svg></button>
 <div id="boutons">
+    <button type="button" id="b-destination" class="bouton" aria-label="Destination"
+            title="Destination : un lieu, une adresse, une entreprise ; l'itinéraire est calculé par le service de l'IGN">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 21V3.5M6 4.5h11l-2.5 4 2.5 4H6"/></svg></button>
     <button type="button" id="b-vue" class="bouton" title="Vue de derrière (3D) ou de dessus (2D)">2D</button>
     <button type="button" id="b-fond" class="bouton" title="Fond : photographie aérienne ou plan IGN">Plan</button>
     <button type="button" id="b-arbres" class="bouton petit on" title="Les arbres le long de la route, mesurés au LiDAR HD">Arbres</button>
@@ -54,6 +63,17 @@
 </div>
 <div id="annonce" class="cartouche" hidden></div>
 <div id="borne" class="cartouche" hidden aria-live="polite"></div>
+<div id="destination" hidden><div class="cartouche">
+    <h1>Destination</h1>
+    <form id="form-destination" autocomplete="off" role="search">
+        <input id="in-destination" type="search" placeholder="Un lieu, une adresse, une entreprise" aria-label="Destination"
+               aria-autocomplete="list" aria-controls="destinations" aria-expanded="false" enterkeyhint="go" />
+    </form>
+    <ul id="destinations" role="listbox" hidden></ul>
+    <p class="note">Itinéraire du service de l'IGN, calculé sur la BD TOPO : sans trafic ni fermetures de routes.</p>
+    <div class="actions"><button type="button" id="b-sans-destination" hidden>Arrêter le guidage</button>
+        <button type="button" id="b-fermer-destination">Fermer</button></div>
+</div></div>
 <div id="accueil" hidden><div class="cartouche">
     <h1><img src="static/favicon.svg" alt="" />En voiture</h1>
     <div id="accueil-texte"></div>

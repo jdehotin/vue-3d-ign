@@ -48,9 +48,10 @@ export function lienRecentrerSur([lon, lat], quoi) {
  * Lien « Y aller » : l'itinéraire jusqu'au point dans l'application de cartes
  * de l'appareil — Plans sur iPhone et iPad, Google Maps ailleurs (son
  * application sur Android, son site sinon), qui calent le point sur la rue la
- * plus proche. Une page ne peut pas guider la voiture elle-même : sur l'écran
- * d'une Tesla, l'itinéraire s'ouvre dans Google Maps ; depuis le téléphone,
- * le partage vers l'application Tesla l'envoie à la voiture.
+ * plus proche : sur l'écran d'une Tesla, l'itinéraire s'ouvre dans Google
+ * Maps ; depuis le téléphone, le partage vers l'application Tesla l'envoie à
+ * la voiture. Puis « en 3D » : la vue en voiture de ce site, guidée jusque-là
+ * par l'itinéraire de l'IGN.
  */
 const APPAREIL_APPLE = /iPhone|iPad|iPod/.test(navigator.userAgent)
     || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);     // iPad en mode ordinateur
@@ -59,7 +60,8 @@ export function lienYAller([lon, lat]) {
     const url = APPAREIL_APPLE ? 'https://maps.apple.com/?daddr=' + point + '&amp;dirflg=d'
                                : 'https://www.google.com/maps/dir/?api=1&amp;destination=' + point;
     return ' <a class="lien-ext lien-y-aller" href="' + url + '" target="_blank" rel="noopener noreferrer">'
-        + 'Y aller ↗</a>';
+        + 'Y aller ↗</a> <a class="lien-ext lien-y-aller-3d" href="voiture?vers=' + point + '"'
+        + ' title="La vue en voiture, guidée jusqu\'ici">en 3D</a>';
 }
 
 // --- Orientation Street View --------------------------------------------

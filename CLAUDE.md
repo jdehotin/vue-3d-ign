@@ -34,6 +34,7 @@ python3 -m http.server -d outils 8000            # visionneuse-ifc.html : un IFC
 npm install puppeteer-core && node outils/essai-navigateur.mjs "http://localhost:8080/?lat=43.9116&lon=5.2003"
 node outils/essai-voiture.mjs "http://localhost:8080/voiture?simu=1&lat=48.8706&lon=2.3055&vitesse=50" 60 voiture.png   # la vue en voiture, conduite simulée
 node outils/film-voiture.mjs "http://localhost:8080/voiture?simu=1&lat=48.8532&lon=2.3692&vers=48.8483,2.3958&versnom=Nation&vitesse=40" docs/demo/demo-voiture-paysage.mp4   # film d'un trajet simulé (vers = destination)
+node outils/essai-guidage.mjs "http://localhost:8080/voiture?simu=1&lat=43.5263&lon=5.4474&vers=43.4546,5.4697&versnom=Gardanne"   # le guidage : la route prévue suit le tracé IGN jusqu'à l'arrivée, ses manœuvres (devier=30 dans essai-voiture : le nouveau calcul)
 ```
 
 ## Architecture
@@ -78,9 +79,9 @@ vue3d/
   static/index.html   la page de la scène : son HTML, et deux scripts en ligne qui partent avant tout (tiroir, demande de la scène)
   static/css/scene.css   sa feuille de style
   static/js/scene/    ses modules ES (three.js r160), chargés par main.js dans l'ordre de leurs effets : socle/, terrain/, batiments/, couches/ (une couche par module), vegetation/, export/, interface/, geometrie/
-  static/voiture.html la vue en voiture, page à part : un monde qui défile en Lambert-93, sol en tuiles WMTS sur le RGE ALTI, carrés chargés le long de la route prévue sur le graphe BD TOPO, voiture calée sur la route
-  static/css/voiture.css, static/js/voiture/   sa feuille de style et ses modules : socle/ (paramètres, Lambert-93, monde, rendu, état partagé), sol/, carres/, route/ (graphe, tunnels : l'altitude sous terre, voiture, limitations, signalisation : panneaux au bord de la route et prochain annoncé, simulation), couches/ (bornes), interface/
-  static/js/commun/   ce que les deux pages partagent : tuiles (fonds, RGE ALTI), règles des bâtiments et des arbres
+  static/voiture.html la vue en voiture, page à part : un monde qui défile en Lambert-93, sol en tuiles WMTS sur le RGE ALTI, carrés chargés le long de la route prévue sur le graphe BD TOPO, voiture calée sur la route ; vers une destination (`vers=`), la route prévue suit le tracé du service d'itinéraire de l'IGN, appelé par le navigateur
+  static/css/voiture.css, static/js/voiture/   sa feuille de style et ses modules : socle/ (paramètres, Lambert-93, monde, rendu, état partagé), sol/, carres/, route/ (graphe et suivi du tracé, tunnels : l'altitude sous terre, voiture, guidage : itinéraire de l'IGN, nouveau calcul, manœuvres, limitations, signalisation : panneaux au bord de la route et prochain annoncé, simulation), couches/ (bornes), interface/ (dont destination et voix)
+  static/js/commun/   ce que les deux pages partagent : tuiles (fonds, RGE ALTI), règles des bâtiments et des arbres, recherche d'un lieu
   static/favicon.svg, favicon-32.png, apple-touch-icon.png   le logo de la page, tiré de docs/logo/
 docs/logo/      le logo « Tuile » : SVG avec et sans le nom (vectorisé), icône, aperçu GitHub
 ```

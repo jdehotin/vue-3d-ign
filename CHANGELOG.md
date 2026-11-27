@@ -13,6 +13,30 @@ messages de commit et dans les commentaires des modules.
 
 ## Scène v16 — 21 novembre 2026
 
+### Ajouté
+
+- **Un vrai guidage dans la vue en voiture** (27 novembre). Une destination
+  se choisit dans la page (bouton du drapeau : la recherche de la page de la
+  scène, désormais partagée dans `js/commun/recherche.js`) ou depuis la fiche
+  d'un bâtiment (« en 3D », à côté de « Y aller »), au GPS comme en
+  simulation. L'itinéraire vient du service d'itinéraire de la Géoplateforme
+  (`bdtopo-osrm`, le plus rapide), calculé sur toute la BD TOPO : l'ancien
+  plus court chemin, réservé à la simulation, ne voyait que les carrés lus
+  dans une bande de 400 m. Son tracé passe à 2 cm des tronçons des carrés en
+  médiane, 4,1 m au pire (25 trajets, 21 005 points) : la route en bleu le
+  suit carrefour par carrefour sur le graphe, et va jusqu'à l'arrivée (Aix →
+  Gardanne : 15 180 m pour un tracé de 15 179 m). Les manœuvres sont tirées
+  du graphe, le service ne disant pas les ronds-points : tourner, serrer,
+  prendre la sortie, le numéro de la sortie d'un rond-point ; avec la
+  distance, l'heure d'arrivée (le temps des étapes du service, sans trafic)
+  et ce qui reste, en haut de l'écran, et à voix haute si on l'allume.
+  Hors de l'itinéraire (trois relevés de suite à plus de 25 m, la route
+  prévue ailleurs), un nouveau est calculé depuis la voiture : en moins de
+  10 s après une sortie simulée au faubourg Saint-Antoine. Le nom d'une
+  destination cherchée reste hors de l'URL. `devier=` fait quitter
+  l'itinéraire à la conduite simulée ; `outils/essai-guidage.mjs` liste les
+  manœuvres d'un trajet et vérifie qu'il arrive.
+
 ### Changé
 
 - **Les toits sous les arbres jugés par le nuage LiDAR HD**, et non plus
